@@ -27,7 +27,7 @@ This repository contains analytical code and documentation for a placental expre
 ## Repository Contents
 
 ### Power Analysis
-- [`power_analysis.html`](power_analysis.html) - Comprehensive power calculations for G×E interaction detection
+- [power_analysis](https://seantbresnahan.com/Placenta_xQTL_atlas/power_analysis.html) - Comprehensive power calculations for G×E interaction detection
   - Analytical power framework using non-central F-distribution
   - Power curves by minor allele frequency
   - Ancestry-stratified power estimates
