@@ -1,0 +1,429 @@
+#!/bin/bash
+#BSUB -q medium
+#BSUB -n 12
+#BSUB -M 120
+#BSUB -R "rusage[mem=120]"
+#BSUB -W 18:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs/merge_pooled_%J.out
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs/merge_pooled_%J.err
+
+source /etc/profile.d/modules.sh
+module load plink
+module load bcftools
+
+# ==============================================================
+# merge_and_filter_pooled.sh
+#
+# 0. Pre-flight: ensure every cohort has an rsq_pass.vcf.gz
+#    (convert from pgen if only plink files exist)
+# 1. Build pooled sample-ancestry table across all cohorts
+#    (excluding 1KGP reference samples HG*/NA*)
+# 2. Subset each cohort's Rsq-passing VCF to ancestry-stratum
+#    samples, strip HDS/GP, and split multiallelics per-cohort
+#    (so DS is correctly partitioned before merge)
+# 3. Merge subsetted VCFs across cohorts with bcftools merge
+#    (--merge none: no new multiallelics are created across
+#    cohorts, so DS stays correctly partitioned and all records
+#    remain biallelic)
+# 4. Normalise ref/alt alleles against GRCh38 reference
+#    (no multiallelic splitting — all records are already
+#    biallelic from the per-cohort split + --merge none)
+# 5. Convert merged VCF to pgen with plink2
+# 6. Apply MAF, HWE, and missingness filters on the pooled
+#    stratum with plink2
+# 7. Drop any remaining sites with >1 biallelic record
+#    (same chr:pos:ref:alt — palindromic duplicates)
+# 8. Write per-ancestry passing variant lists and summary
+#    TSVs for the pooled Rmd report
+#
+# Inputs (per cohort):
+# {QC_DIR}/{COHORT}.rsq_pass.{pgen,pvar,psam}  (plink2)
+#   — or —
+# {QC_DIR}/{COHORT}.rsq_pass.vcf.gz            (VCF)
+# {QC_DIR}/{COHORT}_ancestry_assignments.tsv
+#
+# Outputs (per ancestry stratum):
+# {POOLED_DIR}/{ANC}_pooled.{pgen,pvar,psam}
+# {POOLED_DIR}/{ANC}_pooled_passing.snplist
+# {POOLED_DIR}/{ANC}_pooled_QC_summary_per_chr.tsv
+# {POOLED_DIR}/pooled_sample_ancestry.tsv
+# ==============================================================
+
+# ----------------------------------------------------------
+# Configuration — edit this block
+# ----------------------------------------------------------
+
+COHORTS=("GUSTO" "NIEHS_RICHS" "SNUH" "MALI_G3A" "NIGMS")
+
+declare -A QC_DIRS
+QC_DIRS["GUSTO"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/GUSTO/genotypes/imputed/qc"
+QC_DIRS["NIEHS_RICHS"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIEHS_RICHS/genotypes/imputed/qc"
+QC_DIRS["SNUH"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/SNUH/genotypes/imputed/qc"
+QC_DIRS["MALI_G3A"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/MALI_G3A/genotypes/imputed/qc"
+QC_DIRS["NIGMS"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/genotypes/imputed/qc"
+
+# QC_DIRS["Gen3G"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/Gen3G/genotypes/imputed/qc"
+# QC_DIRS["ITU"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/ITU/genotypes/imputed/qc"
+# QC_DIRS["ELGAN"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/ELGAN/genotypes/imputed/qc"
+# QC_DIRS["RSDSB"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/RSDSB/genotypes/imputed/qc"
+# QC_DIRS["PeriBank"]="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PeriBank/genotypes/imputed/qc"
+
+POOLED_DIR="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/genotypes"
+TMPDIR="${POOLED_DIR}/tmp"
+REF_FASTA="/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta"
+
+THREADS=12
+MAF_THRESH=0.01
+HWE_THRESH=1e-6
+GENO_THRESH=0.05 # per-variant missingness
+
+mkdir -p "${POOLED_DIR}" "${TMPDIR}"
+
+# ----------------------------------------------------------
+# Step 0: Pre-flight — ensure rsq_pass.vcf.gz exists for every cohort
+# ----------------------------------------------------------
+
+echo "=== Step 0: Pre-flight VCF check ==="
+
+for COHORT in "${COHORTS[@]}"; do
+  QC_DIR="${QC_DIRS[$COHORT]}"
+  RSQ_VCF="${QC_DIR}/${COHORT}.rsq_pass.vcf.gz"
+
+  if [[ -f "${RSQ_VCF}" && -s "${RSQ_VCF}" && -f "${RSQ_VCF}.tbi" && -s "${RSQ_VCF}.tbi" ]]; then
+    echo " ${COHORT}: rsq_pass.vcf.gz exists — OK"
+    continue
+  fi
+
+  # VCF missing or incomplete — check for plink pfile to convert from
+  RSQ_PGEN="${QC_DIR}/${COHORT}.rsq_pass.pgen"
+  RSQ_PVAR="${QC_DIR}/${COHORT}.rsq_pass.pvar"
+  RSQ_PSAM="${QC_DIR}/${COHORT}.rsq_pass.psam"
+
+  if [[ ! -f "${RSQ_PGEN}" || ! -f "${RSQ_PVAR}" || ! -f "${RSQ_PSAM}" ]]; then
+    echo " ERROR: ${COHORT} has neither rsq_pass.vcf.gz nor rsq_pass.{pgen,pvar,psam} in ${QC_DIR}"
+    echo "        Cannot proceed — fix input data for this cohort"
+    exit 1
+  fi
+
+  echo " ${COHORT}: rsq_pass.vcf.gz not found — converting from plink pfile..."
+
+  # Convert pgen → vcf with DS dosage field, bgzipped.
+  # vcf-dosage=DS preserves the imputed dosages in the FORMAT/DS
+  # field that downstream steps (plink2 --vcf dosage=DS) require.
+  plink2 \
+    --pfile "${QC_DIR}/${COHORT}.rsq_pass" \
+    --export vcf vcf-dosage=DS bgz \
+    --threads "${THREADS}" \
+    --out "${QC_DIR}/${COHORT}.rsq_pass"
+
+  if [[ ! -f "${RSQ_VCF}" || ! -s "${RSQ_VCF}" ]]; then
+    echo " ERROR: plink2 export failed for ${COHORT} — ${RSQ_VCF} not written"
+    exit 1
+  fi
+
+  bcftools index --tbi "${RSQ_VCF}"
+  echo " ${COHORT}: VCF written and indexed"
+done
+
+echo " All cohorts have rsq_pass.vcf.gz"
+
+# ----------------------------------------------------------
+# Step 1: Build pooled sample-ancestry table
+# ----------------------------------------------------------
+
+echo ""
+echo "=== Step 1: Building pooled sample-ancestry table ==="
+
+POOLED_ANC_FILE="${POOLED_DIR}/pooled_sample_ancestry.tsv"
+
+echo -e "sample_id\tassigned_ancestry\tcohort" > "${POOLED_ANC_FILE}"
+
+for COHORT in "${COHORTS[@]}"; do
+  ANC_FILE="${QC_DIRS[$COHORT]}/${COHORT}_ancestry_assignments.tsv"
+  if [[ ! -f "$ANC_FILE" ]]; then
+    echo " WARNING: ancestry file not found for ${COHORT}: ${ANC_FILE}"
+    continue
+  fi
+  # Append cohort column; skip header.
+  # Exclude 1KGP reference samples (HG*, NA*) used as ancestry-PCA
+  # anchors — they are not study samples and are absent from cohort
+  # VCFs. Including them makes bcftools view --samples-file error out
+  # and silently zero the stratum.
+  awk -v co="${COHORT}" 'NR>1 {print $0 "\t" co}' "${ANC_FILE}" \
+    | grep -vE '^(HG|NA)[0-9]' >> "${POOLED_ANC_FILE}"
+done
+
+echo " Pooled ancestry table written: ${POOLED_ANC_FILE}"
+awk 'NR>1 {print $2}' "${POOLED_ANC_FILE}" | sort | uniq -c | sort -rn
+
+ANCESTRIES=($(awk 'NR>1 {print $2}' "${POOLED_ANC_FILE}" | sort -u))
+echo " Ancestry strata detected: ${ANCESTRIES[*]}"
+
+# ----------------------------------------------------------
+# Step 2–8: Per-ancestry merge, normalise, filter
+# ----------------------------------------------------------
+
+for ANC in "${ANCESTRIES[@]}"; do
+
+  echo ""
+  echo "============================================================"
+  echo " Processing ancestry stratum: ${ANC}"
+  echo "============================================================"
+
+  ANC_TMP="${TMPDIR}/${ANC}"
+  mkdir -p "${ANC_TMP}"
+
+  # ---- Skip-guard: check if final outputs already exist ----
+  # If the complete set of final deliverables for this stratum is
+  # present and non-empty, skip the entire merge/normalise/filter
+  # pipeline for this ancestry.
+  DEDUP_PGEN="${POOLED_DIR}/${ANC}_pooled"
+  SNPLIST="${POOLED_DIR}/${ANC}_pooled_passing.snplist"
+  SUMMARY_TSV="${POOLED_DIR}/${ANC}_pooled_QC_summary_per_chr.tsv"
+
+  if [[ -s "${DEDUP_PGEN}.pgen" && -s "${DEDUP_PGEN}.pvar" && -s "${DEDUP_PGEN}.psam" \
+        && -s "${SNPLIST}" && -s "${SUMMARY_TSV}" ]]; then
+    N_PASS=$(wc -l < "${SNPLIST}")
+    echo " Final outputs already exist (${N_PASS} passing variants) — skipping stratum"
+    continue
+  fi
+
+  MERGED_VCF="${ANC_TMP}/${ANC}_merged_raw.vcf.gz"
+  NORM_VCF="${ANC_TMP}/${ANC}_norm.vcf.gz"
+
+  # Skip-guard brackets steps 2a–3: if the merged VCF is already
+  # built and indexed, skip the per-cohort subsetting and merge
+  # (the expensive steps) and proceed directly to normalisation.
+  if [[ -f "${MERGED_VCF}.tbi" && -s "${MERGED_VCF}.tbi" && -f "${MERGED_VCF}" && -s "${MERGED_VCF}" ]]; then
+    echo " Merged VCF already exists — skipping steps 2a–3"
+
+  else
+
+    # ---- 2a. Write per-cohort sample keep-lists for this ancestry ----
+    VCF_LIST="${ANC_TMP}/vcf_list.txt"
+    > "${VCF_LIST}"
+
+    for COHORT in "${COHORTS[@]}"; do
+      ANC_FILE="${QC_DIRS[$COHORT]}/${COHORT}_ancestry_assignments.tsv"
+      if [[ ! -f "$ANC_FILE" ]]; then continue; fi
+
+      KEEP_FILE="${ANC_TMP}/${COHORT}_${ANC}_samples.txt"
+      awk -v anc="${ANC}" 'NR>1 && $2==anc {print $1}' "${ANC_FILE}" \
+        | grep -vE '^(HG|NA)[0-9]' > "${KEEP_FILE}"
+      N_KEEP=$(wc -l < "${KEEP_FILE}")
+      if [[ "${N_KEEP}" -eq 0 ]]; then
+        echo " ${COHORT}: no ${ANC} samples — skipping"
+        continue
+      fi
+      echo " ${COHORT}: ${N_KEEP} ${ANC} samples"
+
+      # ---- 2b. Subset, standardize FORMAT, and split multiallelics ----
+      RSQ_VCF="${QC_DIRS[$COHORT]}/${COHORT}.rsq_pass.vcf.gz"
+      if [[ ! -f "${RSQ_VCF}" ]]; then
+        echo " WARNING: rsq_pass VCF not found for ${COHORT}: ${RSQ_VCF} — skipping"
+        continue
+      fi
+
+      # Index if missing
+      if [[ ! -f "${RSQ_VCF}.tbi" ]]; then
+        echo " Indexing ${RSQ_VCF}..."
+        bcftools index --tbi "${RSQ_VCF}"
+      fi
+
+      COHORT_VCF="${ANC_TMP}/${COHORT}_${ANC}.vcf.gz"
+
+      # Subset to ancestry samples, strip HDS and GP, then split
+      # multiallelics per-cohort. Splitting per-cohort (before merge)
+      # ensures DS is correctly partitioned — all samples in a cohort
+      # share the same ALT alleles, so bcftools norm handles DS
+      # properly. This avoids the DS corruption that occurs when
+      # splitting after merge (where cohorts have different ALTs).
+      # After this, all records are biallelic with GT:DS FORMAT.
+      # --force-samples: drop any keep-list samples absent from this
+      # VCF with a warning instead of erroring out (defensive against
+      # reference-sample contamination in the ancestry TSVs).
+      bcftools view \
+        --samples-file "${KEEP_FILE}" \
+        --force-samples \
+        "${RSQ_VCF}" | \
+      bcftools annotate \
+        -x FORMAT/HDS,FORMAT/GP,INFO/AF \
+        --output-type z \
+        --threads "${THREADS}" \
+        --output - | \
+      bcftools norm \
+        --fasta-ref "${REF_FASTA}" \
+        --multiallelics -any \
+        --output-type z \
+        --threads "${THREADS}" \
+        --output "${COHORT_VCF}"
+
+      # Verify the cohort VCF was actually written before indexing
+      # and adding to the merge list. If the subset/annotate/norm
+      # pipeline failed (e.g. all keep-list samples absent from the
+      # VCF), bcftools may exit 0 with no output — without this
+      # guard, a non-existent file silently poisons the merge.
+      if [[ ! -s "${COHORT_VCF}" ]]; then
+        echo " ERROR: ${COHORT_VCF} not written — subsetting failed for ${COHORT}/${ANC}; skipping cohort"
+        continue
+      fi
+      bcftools index --tbi "${COHORT_VCF}"
+      echo "${COHORT_VCF}" >> "${VCF_LIST}"
+    done
+
+    N_COHORTS=$(wc -l < "${VCF_LIST}")
+    if [[ "${N_COHORTS}" -eq 0 ]]; then
+      echo " No cohorts with ${ANC} samples — skipping stratum"
+      continue
+    fi
+
+    # ---- 3. Merge VCFs across cohorts ----
+    # --merge none: no new multiallelic records are created during
+    # the merge. Sites with identical REF/ALT across cohorts combine
+    # into one biallelic record; sites with different ALTs stay as
+    # separate biallelic records. This preserves the per-cohort DS
+    # partitioning from step 2b — every record remains biallelic with
+    # intact DS, which plink2 requires (dosage=DS is unsupported for
+    # multiallelic variants). --merge snps would have collapsed
+    # different-ALT sites into multiallelic records, corrupting DS
+    # and triggering "GparseWriteByteCt multiallelic dosage size
+    # request" at the plink2 step.
+    echo " Merging ${N_COHORTS} cohort VCFs..."
+
+    if [[ "${N_COHORTS}" -eq 1 ]]; then
+      cp "$(cat "${VCF_LIST}")" "${MERGED_VCF}"
+    else
+      bcftools merge \
+        --file-list "${VCF_LIST}" \
+        --merge none \
+        --output-type z \
+        --threads "${THREADS}" \
+        --output "${MERGED_VCF}"
+    fi
+    bcftools index --tbi "${MERGED_VCF}"
+
+  fi
+
+  # Verify the merged VCF exists before proceeding. A failed merge
+  # (e.g. all cohort VCFs missing) would otherwise cascade into empty
+  # normalisation → empty pgen → 0 passing variants with no error.
+  if [[ ! -s "${MERGED_VCF}" ]]; then
+    echo " ERROR: ${MERGED_VCF} not written — merge failed for ${ANC}; skipping stratum"
+    continue
+  fi
+
+  # ---- 4. Normalise ref/alt against reference ----
+  # All records are biallelic: the per-cohort split (2b) plus
+  # --merge none (3) guarantee no multiallelics reach this step.
+  # This only aligns REF/ALT to the reference genome and
+  # left-normalises indels.
+  echo " Normalising ref/alt against reference..."
+
+  bcftools norm \
+    --fasta-ref "${REF_FASTA}" \
+    --output-type z \
+    --threads "${THREADS}" \
+    --output "${NORM_VCF}" \
+    "${MERGED_VCF}"
+  bcftools index --tbi "${NORM_VCF}"
+
+  # ---- 5. Convert to pgen ----
+  echo " Converting to pgen..."
+  MERGED_PGEN="${POOLED_DIR}/${ANC}_merged"
+
+  plink2 \
+    --vcf "${NORM_VCF}" dosage=DS \
+    --set-all-var-ids '@:#:$r:$a' \
+    --new-id-max-allele-len 1000 missing \
+    --make-pgen \
+    --no-psam-pheno \
+    --threads "${THREADS}" \
+    --out "${MERGED_PGEN}"
+
+  # ---- 6. MAF, HWE, missingness on pooled stratum ----
+  echo " Applying pooled filters: MAF >= ${MAF_THRESH}, HWE P > ${HWE_THRESH}, geno <= ${GENO_THRESH}..."
+  FILTERED_PGEN="${POOLED_DIR}/${ANC}_merged_filtered"
+
+  plink2 \
+    --pfile "${MERGED_PGEN}" \
+    --maf "${MAF_THRESH}" \
+    --hwe "${HWE_THRESH}" \
+    --geno "${GENO_THRESH}" \
+    --make-pgen \
+    --no-psam-pheno \
+    --threads "${THREADS}" \
+    --out "${FILTERED_PGEN}"
+
+  # ---- 7. Drop sites with >1 biallelic record (same chr:pos:ref:alt) ----
+  # Duplicate records after normalisation indicate strand-ambiguous
+  # palindromic sites (A/T, C/G) that cannot be reliably oriented across
+  # cohorts imputed to different reference panels. Both records are removed
+  # rather than arbitrarily retaining one, as dosages may reflect opposite
+  # strands and are not comparable across cohorts.
+  echo " Removing palindromic duplicate sites..."
+
+  PVAR_FILE="${FILTERED_PGEN}.pvar"
+  DEDUP_KEEP="${ANC_TMP}/${ANC}_dedup_keep.snplist"
+
+  grep -v '^#' "${PVAR_FILE}" \
+    | awk '{print $3}' \
+    | sort | uniq -c \
+    | awk '$1 == 1 {print $2}' \
+    > "${DEDUP_KEEP}"
+
+  N_BEFORE=$(grep -vc '^#' "${PVAR_FILE}")
+  N_AFTER=$(wc -l < "${DEDUP_KEEP}")
+  N_DROPPED=$(( N_BEFORE - N_AFTER ))
+  echo " Variants before dedup: ${N_BEFORE}"
+  echo " Variants after dedup: ${N_AFTER} (dropped ${N_DROPPED} palindromic duplicate sites)"
+
+  plink2 \
+    --pfile "${FILTERED_PGEN}" \
+    --extract "${DEDUP_KEEP}" \
+    --make-pgen \
+    --no-psam-pheno \
+    --threads "${THREADS}" \
+    --out "${DEDUP_PGEN}"
+
+  # ---- 8. Write passing snplist ----
+  grep -v '^#' "${DEDUP_PGEN}.pvar" | awk '{print $3}' > "${SNPLIST}"
+  N_PASS=$(wc -l < "${SNPLIST}")
+  echo " Passing variants in ${ANC} pooled stratum: ${N_PASS}"
+
+  # ---- 8b. Per-chromosome summary TSV for Rmd ----
+  echo -e "CHROM\tn_pass" > "${SUMMARY_TSV}"
+  grep -v '^#' "${DEDUP_PGEN}.pvar" \
+    | awk '{print $1}' \
+    | sort \
+    | uniq -c \
+    | awk '{print $2 "\t" $1}' \
+    >> "${SUMMARY_TSV}"
+  echo " Per-chromosome summary written: ${SUMMARY_TSV}"
+
+  echo " Done: ${ANC}"
+
+done
+
+# ----------------------------------------------------------
+# Step 9: Cross-ancestry summary for Rmd
+# ----------------------------------------------------------
+
+echo ""
+echo "=== Step 9: Writing cross-ancestry variant summary ==="
+
+CROSS_SUMMARY="${POOLED_DIR}/pooled_variant_summary.tsv"
+echo -e "ancestry\tn_pass_total" > "${CROSS_SUMMARY}"
+
+for ANC in "${ANCESTRIES[@]}"; do
+  SNPLIST="${POOLED_DIR}/${ANC}_pooled_passing.snplist"
+  if [[ -f "${SNPLIST}" ]]; then
+    N=$(wc -l < "${SNPLIST}")
+    echo -e "${ANC}\t${N}" >> "${CROSS_SUMMARY}"
+  fi
+done
+
+cat "${CROSS_SUMMARY}"
+echo ""
+echo "=== merge_and_filter_pooled.sh complete ==="
+echo "Outputs in: ${POOLED_DIR}"
+echo "Next step: render pooled_imputation_QC_report.Rmd"

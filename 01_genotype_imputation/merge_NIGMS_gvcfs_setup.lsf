@@ -1,0 +1,36 @@
+#!/bin/bash
+#BSUB -q short
+#BSUB -n 8
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -W 3:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+source /etc/profile.d/modules.sh
+module load bcftools
+
+GVCF_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/genotypes/raw
+GENOMICSDB_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/GenomicsDB
+OUT_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/genotypes
+
+CHROMS=(chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY chrM)
+
+# Index all GVCFs if not already indexed
+for GVCF in ${GVCF_DIR}/*.g.vcf.gz; do
+    if [ ! -f ${GVCF}.tbi ]; then
+        bcftools index --tbi ${GVCF}
+    fi
+done
+
+# Submit a job for each chromosome
+for CHR in "${CHROMS[@]}"; do
+    bsub -q medium \
+        -n 8 \
+        -M 64 \
+        -R "rusage[mem=64]" \
+        -W 12:00 \
+        -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3/genotype_${CHR}.out \
+        -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3/genotype_${CHR}.err \
+        -env "CHR=${CHR}" \
+        < /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/imputation_pipeline/merge_NIGMS_gvcfs_chr.lsf
+done

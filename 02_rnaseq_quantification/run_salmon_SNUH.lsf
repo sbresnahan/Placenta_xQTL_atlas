@@ -1,0 +1,36 @@
+#!/bin/sh
+#BSUB -W 8:00
+#BSUB -n 10
+#BSUB -M 80
+#BSUB -R rusage[mem=80]
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs/salmon
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs/salmon
+#BSUB -q medium
+TXINDEX_salmon=/rsrch5/home/epi/bhattacharya_lab/data/Placenta_LRRNAseq/Placenta_LRRNAseq/STB/combined_GTF/salmon/combined
+DIR_RAW=/rsrch5/home/epi/bhattacharya_lab/data/mapqtl/SNUH/RNA
+DIR_TRIM=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/SNUH/expression/trim
+mkdir ${DIR_TRIM}
+DIR_COUNTS=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/SNUH/expression
+mkdir ${DIR_COUNTS}
+THREADS=10
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate trim-galore-0.6.10
+trim_galore \
+  --cores ${THREADS} \
+  -o ${DIR_TRIM} \
+  --dont_gzip \
+  --paired \
+  ${DIR_RAW}/${LIBID}_1.fastq \
+  ${DIR_RAW}/${LIBID}_2.fastq
+
+conda deactivate
+conda activate salmon-1.10.2
+salmon quant \
+  -i ${TXINDEX_salmon} --libType A \
+  --validateMappings --seqBias \
+  -p ${THREADS} --numBootstraps 50 \
+  -1 ${DIR_TRIM}/${LIBID}_1_val_1.fq \
+  -2 ${DIR_TRIM}/${LIBID}_2_val_2.fq \
+  -o ${DIR_COUNTS}/${LIBID}
+
+conda deactivate

@@ -1,0 +1,37 @@
+#!/bin/bash
+#BSUB -q transfer
+#BSUB -n 2
+#BSUB -M 48
+#BSUB -R "rusage[mem=48]"
+#BSUB -W 12:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs2
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs2
+
+OUTPUT_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/MALI_G3A/genotypes/imputed
+mkdir -p "${OUTPUT_DIR}"
+cd "${OUTPUT_DIR}"
+
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_1.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_2.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_3.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_4.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_5.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_6.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_7.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_8.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_9.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_10.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_11.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_12.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_13.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_14.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_15.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_16.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_17.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_18.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_19.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_20.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_21.zip"
+wget "https://dev-wes.afrigen-d.dev/ga4gh/wes/v1/runs/9adc7b9f-faa8-42b9-b66c-34087fc3b341/outputs/chr_22.zip"
+
+

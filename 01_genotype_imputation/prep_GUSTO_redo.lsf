@@ -1,0 +1,179 @@
+#!/bin/bash
+#BSUB -q long
+#BSUB -n 8
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -W 25:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs/GUSTO_liftover_imputation_prep.%J.out
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs/GUSTO_liftover_imputation_prep.%J.err
+
+# =============================================================================
+# GUSTO infants: hg19 PLINK (MAJOR/MINOR) -> hg38 imputation-ready per-chr VCFs
+#
+#   1. Extract infant samples (IID begins with "B")
+#   2. Export VCF, setting REF/ALT from the hg19 reference (ref-from-fa)
+#   3. Liftover hg19 -> hg38 (picard LiftoverVcf)
+#   4. Sort + index
+#   5. QC: SNPs only, biallelic, dedup, missingness/MAF/HWE, REF check vs hg38
+#   6. Split into per-autosome VCFs (chr1..chr22) for the imputation server
+#
+# Threading strategy (8 cores / 16 hyperthreads):
+#   - plink2 and bcftools index/norm get --threads ${THREADS}
+#   - bcftools --threads only accelerates bgzf (de)compression of -Oz/-Ob
+#     output, so intermediate pipe stages use uncompressed BCF (-Ou) instead
+#   - bcftools sort has NO --threads option (verified in bcftools source);
+#     we raise --max-mem instead so it sorts in memory
+#   - picard LiftoverVcf is single-threaded; no threading option exists
+#   - the per-chromosome split is embarrassingly parallel -> PAR_JOBS at once
+# =============================================================================
+
+set -eo pipefail
+
+source /etc/profile.d/modules.sh
+module load plink/2.00-alpha
+module load picard
+module load bcftools
+module load samtools
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate picard-2.27.4
+
+# ----------------------------- configuration ---------------------------------
+BASENAME=GUSTO
+GENO_DIR=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/GUSTO/genotypes
+IN_PREFIX=${GENO_DIR}/s194_noQC
+OUT_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/GUSTO/genotypes/preimputation
+WORK_DIR=${OUT_DIR}/liftover_work
+
+CHAIN=/home/stbresnahan/bhattacharya_lab/data/GenomicReferences/liftover/hg19ToHg38.over.chain
+HG38_FASTA=/rsrch5/home/epi/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta
+HG19_FASTA_DIR=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/GenomicReferences/genome
+
+MAX_MISSING=0.05
+MIN_MAF=0.01
+MIN_HWE_P=1e-6
+
+# Threading. THREADS matches #BSUB -n 8. If LSF does not bind CPUs to the 8
+# reserved slots, the node's 16 hyperthreads let you raise these to 16.
+THREADS=8
+PAR_JOBS=8        # concurrent chromosomes in the split step
+
+mkdir -p "${OUT_DIR}" "${WORK_DIR}"
+
+# ---- input checks ----
+for f in "${IN_PREFIX}.bed" "${IN_PREFIX}.bim" "${IN_PREFIX}.fam" "${CHAIN}" "${HG38_FASTA}"; do
+  [[ -f "$f" ]] || { echo "ERROR: missing input: $f"; exit 1; }
+done
+
+# ---- pick the hg19 fasta whose contig naming matches the .bim ----
+BIM_CHR=$(awk 'NR==1{print $1}' "${IN_PREFIX}.bim")
+if [[ "${BIM_CHR}" == chr* ]]; then
+  HG19_FASTA=${HG19_FASTA_DIR}/hg19_chr.fasta
+else
+  HG19_FASTA=${HG19_FASTA_DIR}/hg19.fasta
+fi
+[[ -f "${HG19_FASTA}" ]] || { echo "ERROR: ${HG19_FASTA} not found"; exit 1; }
+echo "bim chromosome coding: '${BIM_CHR}' style -> using $(basename "${HG19_FASTA}")"
+
+# plink2 --fa needs a .fai index; picard needs a sequence dictionary for R
+[[ -f "${HG19_FASTA}.fai" ]] || samtools faidx "${HG19_FASTA}"
+if [[ ! -f "${HG38_FASTA%.fasta}.dict" && ! -f "${HG38_FASTA}.dict" ]]; then
+  echo "WARNING: picard sequence dictionary for the hg38 fasta not found."
+  echo "         Create once with: picard CreateSequenceDictionary R=${HG38_FASTA}"
+fi
+
+cd "${WORK_DIR}"
+
+# --------------------- 1+2. extract infants, export VCF with true REF/ALT ----
+awk '$2 ~ /^B/ {print $1, $2}' "${IN_PREFIX}.fam" > infants.keep
+N_INFANTS=$(wc -l < infants.keep)
+echo "Infant samples found: ${N_INFANTS}"
+[[ "${N_INFANTS}" -gt 0 ]] || { echo "ERROR: no IIDs starting with 'B' in ${IN_PREFIX}.fam"; exit 1; }
+
+# --ref-from-fa is a STANDALONE flag (requires --fa), not an --export
+# modifier. It sets REF alleles from the fasta wherever unambiguous
+# (MAJOR/MINOR -> REF/ALT); .bed A2 alleles load as 'provisional' REF, so no
+# 'force' modifier is needed. It does not flip strand: any strand-flipped
+# manifest SNPs keep a wrong REF here and are caught post-liftover by the
+# 'bcftools norm --check-ref' in step 5.
+# (If plink2 errors with "Unrecognized flag: --ref-from-fa", the module build
+# predates the flag: remove --fa/--ref-from-fa from this command and rely on
+# the step-5 REF check, with '--check-ref x' to drop unfixable sites.)
+# id-paste=iid:   VCF sample names = IID (e.g. B019-30195)
+# --output-chr chrM: write chr1-style contig names to match the chain file
+plink2 --bfile "${IN_PREFIX}" \
+  --keep infants.keep \
+  --fa "${HG19_FASTA}" \
+  --ref-from-fa \
+  --threads "${THREADS}" \
+  --export vcf bgz id-paste=iid \
+  --output-chr chrM \
+  --out ${BASENAME}_infants_hg19
+
+bcftools index --tbi --threads "${THREADS}" ${BASENAME}_infants_hg19.vcf.gz
+
+# --------------------- 3. liftover to hg38 -----------------------------------
+# NOTE: picard LiftoverVcf is single-threaded; there is no threading option.
+picard -Xmx56g LiftoverVcf \
+  I=${BASENAME}_infants_hg19.vcf.gz \
+  O=${BASENAME}_infants_hg38_raw.vcf.gz \
+  CHAIN="${CHAIN}" \
+  REJECT=${BASENAME}_infants_hg38_rejected.vcf.gz \
+  R="${HG38_FASTA}" \
+  WARN_ON_MISSING_CONTIG=true
+
+echo "Variants rejected by liftover: $(bcftools view -H ${BASENAME}_infants_hg38_rejected.vcf.gz | wc -l)"
+
+# --------------------- 4. sort + index ---------------------------------------
+# bcftools sort has no --threads option; -m keeps the sort in memory instead
+# of spilling temp files to disk.
+bcftools sort -m 8G ${BASENAME}_infants_hg38_raw.vcf.gz -Oz -o ${BASENAME}_infants_hg38.vcf.gz
+bcftools index --tbi --threads "${THREADS}" ${BASENAME}_infants_hg38.vcf.gz
+
+# --------------------- 5. QC + normalize -------------------------------------
+# --rm-dup snps: liftover can map two hg19 sites to the same hg38 position;
+#                imputation servers reject duplicate positions -> keep first.
+# --check-ref f: fix REF/ALT swaps against hg38 (e.g. reference-base changes
+#                between builds). If norm errors on an unfixable site
+#                (typically a strand-flipped manifest SNP), rerun this step
+#                with '--check-ref x' to discard those sites instead.
+# -Ou: intermediate stages stream uncompressed BCF (skips the text codec);
+#      the 6 pipe stages already run concurrently on separate cores, and
+#      --threads only helps bgzf output, so it is given to the final norm only.
+bcftools view -Ou --type snps --min-alleles 2 --max-alleles 2 ${BASENAME}_infants_hg38.vcf.gz | \
+bcftools norm -Ou --rm-dup snps | \
+bcftools filter -Ou --exclude "F_MISSING > ${MAX_MISSING} || MAF < ${MIN_MAF}" | \
+bcftools +fill-tags -Ou -- -t HWE | \
+bcftools filter -Ou --exclude "HWE < ${MIN_HWE_P}" | \
+bcftools norm -Oz --threads 4 --fasta-ref "${HG38_FASTA}" --check-ref f \
+  -o "${OUT_DIR}/${BASENAME}_filtered_norm.vcf.gz"
+
+bcftools index --tbi --threads "${THREADS}" "${OUT_DIR}/${BASENAME}_filtered_norm.vcf.gz"
+echo "Variants passing QC: $(bcftools index --nrecords "${OUT_DIR}/${BASENAME}_filtered_norm.vcf.gz")"
+
+# --------------------- 6. split by chromosome (parallel) ---------------------
+# The filtered VCF is already coordinate-sorted, so 'bcftools view --regions'
+# output is sorted and the per-chromosome 'bcftools sort' from the RICHS
+# template is unnecessary. Chromosomes are independent -> run PAR_JOBS at once.
+# xargs propagates a nonzero exit if any chromosome job fails.
+split_chr() {
+  set -e
+  CHR=$1
+  OUT_VCF="${OUT_DIR}/${BASENAME}_chr${CHR}.vcf.gz"
+  bcftools view --regions "chr${CHR}" -Oz -o "${OUT_VCF}" "${OUT_DIR}/${BASENAME}_filtered_norm.vcf.gz"
+  bcftools index --tbi "${OUT_VCF}"
+  printf "chr%s\t%s\n" "${CHR}" "$(bcftools index --nrecords "${OUT_VCF}")" > "${OUT_DIR}/.counts_chr${CHR}.tmp"
+}
+export -f split_chr
+export OUT_DIR BASENAME
+
+seq 1 22 | xargs -P "${PAR_JOBS}" -n 1 bash -c 'split_chr "$0"'
+
+# assemble the counts table in chromosome order
+printf "chr\tn_variants\n" > "${OUT_DIR}/${BASENAME}_per_chr_counts.tsv"
+for CHR in $(seq 1 22); do
+  cat "${OUT_DIR}/.counts_chr${CHR}.tmp" >> "${OUT_DIR}/${BASENAME}_per_chr_counts.tsv"
+  rm -f "${OUT_DIR}/.counts_chr${CHR}.tmp"
+done
+
+echo "Done. Imputation-ready VCFs in: ${OUT_DIR}"
+cat "${OUT_DIR}/${BASENAME}_per_chr_counts.tsv"

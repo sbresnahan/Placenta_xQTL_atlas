@@ -1,0 +1,64 @@
+#!/bin/bash
+#BSUB -q short
+#BSUB -n 2
+#BSUB -M 12
+#BSUB -R "rusage[mem=12]"
+#BSUB -W 3:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+
+source /etc/profile.d/modules.sh
+module load bcftools
+
+basename=SNUH
+
+base_vcf=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/OGF.orig.SNP.hg38.vcf.gz
+
+bcftools view -r 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22 \
+  /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/OGF.orig.SNP.hg38.vcf.gz | \
+bcftools annotate --rename-chrs <(echo -e "1\tchr1\n2\tchr2\n3\tchr3\n4\tchr4\n5\tchr5\n6\tchr6\n7\tchr7\n8\tchr8\n9\tchr9\n10\tchr10\n11\tchr11\n12\tchr12\n13\tchr13\n14\tchr14\n15\tchr15\n16\tchr16\n17\tchr17\n18\tchr18\n19\tchr19\n20\tchr20\n21\tchr21\n22\tchr22") \
+  -Oz -o /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/OGF.orig.SNP.hg38.chr.vcf.gz
+  
+tabix -p vcf /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/OGF.orig.SNP.hg38.chr.vcf.gz
+
+input_vcf=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/OGF.orig.SNP.hg38.chr.vcf.gz
+output_dir=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/imputation_ready/${basename}
+ref_fasta=/rsrch5/home/epi/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta
+
+mkdir -p "$output_dir"
+
+tabix -p vcf $input_vcf
+
+# Step 1: Basic QC filters
+# - Remove indels (keep SNPs only for imputation scaffold)
+# - Remove multiallelic sites
+# - Filter on genotype missingness, MAF, and HWE
+bcftools view \
+    --type snps \
+    --max-alleles 2 \
+    --min-alleles 2 \
+    "$input_vcf" | \
+bcftools filter \
+    --exclude 'F_MISSING > 0.05 || MAF < 0.01' | \
+bcftools +fill-tags -- -t HWE | \
+bcftools filter \
+    --exclude 'HWE < 1e-6' | \
+# Step 2: Normalize (left-align and trim) against reference genome
+bcftools norm \
+    --fasta-ref "$ref_fasta" \
+    --check-ref w \
+    -o "$output_dir/${basename}_filtered_norm.vcf.gz" \
+    -O z
+
+bcftools index --tbi "$output_dir/${basename}_filtered_norm.vcf.gz"
+
+# Step 3: Split by chromosome and sort (TOPMed requires per-chromosome VCFs)
+for CHR in {1..22}; do
+    bcftools view \
+        --regions "chr${CHR}" \
+        "$output_dir/${basename}_filtered_norm.vcf.gz" | \
+    bcftools sort \
+        -o "$output_dir/${basename}_chr${CHR}.vcf.gz" \
+        -O z
+    bcftools index --tbi "$output_dir/${basename}_chr${CHR}.vcf.gz"
+done

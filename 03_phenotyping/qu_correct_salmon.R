@@ -1,0 +1,259 @@
+#!/usr/bin/env Rscript
+# =============================================================================
+# qu_correct_salmon.R
+# -----------------------------------------------------------------------------
+# Apply quantification-uncertainty (QU) correction to Salmon transcript
+# quantifications, per:
+#   Chen, Y., Lun, A.T.L., Zhou, X., et al. (2023).
+#   "Dividing out quantification uncertainty allows efficient assessment of
+#    differential transcript expression with edgeR."
+#   Nucleic Acids Research, gkad1167.  https://doi.org/10.1093/nar/gkad1167
+#
+# Method
+# -------
+# Salmon (and kallisto) emit bootstrap resamples of transcript counts. The
+# read-to-transcript ambiguity (RTA) in those bootstraps induces extra-Poisson
+# variation (an "overdispersion" sigma^2_t per transcript). The edgeR function
+# catchSalmon fits a quasi-Poisson model to the bootstraps and estimates
+# sigma^2_t. Dividing each transcript's count by its overdispersion
+#   z_ti = y_ti / sigma^2_t
+# yields "scaled counts" that follow the standard negative-binomial
+# mean-variance relationship, so downstream gene-level tools (edgeR, etc.) work
+# at full statistical efficiency.
+#
+# IMPORTANT: catchSalmon is in the **edgeR** Bioconductor package (NOT fishpond;
+# fishpond provides Swish, a different method). The paper states this
+# explicitly.
+#
+# What this script does
+# ---------------------
+# 1. Reads the per-sample Salmon directories (<salmon-dir>/<sample>), in the
+#    order given by <samples.txt>.
+# 2. edgeR::catchSalmon(dirs) -> per-transcript RTA overdispersion.
+# 3. Builds tx2gene (transcript_id -> gene_id) from the reference GTF via
+#    rtracklayer::import (standard, fast, C-backed GTF parser).
+# 4. tximport(..., type="salmon", tx2gene=tx2g, txOut=TRUE, dropInfReps=TRUE)
+#    to import the quant.sf files (inferential replicates dropped AFTER
+#    catchSalmon has consumed the bootstraps).
+# 5. QU correction: counts <- counts / overdispersion (clamped to >= 1, as the
+#    paper's estimator does via max(1, ...)).
+# 6. Recomputes abundance as CPM from the scaled counts (edgeR::cpm), matching
+#    the reference workflow.
+# 7. Writes an ADJUSTED quant.sf per sample to <out-dir>/<sample>/quant.sf,
+#    with the same 5 columns Salmon uses (Name, Length, EffectiveLength, TPM,
+#    NumReads):
+#       Name            = transcript_id
+#       NumReads        = QU-corrected (scaled) counts
+#       TPM             = recomputed from scaled counts (per-sample TPM =
+#                         scaled_count / sum(scaled_count) * 1e6)
+#       Length          = carried from the original quant.sf
+#       EffectiveLength = carried from the original quant.sf
+#    This makes <out-dir> a drop-in replacement for the original Salmon dir
+#    from assemble_bed.py's perspective (it reads Name/TPM/NumReads).
+#
+# Scope
+# -----
+# QU correction is applied to ISOFORM (transcript) counts only. Gene-level
+# expression is produced by assemble_bed.py from the ORIGINAL Salmon dir
+# (gene-level counts are largely unambiguous, so RTA is negligible there).
+#
+# Usage
+# -----
+#   Rscript qu_correct_salmon.R \
+#       --samples    <samples.txt> \
+#       --salmon-dir <cohort_dir>/intermediate/expression \
+#       --ref-anno   <HPLRv2.0.annotated.PANTRY.gtf> \
+#       --out-dir    <cohort_dir>/intermediate/expression_qu
+#
+# Requires in the seadragon R library: edgeR, tximport, rtracklayer (and their
+# deps). Errors clearly if a package is missing.
+# =============================================================================
+
+.libPaths(c("/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1", .libPaths()))
+
+suppressPackageStartupMessages(library(optparse))
+
+# =============================================================================
+# Helper: build tx2gene (transcript_id -> gene_id) from a GTF via rtracklayer
+# =============================================================================
+# rtracklayer::import is the standard, fast (C-backed) GTF parser. We import
+# the GTF, subset to transcript features, extract gene_id + transcript_id, and
+# deduplicate. This replaces an earlier base-R line-by-line parser that was
+# slower and more fragile; rtracklayer is near-universal in any Bioconductor
+# environment that already has edgeR + tximport.
+.build_tx2gene <- function(gtf_file) {
+  if (!file.exists(gtf_file)) stop("GTF not found: ", gtf_file)
+  gr <- rtracklayer::import(gtf_file)            # GRanges; mcols hold attributes
+  gr <- gr[gr$type == "transcript"]              # subset to transcript features
+  if (length(gr) == 0) {
+    stop("No transcript features with type=='transcript' found in GTF: ", gtf_file)
+  }
+  tx2g <- data.frame(
+    transcript_id = gr$transcript_id,
+    gene_id       = gr$gene_id,
+    stringsAsFactors = FALSE
+  )
+  tx2g <- unique(tx2g)                           # a transcript may span lines
+  # Drop any rows missing either ID (shouldn't happen for a well-formed GTF):
+  tx2g <- tx2g[!is.na(tx2g$transcript_id) & !is.na(tx2g$gene_id) &
+               nzchar(tx2g$transcript_id) & nzchar(tx2g$gene_id), ]
+  if (nrow(tx2g) == 0) {
+    stop("No transcript_id/gene_id attributes on transcript features in GTF: ", gtf_file)
+  }
+  tx2g
+}
+
+option_list <- list(
+  make_option("--samples", type = "character", default = NULL,
+              help = "File with one sample ID per line (no header)"),
+  make_option("--salmon-dir", type = "character", default = NULL,
+              help = "Directory containing per-sample Salmon output subdirs (each with quant.sf + aux_info/)"),
+  make_option("--ref-anno", type = "character", default = NULL,
+              help = "Reference GTF with transcript_id / gene_id attributes (used to build tx2gene)"),
+  make_option("--out-dir", type = "character", default = NULL,
+              help = "Output directory: adjusted quant.sf written to <out-dir>/<sample>/quant.sf")
+)
+opt <- parse_args(OptionParser(option_list = option_list))
+
+required <- c("samples", "salmon-dir", "ref-anno", "out-dir")
+missing <- required[vapply(required, function(k) is.null(opt[[k]]), logical(1))]
+if (length(missing) > 0) {
+  stop(sprintf("Missing required argument(s): %s. Required: --samples, --salmon-dir, --ref-anno, --out-dir",
+               paste0("--", missing, collapse = ", ")))
+}
+
+samples_file   <- opt[["samples"]]
+salmon_dir     <- opt[["salmon-dir"]]
+ref_anno_file  <- opt[["ref-anno"]]
+out_dir        <- opt[["out-dir"]]
+
+# ---- Load required packages ------------------------------------------------
+for (pkg in c("edgeR", "tximport", "rtracklayer")) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    stop(sprintf("Required R package '%s' not found in .libPaths(): %s\n",
+                 pkg, paste(.libPaths(), collapse = ", ")))
+  }
+}
+suppressPackageStartupMessages(library(edgeR))
+suppressPackageStartupMessages(library(tximport))
+suppressPackageStartupMessages(library(rtracklayer))
+
+# ---- Read samples ----------------------------------------------------------
+samples <- readLines(samples_file)
+samples <- trimws(samples)
+samples <- samples[nzchar(samples)]
+if (length(samples) == 0) stop("No samples found in samples file: ", samples_file)
+
+dirs <- file.path(salmon_dir, samples)
+missing_dirs <- dirs[!dir.exists(dirs)]
+if (length(missing_dirs) > 0) {
+  stop("Missing Salmon output directories:\n  ", paste(missing_dirs, collapse = "\n  "))
+}
+files <- file.path(dirs, "quant.sf")
+missing_files <- files[!file.exists(files)]
+if (length(missing_files) > 0) {
+  stop("Missing quant.sf files:\n  ", paste(missing_files, collapse = "\n  "))
+}
+names(files) <- samples
+
+cat("================================================================\n")
+cat("qu_correct_salmon.R\n")
+cat("  samples    :", length(samples), "\n")
+cat("  salmon-dir :", salmon_dir, "\n")
+cat("  ref-anno   :", ref_anno_file, "\n")
+cat("  out-dir    :", out_dir, "\n")
+cat("================================================================\n")
+
+# ---- Build tx2gene from the reference GTF ----------------------------------
+cat("[1/5] Building tx2gene from GTF (rtracklayer::import)\n")
+tx2gene <- .build_tx2gene(ref_anno_file)
+cat("       tx2gene rows:", nrow(tx2gene), "\n")
+
+# ---- catchSalmon: estimate RTA overdispersion from bootstraps --------------
+cat("[2/5] edgeR::catchSalmon (estimating RTA overdispersion from bootstraps)\n")
+# catchSalmon takes a vector of per-sample Salmon directories and reads
+# aux_info/ bootstraps + quant.sf from each.
+s <- edgeR::catchSalmon(dirs)
+# s$counts           : transcript x sample matrix of (unscaled) counts
+# s$annotation       : data.frame incl. $Overdispersion (per-transcript sigma^2_t)
+overdisp <- s$annotation$Overdispersion
+# Clamp to >= 1 (the paper's estimator already applies max(1, ...) via the
+# empirical-Bayes moderation, but guard explicitly).
+overdisp <- pmax(overdisp, 1)
+cat("       overdispersion: min=", round(min(overdisp), 3),
+    " median=", round(median(overdisp), 3),
+    " max=", round(max(overdisp), 3), "\n", sep = "")
+
+# ---- tximport: import quant.sf (drop inf reps; catchSalmon already used them)
+cat("[3/5] tximport (type=salmon, txOut=TRUE, dropInfReps=TRUE)\n")
+txi <- tximport::tximport(files, type = "salmon", tx2gene = tx2gene,
+                          txOut = TRUE, dropInfReps = TRUE)
+# txi$counts      : transcript x sample
+# txi$abundance   : transcript x sample (TPM from Salmon)
+# txi$length      : transcript x sample (effective lengths)
+
+# Align row order of overdispersion to txi$counts rows.
+# catchSalmon and tximport should produce the same transcript order (both read
+# quant.sf in the same per-sample dir order), but verify.
+if (!all(rownames(txi$counts) == rownames(s$counts))) {
+  # Reorder overdispersion to match tximport's row order.
+  overdisp <- overdisp[match(rownames(txi$counts), rownames(s$counts))]
+  if (any(is.na(overdisp))) {
+    n_na <- sum(is.na(overdisp))
+    warning(n_na, " transcripts in tximport output not found in catchSalmon output; ",
+            "setting their overdispersion to 1 (no scaling).")
+    overdisp[is.na(overdisp)] <- 1
+  }
+}
+
+# ---- QU correction: divide counts by overdispersion -----------------------
+cat("[4/5] Applying QU correction (counts / overdispersion)\n")
+scaled_counts <- txi$counts / overdisp
+# Recompute abundance as CPM from scaled counts (matches the reference workflow).
+scaled_abundance <- edgeR::cpm(scaled_counts, log = FALSE)
+
+# ---- Write adjusted quant.sf per sample -----------------------------------
+cat("[5/5] Writing adjusted quant.sf to ", out_dir, "\n", sep = "")
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Carry Length / EffectiveLength from the original quant.sf files (per-sample).
+# Build a transcript -> (Length, EffectiveLength) table from the first sample's
+# quant.sf (these are annotation-derived and identical across samples for the
+# same index).
+first_qsf <- read.delim(files[1], stringsAsFactors = FALSE)
+length_tbl <- first_qsf[, c("Name", "Length", "EffectiveLength")]
+rownames(length_tbl) <- length_tbl$Name
+
+for (i in seq_along(samples)) {
+  sm <- samples[i]
+  sm_out_dir <- file.path(out_dir, sm)
+  dir.create(sm_out_dir, showWarnings = FALSE, recursive = TRUE)
+  out_file <- file.path(sm_out_dir, "quant.sf")
+
+  # Per-sample adjusted NumReads and TPM:
+  numreads <- scaled_counts[, i]
+  # TPM = scaled_count / sum(scaled_count) * 1e6 (per sample)
+  tpm <- numreads / sum(numreads) * 1e6
+
+  # Assemble in Salmon quant.sf column order, aligned to tximport row order:
+  tx_ids <- rownames(scaled_counts)
+  len_df <- length_tbl[tx_ids, c("Length", "EffectiveLength")]
+
+  qsf <- data.frame(
+    Name            = tx_ids,
+    Length          = len_df$Length,
+    EffectiveLength = len_df$EffectiveLength,
+    TPM             = tpm,
+    NumReads        = numreads,
+    stringsAsFactors = FALSE
+  )
+  # Guard against any NaN/Inf from zero-library samples:
+  qsf$TPM[is.nan(qsf$TPM) | is.infinite(qsf$TPM)] <- 0
+  qsf$NumReads[is.nan(qsf$NumReads) | is.infinite(qsf$NumReads)] <- 0
+
+  write.table(qsf, file = out_file, sep = "\t", quote = FALSE,
+              row.names = FALSE, col.names = TRUE)
+}
+cat("       wrote ", length(samples), " adjusted quant.sf files\n", sep = "")
+cat("================================================================\n")
+cat("qu_correct_salmon.R DONE\n")

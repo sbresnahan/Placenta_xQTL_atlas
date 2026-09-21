@@ -1,0 +1,124 @@
+#!/bin/bash
+#BSUB -W 24:00
+#BSUB -n 8
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+#BSUB -q medium
+
+# ── Modules ────────────────────────────────────────────────────────────────────
+source /etc/profile.d/modules.sh
+module load bwa
+module load gatk4
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate gatk4-4.6.2.0
+module load sratoolkit
+module load samtools
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+RAW_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/raw
+REPORTS_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/reports
+FASTQ_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/fastq
+BAM_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/bam
+GVCF_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/genotypes/raw
+TMP_DIR=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/temp
+
+REF=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta
+DBSNP=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/dbSNP/hg38/common_all_20180418.chr.vcf.gz
+KG=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/1kGP/1kGP_hg38.vcf.gz
+
+THREADS=8
+
+mkdir -p ${FASTQ_DIR} ${BAM_DIR} ${GVCF_DIR} ${TMP_DIR} ${REPORTS_DIR}
+
+# ── Sample ─────────────────────────────────────────────────────────────────────
+SRR=${SRA}
+echo "[$(date)] Processing ${SRR}"
+
+# ── 1. SRA → FASTQ ─────────────────────────────────────────────────────────────
+R1=${FASTQ_DIR}/${SRR}_1.fastq
+R2=${FASTQ_DIR}/${SRR}_2.fastq
+
+if [ ! -s ${R1} ] || [ ! -s ${R2} ]; then
+    echo "[$(date)] fasterq-dump: ${SRR}"
+    fasterq-dump \
+        ${RAW_DIR}/${SRR}/${SRR}.sra \
+        --outdir ${FASTQ_DIR} \
+        --temp ${TMP_DIR} \
+        --threads ${THREADS} \
+        --split-files
+else
+    echo "[$(date)] Skipping fasterq-dump: ${SRR} FASTQs already exist"
+fi
+
+# ── 2. Align ───────────────────────────────────────────────────────────────────
+echo "[$(date)] BWA-MEM: ${SRR}"
+RG="@RG\tID:${SRR}\tSM:${SRR}\tPL:ILLUMINA\tLB:${SRR}\tPU:${SRR}"
+
+bwa mem \
+    -t ${THREADS} \
+    -R "${RG}" \
+    ${REF} \
+    ${R1} ${R2} \
+| samtools sort \
+    -@ ${THREADS} \
+    -T ${TMP_DIR}/${SRR} \
+    -o ${BAM_DIR}/${SRR}.sorted.bam
+
+samtools index ${BAM_DIR}/${SRR}.sorted.bam
+
+# ── 3. Mark Duplicates ─────────────────────────────────────────────────────────
+echo "[$(date)] MarkDuplicates: ${SRR}"
+gatk MarkDuplicates \
+    -I ${BAM_DIR}/${SRR}.sorted.bam \
+    -O ${BAM_DIR}/${SRR}.markdup.bam \
+    -M ${BAM_DIR}/${SRR}.markdup.metrics \
+    --TMP_DIR ${TMP_DIR} \
+    --CREATE_INDEX true
+
+# ── 4. BQSR ────────────────────────────────────────────────────────────────────
+echo "[$(date)] BaseRecalibrator: ${SRR}"
+gatk BaseRecalibrator \
+    -I ${BAM_DIR}/${SRR}.markdup.bam \
+    -R ${REF} \
+    --known-sites ${DBSNP} \
+    -O ${BAM_DIR}/${SRR}.recal.table \
+    --tmp-dir ${TMP_DIR}
+
+echo "[$(date)] ApplyBQSR: ${SRR}"
+gatk ApplyBQSR \
+    -I ${BAM_DIR}/${SRR}.markdup.bam \
+    -R ${REF} \
+    --bqsr-recal-file ${BAM_DIR}/${SRR}.recal.table \
+    -O ${BAM_DIR}/${SRR}.bqsr.bam \
+    --tmp-dir ${TMP_DIR}
+
+# ── 5. HaplotypeCaller → GVCF ──────────────────────────────────────────────────
+echo "[$(date)] HaplotypeCaller: ${SRR}"
+gatk HaplotypeCaller \
+    -I ${BAM_DIR}/${SRR}.bqsr.bam \
+    -R ${REF} \
+    -O ${GVCF_DIR}/${SRR}.g.vcf.gz \
+    -ERC GVCF \
+    --dbsnp ${DBSNP} \
+    --tmp-dir ${TMP_DIR} \
+    --native-pair-hmm-threads ${THREADS}
+
+if [ ! -s ${GVCF_DIR}/${SRR}.g.vcf.gz ]; then
+    echo "[$(date)] ERROR: GVCF not found or empty for ${SRR}. Skipping cleanup." >&2
+    exit 1
+fi
+
+echo "[$(date)] Done: ${SRR}"
+
+rm -f ${BAM_DIR}/${SRR}.sorted.bam ${BAM_DIR}/${SRR}.sorted.bam.bai
+
+rm -f \
+    ${BAM_DIR}/${SRR}.markdup.bam \
+    ${BAM_DIR}/${SRR}.markdup.bai \
+    ${BAM_DIR}/${SRR}.recal.table
+
+rm -f \
+    ${BAM_DIR}/${SRR}.bqsr.bam \
+    ${BAM_DIR}/${SRR}.bqsr.bai

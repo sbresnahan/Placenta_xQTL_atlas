@@ -1,0 +1,25 @@
+#!/bin/bash
+#BSUB -q short
+#BSUB -n 4
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -W 3:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+
+source /etc/profile.d/modules.sh
+module load picard
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate picard-2.27.4
+
+OUTPUT_DIR=/rsrch5/home/epi/bhattacharya_lab/data/mapqtl/NIEHS_RICHS/genotypes
+
+cd ${OUTPUT_DIR}
+
+picard -Xmx56g LiftoverVcf \
+  I=RICHS_genotypes_snps_chr_clean_primary.vcf.gz \
+  O=RICHS_genotypes_snps_hg38.vcf.gz \
+  CHAIN=/home/stbresnahan/bhattacharya_lab/data/GenomicReferences/liftover/hg19ToHg38.over.chain \
+  REJECT=RICHS_genotypes_snps_hg38_rejected.vcf.gz \
+  R=/home/stbresnahan/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta \
+  WARN_ON_MISSING_CONTIG=true

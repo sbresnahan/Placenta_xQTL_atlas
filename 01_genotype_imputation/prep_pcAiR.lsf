@@ -1,0 +1,33 @@
+#!/bin/bash
+#BSUB -q medium
+#BSUB -n 12
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -W 8:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+
+source /etc/profile.d/modules.sh
+module load bcftools
+module load plink
+
+# ---- One-time setup: Build 1KG reference pgen ----
+THREADS=12
+KG_DIR="/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/1kGP"
+KG_REF="${KG_DIR}/1kGP_hg38"
+
+# Write BCF list
+for chr in {1..22}; do
+    echo "${KG_DIR}/1kGP_high_coverage_Illumina.chr${chr}.filtered.SNV_INDEL_SV_phased_panel.bcf"
+done > "${KG_DIR}/bcf_list.txt"
+
+bcftools concat --file-list "${KG_DIR}/bcf_list.txt" \
+    --threads "$THREADS" \
+    -Oz -o "${KG_DIR}/1kGP_hg38.vcf.gz"
+
+tabix -p vcf "${KG_DIR}/1kGP_hg38.vcf.gz"
+
+plink2 --vcf "${KG_DIR}/1kGP_hg38.vcf.gz" \
+    --make-pgen \
+    --threads "$THREADS" \
+    --out "$KG_REF"

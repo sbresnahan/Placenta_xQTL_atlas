@@ -1,0 +1,114 @@
+# =============================================================================
+# PANTRY rewrite for MDACC seadragon HPC (LSF/BSUB)
+# Master configuration: shared references + per-cohort parameters
+# =============================================================================
+# Usage:
+#   1. Run Tier 1 (shared reference prep) once:
+#        bsub -env "CONFIG=\"config.yml\",SCRIPTS_DIR=\"/path/to/scripts\"" < 001_refprep_pre.sh
+#        bsub -env "CONFIG=\"config.yml\",SCRIPTS_DIR=\"/path/to/scripts\"" < 002_txrevise_array.sh
+#        bsub -env "CONFIG=\"config.yml\",SCRIPTS_DIR=\"/path/to/scripts\"" < 003_refprep_post.sh
+#   2. Run Tier 2 (per cohort) via the driver:
+#        python3 run_pipeline.py --config config.yml --cohort cohort1
+# =============================================================================
+
+# ---- Shared references (used by all cohorts) ----
+ref_genome: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta
+ref_anno: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/lrassembly_v2/HPLRv2/SQANTI3/HPLRv2.0.annotated.gtf
+
+# Normalized GTF (output of prep_PANTRY_gtf.R in Tier 1; used by aggregation
+# scripts 10-15 for --ref-anno, since assemble_bed.py needs gene_name,
+# gene_biotype, and gene feature lines only present in the normalized GTF)
+normalized_gtf: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/reference/HPLRv2.0.annotated.PANTRY.gtf
+
+# SQANTI3 classification table (input to prep_PANTRY_gtf.R in Tier 1)
+classification: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/lrassembly_v2/HPLRv2/SQANTI3/HPLRv2_classification.annotated.txt
+
+# Reference GENCODE GTF (input to prep_PANTRY_gtf.R for gene boundary override)
+reference_gtf: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/Placenta_LRRNAseq/Placenta_LRRNAseq/STB/SQANTI3/gencode_v45_dedup.gtf
+
+# Source prefix for prep_PANTRY_gtf.R — written into GTF column 2 (source) for
+# gene feature lines whose input line has no source, and into the ##source
+# header comment of the normalized GTF. Default: HPLR. Change to whatever prefix
+# your assembly uses (e.g. FLAIR, TALON, IsoSeq).
+source_prefix: HPLR
+
+# REDIportal hg38 table (input to rediportal_preprocess.py in Tier 1)
+# chr-prefixed output matches the HPLRv2 GTF and hg38 FASTA
+rediportal_input: /rsrch5/home/epi/bhattacharya_lab/data/REDIportal/TABLE1_hg38_v3.txt.gz
+
+star_index: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/GenomicReferences/star-2.7.4a_GCA_000001405.15_GRCh38_no_alt_analysis_set
+salmon_index: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/lrassembly_v2/HPLRv2/salmon/HPLRv2
+majiq_license: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/software/MAJIQ/majiq_license_academic_official.lic.txt
+
+# Edit sites BED (produced by rediportal_preprocess.py in Tier 1)
+# chr-prefixed to match the HPLRv2 GTF and hg38 FASTA
+edit_sites_bed: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/reference/rediportal_hg38.bed
+
+# Shared reference prep output directory (Tier 1 outputs land here)
+reference_dir: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/reference
+
+# Per-cohort output base (each cohort gets a subdirectory)
+output_base: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY
+
+# Pantry bundled scripts directory (original PANTRY scripts, used unmodified
+# except assemble_bed.py which is replaced with the modified version)
+pantry_scripts: /rsrch5/home/epi/bhattacharya_lab/software/Pantry/phenotyping/scripts
+
+# Seadragon-specific scripts directory (this package: run_pipeline.py,
+# config_get.py, prep_PANTRY_gtf.R, qu_correct_salmon.R, rediportal_preprocess.py,
+# and all the .sh stage scripts)
+seadragon_scripts: /rsrch5/home/epi/bhattacharya_lab/software/Pantry/phenotyping/scripts
+
+# txrevise batch count (must match the #BSUB -J "txrevise[1-N]" array range
+# in 002_txrevise_array.sh, which is parsed at LSF submission time and cannot
+# read from config)
+txrevise_n_batches: 100
+
+# ---- RNA editing parameters (shared) ----
+rna_editing:
+  edit_sites_min_coverage: 20
+  edit_sites_min_samples: 10
+  edit_sites_min_samples_fraction: 0.1
+  edit_sites_cluster: false
+  edit_sites_correlation_threshold: 0.9
+
+# ---- MAJIQ / intron retention parameters (shared) ----
+intron_retention:
+  psicov_batch_size: 25
+  min_experiments: 0.01
+
+# ---- LSF queue defaults (per-stage overrides in each script) ----
+lsf:
+  default_queue: medium
+  logs_dir_name: logs
+
+# ---- Cohorts ----
+# Each cohort declares:
+#   strandedness: unstranded | stranded | reverse_stranded
+#     (drives featureCounts -s; Salmon always uses -l A; RegTools always -s XS)
+#   fastq_dir: directory containing FASTQ files
+#   fastq_map: tab-delimited file (R1_path, R2_path, sample_id) or (R1_path, sample_id)
+#     paths relative to fastq_dir; 2 paths = paired-end, 1 path = single-end
+#   samples_file: one-column file of sample IDs to include
+cohorts:
+  cohort1:
+    strandedness: unstranded
+    fastq_dir: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIEHS_RICHS/expression/trim
+    fastq_map: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIEHS_RICHS/expression/trim/fastq_map.tsv
+    samples_file: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIEHS_RICHS/expression/trim/samples.txt
+  cohort2:
+    strandedness: reverse_stranded
+    fastq_dir: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/GUSTO/rnaseq/fastq
+    fastq_map: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/GUSTO/rnaseq/fastq/fastq_map.tsv
+    samples_file: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/GUSTO/rnaseq/fastq/samples.txt
+  cohort3:
+    strandedness: reverse_stranded
+    fastq_dir: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/SNUH/expression/trim
+    fastq_map: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/SNUH/expression/trim/fastq_map.tsv
+    samples_file: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/SNUH/expression/trim/samples.txt
+  cohort4:
+    strandedness: reverse_stranded
+    fastq_dir: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/NIGMS_SexDifferences_Placentas
+    fastq_map: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/NIGMS_SexDifferences_Placentas/fastq_map.tsv
+    samples_file: /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/NIGMS_SexDifferences_Placentas/samples.txt
+  # ... add cohorts with their own strandedness, fastq_dir, fastq_map, samples_file

@@ -1,0 +1,191 @@
+#!/bin/bash
+#BSUB -q medium
+#BSUB -n 12
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -W 12:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+
+source /etc/profile.d/modules.sh
+module load bcftools
+module load plink
+
+# ==============================================================
+# Pre-PC-AiR genotype preparation for MALI
+# Input:  per-chromosome imputed VCFs from TOPMed
+# Output: PLINK2 pgen/pvar/psam filtered to Rsq >= 0.4
+# ==============================================================
+
+# ---- Configuration ----
+COHORT="MALI"
+VCF_DIR="/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/MALI/genotypes/imputed"
+OUTDIR=${VCF_DIR}/qc
+KG_DIR="/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/1kGP"
+KG_REF="${KG_DIR}/1kGP_hg38"
+KG_LABELS="${KG_DIR}/1kg_superpop.tsv"
+THREADS=12
+RSQ_THRESH=0.4
+
+mkdir -p "$OUTDIR"
+
+RUN_STEP=true
+
+if [ "$RUN_STEP" = true ]; then
+  
+  # ---- Step 1: Merge per-chromosome VCFs ----
+  echo "=== Step 1: Merging VCFs ==="
+  
+  VCF_LIST="$OUTDIR/vcf_list.txt"
+  ls "$VCF_DIR"/chr{1..22}.dose.vcf.gz > "$VCF_LIST"
+  
+  bcftools concat \
+      --file-list "$VCF_LIST" \
+      --threads "$THREADS" \
+      -Oz -o "$OUTDIR/${COHORT}.merged.vcf.gz"
+  
+  tabix -p vcf "$OUTDIR/${COHORT}.merged.vcf.gz"
+  
+fi
+
+# ---- Step 2: Filter to Rsq >= 0.4 ----
+echo "=== Step 2: Filtering to Rsq >= ${RSQ_THRESH} and converting to PLINK2 ==="
+
+bcftools view \
+    --include "INFO/R2 >= ${RSQ_THRESH}" \
+    --threads "$THREADS" \
+    "$OUTDIR/${COHORT}.merged.vcf.gz" \
+    -Oz -o "$OUTDIR/${COHORT}.rsq_pass.vcf.gz"
+
+tabix -p vcf "$OUTDIR/${COHORT}.rsq_pass.vcf.gz"
+
+NPASS=$(bcftools view -H "$OUTDIR/${COHORT}.rsq_pass.vcf.gz" | wc -l)
+echo "  Rsq-passing variants: $NPASS"
+
+# ---- Step 3: Convert to PLINK2 format ----
+echo "=== Step 3: Converting to PLINK2 ==="
+
+plink2 \
+    --vcf "$OUTDIR/${COHORT}.rsq_pass.vcf.gz" dosage=DS \
+    --chr 1-22 \
+    --set-all-var-ids '@:#:$r:$a' \
+    --new-id-max-allele-len 1000 \
+    --make-pgen \
+    --threads "$THREADS" \
+    --out "$OUTDIR/${COHORT}.rsq_pass"
+
+# ---- Step 4: LD pruning for PCA ----
+echo "=== Step 4: LD pruning ==="
+
+plink2 \
+    --pfile "$OUTDIR/${COHORT}.rsq_pass" \
+    --maf 0.05 \
+    --geno 0.05 \
+    --indep-pairwise 1000 100 0.1 \
+    --threads "$THREADS" \
+    --out "$OUTDIR/${COHORT}.pruned"
+
+# ---- Step 5: Merge with 1000 Genomes reference for PC-AiR ----
+echo "=== Step 5: Merging with 1000 Genomes reference ==="
+
+# Extract LD-pruned variants from cohort
+plink2 \
+    --pfile "$OUTDIR/${COHORT}.rsq_pass" \
+    --extract "$OUTDIR/${COHORT}.pruned.prune.in" \
+    --make-pgen \
+    --threads "$THREADS" \
+    --out "$OUTDIR/${COHORT}.pruned.extracted"
+
+# Standardize 1KG variant IDs to chr:pos:ref:alt to match cohort
+if [ ! -f "$KG_DIR/kg_ref.standardized.pgen" ]; then
+    plink2 \
+        --pfile "$KG_REF" \
+        --set-all-var-ids '@:#:$r:$a' \
+        --new-id-max-allele-len 1000 \
+        --make-pgen \
+        --threads "$THREADS" \
+        --out "$KG_DIR/kg_ref.standardized"
+else
+    echo "  kg_ref.standardized already exists, skipping."
+fi
+
+# Get overlapping variant IDs
+awk 'NR>1 && !/^#/ {print $3}' "$OUTDIR/${COHORT}.pruned.extracted.pvar" \
+    > "$OUTDIR/cohort_ids.txt"
+awk 'NR>1 && !/^#/ {print $3}' "$KG_DIR/kg_ref.standardized.pvar" \
+    > "$OUTDIR/kg_ids.txt"
+
+awk 'NR==FNR {vars[$1]=1; next} $1 in vars {print $1}' \
+    "$OUTDIR/cohort_ids.txt" \
+    "$OUTDIR/kg_ids.txt" \
+    > "$OUTDIR/overlap_snps.txt"
+
+echo "  Cohort pruned variants: $(wc -l < "$OUTDIR/cohort_ids.txt")"
+echo "  1KG standardized variants: $(wc -l < "$OUTDIR/kg_ids.txt")"
+echo "  Overlapping variants: $(wc -l < "$OUTDIR/overlap_snps.txt")"
+
+# Extract and sort cohort
+plink2 \
+    --pfile "$OUTDIR/${COHORT}.pruned.extracted" \
+    --extract "$OUTDIR/overlap_snps.txt" \
+    --sort-vars \
+    --make-pgen pvar-cols=maybequal,maybefilter,maybecm \
+    --threads "$THREADS" \
+    --out "$OUTDIR/${COHORT}.for_pcair.sorted"
+
+# Extract and sort 1KG
+plink2 \
+    --pfile "$KG_DIR/kg_ref.standardized" \
+    --extract "$OUTDIR/overlap_snps.txt" \
+    --sort-vars \
+    --make-pgen pvar-cols=maybequal,maybefilter,maybecm \
+    --threads "$THREADS" \
+    --out "$OUTDIR/kg_ref.for_pcair.sorted"
+
+# Convert both to VCF
+plink2 \
+    --pfile "$OUTDIR/${COHORT}.for_pcair.sorted" \
+    --recode vcf \
+    --threads "$THREADS" \
+    --out "$OUTDIR/${COHORT}.for_pcair.sorted"
+
+plink2 \
+    --pfile "$OUTDIR/kg_ref.for_pcair.sorted" \
+    --recode vcf \
+    --threads "$THREADS" \
+    --out "$OUTDIR/kg_ref.for_pcair.sorted"
+
+# bgzip and index both
+bgzip -@ "$THREADS" "$OUTDIR/${COHORT}.for_pcair.sorted.vcf"
+bgzip -@ "$THREADS" "$OUTDIR/kg_ref.for_pcair.sorted.vcf"
+tabix -p vcf "$OUTDIR/${COHORT}.for_pcair.sorted.vcf.gz"
+tabix -p vcf "$OUTDIR/kg_ref.for_pcair.sorted.vcf.gz"
+
+# Merge (sample-wise)
+bcftools merge \
+    "$OUTDIR/${COHORT}.for_pcair.sorted.vcf.gz" \
+    "$OUTDIR/kg_ref.for_pcair.sorted.vcf.gz" \
+    --threads "$THREADS" \
+    -Oz -o "$OUTDIR/${COHORT}_plus_kg.for_pcair.vcf.gz"
+
+tabix -p vcf "$OUTDIR/${COHORT}_plus_kg.for_pcair.vcf.gz"
+
+# ---- Step 6: Convert merged VCF to BED for GDS conversion in R ----
+echo "=== Step 6: Converting merged VCF to BED ==="
+
+plink2 \
+    --vcf "$OUTDIR/${COHORT}_plus_kg.for_pcair.vcf.gz" \
+    --make-bed \
+    --threads "$THREADS" \
+    --out "$OUTDIR/${COHORT}_plus_kg.for_pcair"
+
+if [ ! -f "$OUTDIR/${COHORT}_plus_kg.for_pcair.bed" ]; then
+    echo "ERROR: conversion failed. Check log."
+    exit 1
+fi
+
+echo "=== Script 1 complete ==="
+echo "Inputs ready for PC-AiR:"
+echo "  Full Rsq-passing pgen: $OUTDIR/${COHORT}.rsq_pass"
+echo "  Merged cohort+1KG bed: $OUTDIR/${COHORT}_plus_kg.for_pcair"
+echo "  1KG ancestry labels: $KG_LABELS"

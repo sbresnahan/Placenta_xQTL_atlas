@@ -1,0 +1,62 @@
+#!/bin/bash
+#BSUB -q short
+#BSUB -n 2
+#BSUB -M 12
+#BSUB -R "rusage[mem=12]"
+#BSUB -W 3:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+
+source /etc/profile.d/modules.sh
+module load bcftools
+
+basename=NIGMS
+chr_vcf_dir=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/genotypes/raw
+output_dir=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/NIGMS/genotypes/raw/imputation_ready/${basename}
+ref_fasta=/rsrch5/home/epi/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta
+mkdir -p "$output_dir"
+
+# Step 0: Merge per-chromosome VCFs into a single VCF
+input_vcf="${output_dir}/${basename}_merged.vcf.gz"
+bcftools concat \
+    --naive \
+    $(for CHR in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y M; do
+        echo "${chr_vcf_dir}/chr${CHR}.vcf.gz"
+    done) \
+    -o "$input_vcf" \
+    -O z
+bcftools index --tbi "$input_vcf"
+
+# Step 1: Basic QC filters
+# - Remove indels (keep SNPs only for imputation scaffold)
+# - Remove multiallelic sites
+# - Filter on genotype missingness, MAF, and HWE
+bcftools view \
+    --type snps \
+    --max-alleles 2 \
+    --min-alleles 2 \
+    "$input_vcf" | \
+bcftools filter \
+    --exclude 'F_MISSING > 0.05 || MAF < 0.01' | \
+bcftools +fill-tags -- -t HWE | \
+bcftools filter \
+    --exclude 'HWE < 1e-6' | \
+# Step 2: Normalize (left-align and trim) against reference genome
+bcftools norm \
+    --fasta-ref "$ref_fasta" \
+    --check-ref w \
+    -o "$output_dir/${basename}_filtered_norm.vcf.gz" \
+    -O z
+
+bcftools index --tbi "$output_dir/${basename}_filtered_norm.vcf.gz"
+
+# Step 3: Split by chromosome and sort (TOPMed requires per-chromosome VCFs)
+for CHR in {1..22}; do
+    bcftools view \
+        --regions "chr${CHR}" \
+        "$output_dir/${basename}_filtered_norm.vcf.gz" | \
+    bcftools sort \
+        -o "$output_dir/${basename}_chr${CHR}.vcf.gz" \
+        -O z
+    bcftools index --tbi "$output_dir/${basename}_chr${CHR}.vcf.gz"
+done

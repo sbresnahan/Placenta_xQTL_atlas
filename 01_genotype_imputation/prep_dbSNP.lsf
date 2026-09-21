@@ -1,0 +1,29 @@
+#!/bin/bash
+#BSUB -W 3:00
+#BSUB -n 8
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+#BSUB -q short
+
+source /etc/profile.d/modules.sh
+module load bcftools
+
+DBSNP_DIR=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/dbSNP/hg38
+cd $DBSNP_DIR
+
+for i in {1..22} X Y MT; do
+    echo "${i} chr${i}"
+done > ${DBSNP_DIR}/chr_rename.txt
+
+REGIONS=$(for i in {1..22} X Y MT; do echo ${i}; done | tr '\n' ',' | sed 's/,$//')
+
+bcftools annotate \
+    --rename-chrs ${DBSNP_DIR}/chr_rename.txt \
+    --regions ${REGIONS} \
+    -O z \
+    -o ${DBSNP_DIR}/common_all_20180418.chr.vcf.gz \
+    ${DBSNP_DIR}/common_all_20180418.vcf.gz
+
+bcftools index --tbi ${DBSNP_DIR}/common_all_20180418.chr.vcf.gz

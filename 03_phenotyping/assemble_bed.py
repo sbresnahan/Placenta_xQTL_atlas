@@ -1,0 +1,445 @@
+"""Assemble data into an RNA phenotype BED file
+
+MODIFIED for Salmon (replaces kallisto) for MDACC seadragon HPC PANTRY rewrite.
+
+The ONLY change from the original PANTRY assemble_bed.py is the load_kallisto()
+function, renamed to load_salmon(), which reads Salmon's quant.sf format
+instead of kallisto's abundance.tsv:
+
+  kallisto abundance.tsv:  target_id, length, eff_length, est_counts, tpm
+  Salmon quant.sf:         Name, Length, EffectiveLength, TPM, NumReads
+
+Column mapping:
+  target_id  <- Name
+  tpm        <- TPM
+  est_counts <- NumReads
+
+All other functions (load_tss, assemble_expression, assemble_alt_TSS_polyA,
+assemble_splicing, assemble_intron_retention, assemble_RNA_editing,
+assemble_stability, and the main() CLI) are unchanged from the original.
+"""
+
+import argparse
+from pathlib import Path
+from gtfparse import read_gtf
+import numpy as np
+import pandas as pd
+
+def load_tss(ref_anno: Path) -> pd.DataFrame:
+    """Load TSS annotations from GTF file
+
+    Returns TSS as the first four columns of the BED format, meaning the
+    coordinates are 0-based and chromEnd is just chromStart + 1.
+    """
+    anno = read_gtf(ref_anno)
+    # Newer versions return a polars DF by default, but not all versions allow
+    # return type to be specified, so this handles older and newer versions:
+    if type(anno).__module__ == 'polars.dataframe.frame':
+        anno = anno.to_pandas()
+    anno = anno.loc[anno['feature'] == 'gene', :]
+    anno['chromEnd'] = np.where(anno['strand'] == '+', anno['start'], anno['end'])
+    anno['chromStart'] = anno['chromEnd'] - 1 # BED coordinates are 0-based
+    anno['#chrom'] = anno['seqname']
+    anno = anno.sort_values(['#chrom', 'chromStart'])
+    anno = anno[['#chrom', 'chromStart', 'chromEnd', 'gene_id']]
+    # Rename columns for tensorQTL:
+    anno.columns = ['#chr', 'start', 'end', 'gene_id']
+    return anno
+
+def load_tss_with_gene_id_base(ref_anno: Path) -> pd.DataFrame:
+    """Load TSS annotations with versionless gene IDs for external tools."""
+    anno = load_tss(ref_anno)
+    anno['gene_id_base'] = anno['gene_id'].astype(str).str.split('.').str[0]
+    return anno
+
+def load_exons(ref_anno: Path) -> pd.DataFrame:
+    """Load exon annotations
+
+    Returns exons with start and end oriented on the gene's strand.
+    """
+    anno = read_gtf(ref_anno)
+    if type(anno).__module__ == 'polars.dataframe.frame':
+        anno = anno.to_pandas()
+    anno = anno.loc[anno['feature'] == 'exon', :]
+    anno['chrom'] = anno['seqname']
+    anno['exonStart'] = np.where(anno['strand'] == '+', anno['start'], anno['end'])
+    anno['exonEnd'] = np.where(anno['strand'] == '+', anno['end'], anno['start'])
+    return anno[['gene_id', 'chrom', 'exonStart', 'exonEnd']]
+
+def transcript_to_gene_map(ref_anno: Path) -> pd.DataFrame:
+    """Load transcript IDs and corresponding gene IDs from GTF file"""
+    anno = read_gtf(ref_anno)
+    if type(anno).__module__ == 'polars.dataframe.frame':
+        anno = anno.to_pandas()
+    anno = anno.loc[anno['feature'] == 'transcript', :]
+    return anno[['gene_id', 'transcript_id']]
+
+def map_introns_to_genes(introns: list, exons: pd.DataFrame) -> pd.DataFrame:
+    """Map de novo splice junctions to genes based on known exon boundaries"""
+    exons['exonStart'] = exons['exonStart'].astype(str)
+    exons['exonEnd'] = exons['exonEnd'].astype(str)
+    df = pd.DataFrame({'intron': introns})
+    # Expected intron format: chrom:start:end:clu_ _
+    # Some chromosome IDs contain underscores (e.g. "NC_000001.11"), so split
+    # first by colon and then split the last field by underscores.
+    df[['chrom', 'chr_start', 'chr_end', 'cluster_info']] = df['intron'].str.split(':', expand=True)
+    df[['clu', 'cluster', 'strand']] = df['cluster_info'].str.split('_', expand=True)
+    df['start'] = np.where(df['strand'] == '+', df['chr_start'], df['chr_end'])
+    df['end'] = np.where(df['strand'] == '+', df['chr_end'], df['chr_start'])
+    start_matches = df.merge(
+        exons[['chrom', 'exonEnd', 'gene_id']].rename(columns={'exonEnd': 'start'}),
+        on=['chrom', 'start'],
+        how='inner'
+    )
+    end_matches = df.merge(
+        exons[['chrom', 'exonStart', 'gene_id']].rename(columns={'exonStart': 'end'}),
+        on=['chrom', 'end'],
+        how='inner'
+    )
+    df = pd.concat([start_matches, end_matches])
+    clust_genes = df.groupby('cluster', group_keys=False).agg({'gene_id': pd.Series.unique})
+    clust_genes = clust_genes.reset_index().explode('gene_id')
+    return clust_genes
+
+# =============================================================================
+# MODIFIED: load_salmon() replaces load_kallisto()
+# =============================================================================
+# Original kallisto version read abundance.tsv with:
+#   pd.read_csv(fname, sep='\t', index_col='target_id')
+#   d = d[units]  # 'tpm' or 'est_counts'
+#
+# Salmon quant.sf has columns: Name, Length, EffectiveLength, TPM, NumReads
+# We map: Name -> target_id (index), TPM -> tpm, NumReads -> est_counts
+# =============================================================================
+
+# Map Salmon quant.sf column names to the kallisto-compatible names used
+# by the rest of the script:
+SALMON_COLUMN_MAP = {
+    'Name': 'target_id',
+    'TPM': 'tpm',
+    'NumReads': 'est_counts',
+}
+
+def load_salmon(sample_ids: list, salmon_dir: Path, units: str) -> pd.DataFrame:
+    """Assemble Salmon TPM or NumReads outputs into a table.
+
+    Reads quant.sf from each sample's output directory.
+    Replaces the original load_kallisto() function.
+
+    Args:
+        sample_ids: List of sample IDs.
+        salmon_dir: Directory containing per-sample subdirectories with quant.sf.
+        units: 'tpm' or 'est_counts' (mapped from Salmon 'TPM' or 'NumReads').
+    """
+    counts = []
+    for i, sample in enumerate(sample_ids):
+        fname = salmon_dir / sample / 'quant.sf'
+        d = pd.read_csv(fname, sep='\t')
+        # Rename Salmon columns to kallisto-compatible names
+        d = d.rename(columns=SALMON_COLUMN_MAP)
+        d = d.set_index('target_id')
+        d = d[units]  # 'tpm' or 'est_counts'
+        d.name = sample
+        counts.append(d)
+    return pd.concat(counts, axis=1)
+
+# Keep a backward-compatible alias in case any code references the old name
+load_kallisto = load_salmon
+
+def assemble_alt_TSS_polyA(sample_ids: list, group1_dir: Path, group2_dir: Path, units: str, ref_anno: Path, bed: Path, min_frac: float = 0.05, max_frac: float = 0.95):
+    """Assemble txrevise-based Salmon outputs into BED file
+
+    By default, txrevise produces two sets of annotations per annotation type.
+    Relative TSS/polyA site usage should be calculated within each set, and
+    can then be combined to produce a single BED file.
+    """
+    df1 = load_salmon(sample_ids, group1_dir, units)
+    df2 = load_salmon(sample_ids, group2_dir, units)
+
+    # This assumes target_id is e.g. {gene_id}.grp_1.downstream.{transcript_id}
+    df1['gene_id'] = df1.index.str.split('.grp_').str[0]
+    df2['gene_id'] = df2.index.str.split('.grp_').str[0]
+
+    # Calculate proportion of each transcript in each gene_id:
+    gene_ids = df1['gene_id'] # groupby/apply removes gene_id, so save it to add back
+    df1 = df1.groupby('gene_id', group_keys=False).apply(lambda x: x / x.sum(axis=0))
+    # Remove sites with mean relative usage < `min_frac` or > `max_frac`:
+    df1 = df1[(df1.mean(axis=1) >= min_frac) & (df1.mean(axis=1) <= max_frac)]
+    df1 = df1.join(gene_ids, how='left')
+
+    gene_ids = df2['gene_id']
+    df2 = df2.groupby('gene_id', group_keys=False).apply(lambda x: x / x.sum(axis=0))
+    # Remove sites with mean relative usage < `min_frac` or > `max_frac`:
+    df2 = df2[(df2.mean(axis=1) >= min_frac) & (df2.mean(axis=1) <= max_frac)]
+    df2 = df2.join(gene_ids, how='left')
+
+    df = pd.concat([df1, df2], axis=0)
+    # Use __ to separate gene ID from other info in phenotype IDs
+    df.index = df.index.str.replace('.grp_', '__grp_', 1)
+    # Replace period separators for easier parsing in case of periods in transcript IDs
+    df.index = df.index.str.replace('.upstream.', '_upstream_', 1)
+    df.index = df.index.str.replace('.downstream.', '_downstream_', 1)
+    df.index = df.index.rename('phenotype_id')
+    df = df.reset_index()
+
+    # Use gene's TSS for all of its isoforms:
+    anno = load_tss(ref_anno)
+    df = anno.merge(df.reset_index(), on='gene_id', how='inner')
+    df = df[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
+    df.to_csv(bed, sep='\t', index=False, float_format='%g')
+
+def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno: Path, bed_iso: Path, bed_gene: Path, min_count: int = 10, min_frac: float = 0.05, max_frac: float = 0.95, log2_expr: bool = False):
+    """Assemble Salmon TPM or NumReads outputs into isoform- and gene-level BED files
+
+    Isoform values are normalized to relative abundance in each gene. Isoforms
+    with fewer than `min_count` reads on average are excluded
+    (`est_counts` read counts are always used for this filtering).
+
+    `bed_iso` and `bed_gene` are each optional (may be None): only the non-None
+    BED is written. This lets the caller assemble the gene-level BED from one
+    Salmon directory (e.g. original counts) and the isoform BED from another
+    (e.g. QU-corrected counts) in two separate calls. At least one must be set.
+    """
+    if bed_iso is None and bed_gene is None:
+        raise ValueError("assemble_expression: at least one of bed_iso / bed_gene must be provided")
+
+    df_iso = load_salmon(sample_ids, salmon_dir, units)
+
+    # Record isoforms with any value >= `min_count` to keep:
+    if units == 'est_counts':
+        df_counts = df_iso
+    else:
+        df_counts = load_salmon(sample_ids, salmon_dir, 'est_counts')
+    iso_enough_counts = df_counts[df_counts.mean(axis=1) >= min_count].index
+
+    df_iso.index = df_iso.index.rename('transcript_id')
+    gene_map = transcript_to_gene_map(ref_anno).set_index('transcript_id')
+    df_iso = df_iso.join(gene_map, how='inner')
+    assert df_iso.shape[0] > 0, 'No matching isoforms in Salmon output and reference annotation'
+
+    # Also get gene-level expression:
+    df_gene = df_iso.reset_index().drop('transcript_id', axis=1).groupby('gene_id', group_keys=True).sum()
+    if log2_expr:
+        df_gene = np.log2(df_gene + 1)
+
+    # Calculate proportion of each transcript in each gene_id:
+    df_iso = df_iso.groupby('gene_id', group_keys=False).apply(lambda x: x / x.sum(axis=0))
+    # Remove isoforms with mean read count < `min_count`:
+    df_iso = df_iso[df_iso.index.isin(iso_enough_counts)]
+    # Remove isoforms with mean relative abundance < `min_frac` or > `max_frac`:
+    df_iso = df_iso[(df_iso.mean(axis=1) >= min_frac) & (df_iso.mean(axis=1) <= max_frac)]
+    # groupby/apply removes gene_id, so add them back
+    df_iso = df_iso.join(gene_map, how='left')
+
+    anno = load_tss(ref_anno)
+    if bed_iso is not None:
+        df_iso_out = anno.merge(df_iso.reset_index(), on='gene_id', how='inner')
+        df_iso_out['phenotype_id'] = df_iso_out['gene_id'] + '__' + df_iso_out['transcript_id']
+        df_iso_out = df_iso_out[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
+        df_iso_out.to_csv(bed_iso, sep='\t', index=False, float_format='%g')
+
+    if bed_gene is not None:
+        df_gene_out = anno.merge(df_gene.reset_index(), on='gene_id', how='inner')
+        df_gene_out = df_gene_out.rename(columns={'gene_id': 'phenotype_id'})
+        df_gene_out = df_gene_out[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
+        df_gene_out.to_csv(bed_gene, sep='\t', index=False, float_format='%g')
+
+def assemble_latent(data: Path, ref_anno: Path, bed: Path):
+    """Convert latent RNA phenotyping output into BED file"""
+    df = pd.read_csv(data, sep='\t')
+    sample_ids = list(df.columns[2:])
+    anno = load_tss(ref_anno)
+    df = anno.merge(df, on='gene_id', how='inner')
+    df['phenotype_id'] = df['gene_id'] + '__' + df['PC']
+    df = df[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
+    df.to_csv(bed, sep='\t', index=False, float_format='%g')
+
+def assemble_RNA_editing(data: Path, ref_anno: Path, bed: Path):
+    """Convert prepared RNA editing phenotype matrix into BED file."""
+    df = pd.read_csv(data, sep='\t')
+    sample_ids = list(df.columns[1:])
+    df = df.rename(columns={df.columns[0]: 'phenotype_id'})
+    df['gene_id'] = df['phenotype_id'].str.replace(r'__.*$', '', regex=True)
+
+    anno = load_tss(ref_anno)
+    df = anno.merge(df, on='gene_id', how='inner')
+    df = df[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
+    df.to_csv(bed, sep='\t', index=False, float_format='%g')
+
+def assemble_splicing(counts: Path, ref_anno: Path, bed: Path, min_frac: float = 0.05, max_frac: float = 0.95):
+    """Convert leafcutter output into splicing BED file"""
+    df = pd.read_csv(counts, sep=' ')
+    sample_ids = list(df.columns)
+    cluster = df.index.str.extract(r'clu_(\d+)_', expand=False)
+    df = df.groupby(cluster, group_keys=False).apply(lambda g: g / g.sum(axis=0))
+    # Remove junctions with mean relative usage < `min_frac` or > `max_frac`:
+    df = df[(df.mean(axis=1) >= min_frac) & (df.mean(axis=1) <= max_frac)]
+    df['cluster'] = df.index.str.extract(r'clu_(\d+)_', expand=False)
+    df.index = df.index.rename('intron')
+    df = df.reset_index()
+
+    exons = load_exons(ref_anno)
+    genes = map_introns_to_genes(df['intron'], exons)
+    df = df.merge(genes, on='cluster', how='left')
+
+    anno = load_tss(ref_anno)
+    df = anno.merge(df, on='gene_id', how='inner')
+    df['intron'] = df['intron'].str.replace(':', '_')
+    df['phenotype_id'] = df['gene_id'] + '__' + df['intron']
+    df = df[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
+    df.to_csv(bed, sep='\t', index=False, float_format='%g')
+
+def assemble_intron_retention(data: Path, ref_anno: Path, bed: Path):
+    """Convert retained-intron PSI values from MAJIQ into BED format."""
+    df = pd.read_csv(data, sep='\t', dtype={'seqid': str})
+    metadata_cols = {
+        'majiq_ir_id', 'ec_idx', 'seqid', 'start', 'end', 'strand',
+        'gene_id', 'gene_id_base', 'gene_name', 'event_type',
+        'is_denovo', 'event_denovo', 'ref_exon_start', 'ref_exon_end',
+        'other_exon_start', 'other_exon_end',
+    }
+    sample_ids = [col for col in df.columns if col not in metadata_cols]
+
+    if 'gene_id_base' not in df.columns:
+        df['gene_id_base'] = df['gene_id'].astype(str).str.split('.').str[0]
+    if 'majiq_ir_id' not in df.columns:
+        df['majiq_ir_id'] = (
+            'IR:' + df['gene_id_base'].astype(str)
+            + ':' + df['seqid'].astype(str)
+            + ':' + df['start'].astype(int).astype(str)
+            + ':' + df['end'].astype(int).astype(str)
+            + ':' + df['strand'].astype(str)
+            + ':' + df.index.astype(str)
+        )
+
+    anno = load_tss_with_gene_id_base(ref_anno).rename(columns={'gene_id': 'tss_gene_id'})
+    df = anno.merge(df, on='gene_id_base', how='inner')
+    df['phenotype_id'] = df['tss_gene_id'] + '__' + df['majiq_ir_id'].str.replace(':', '_', regex=False)
+    df = df[['#chr', 'start_x', 'end_x', 'phenotype_id'] + sample_ids]
+    df = df.rename(columns={'start_x': 'start', 'end_x': 'end'})
+    df.to_csv(bed, sep='\t', index=False, float_format='%g')
+
+def load_featureCounts(sample_ids: list, counts_dir: Path, feature: str, min_count: int = 10) -> pd.DataFrame:
+    """Assemble featureCounts outputs into a table"""
+    counts = []
+    for i, sample in enumerate(sample_ids):
+        fname_ex = counts_dir / f'{sample}.{feature}.counts.txt'
+        d = pd.read_csv(fname_ex, sep='\t', index_col='Geneid', skiprows=1)
+        d = d.iloc[:, 5]
+        d.name = sample
+        d[d < min_count] = np.nan
+        counts.append(d)
+    return pd.concat(counts, axis=1)
+
+def assemble_stability(sample_ids: list, stab_dir: Path, ref_anno: Path, bed: Path):
+    """Assemble exon to intron read ratios into mRNA stability BED file"""
+    exon = load_featureCounts(sample_ids, stab_dir, 'exonic')
+    intron = load_featureCounts(sample_ids, stab_dir, 'intronic')
+    genes = exon.index[np.isin(exon.index, intron.index)]
+    assert exon.loc[genes, :].index.equals(intron.loc[genes, :].index)
+    assert exon.columns.equals(intron.columns)
+    df = exon.loc[genes, :] / intron.loc[genes, :]
+    df = df[df.isnull().mean(axis=1) <= 0.5]
+
+    anno = load_tss(ref_anno)
+    anno = anno.rename(columns={'gene_id': 'phenotype_id'})
+    df.index = df.index.rename('phenotype_id')
+    df = anno.merge(df.reset_index(), on='phenotype_id', how='inner')
+    df.to_csv(bed, sep='\t', index=False, float_format='%g')
+
+def _load_samples(path: Path) -> list[str]:
+    return pd.read_csv(path, sep='\t', header=None, dtype=str)[0].tolist()
+
+def main():
+    parser = argparse.ArgumentParser(description='Assemble data into an RNA phenotype BED file')
+    sub = parser.add_subparsers(dest='cmd', required=True)
+
+    # alt_TSS_polyA
+    p_tss = sub.add_parser('alt-tss-polya', help='Assemble txrevise alt TSS or polyA usage')
+    p_tss.add_argument('--samples', type=Path, required=True, help='Path to sample IDs file (one sample ID per line)')
+    p_tss.add_argument('--group1-dir', type=Path, required=True, help='Group 1 directory (path of grp_1.upstream for TSS, grp_1.downstream for polyA) containing Salmon output directories named by sample')
+    p_tss.add_argument('--group2-dir', type=Path, required=True, help='Group 2 directory (path of grp_2.upstream for TSS, grp_2.downstream for polyA) containing Salmon output directories named by sample')
+    p_tss.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
+    p_tss.add_argument('--output', type=Path, required=True, help='Output BED file')
+    p_tss.add_argument('--min-frac', type=float, default=0.05, help='Minimum mean fraction for TSS/polyA site to be included')
+    p_tss.add_argument('--max-frac', type=float, default=0.95, help='Maximum mean fraction for TSS/polyA site to be included')
+
+    # expression
+    p_expr = sub.add_parser('expression', help='Assemble isoform- and gene-level expression')
+    p_expr.add_argument('--samples', type=Path, required=True, help='Path to sample IDs file (one sample ID per line)')
+    p_expr.add_argument('--input-dir', type=Path, required=True, help='Directory containing Salmon output directories named by sample')
+    p_expr.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
+    p_expr.add_argument('--output-isoforms', type=Path, default=None, help='Isoform ratio BED (optional; at least one of --output-isoforms/--output-expression is required)')
+    p_expr.add_argument('--output-expression', type=Path, default=None, help='Gene-level expression BED (optional; at least one of --output-isoforms/--output-expression is required)')
+    p_expr.add_argument('--min-count', type=int, default=10, help='Minimum mean count for isoform to be included in isoform-level BED')
+    p_expr.add_argument('--min-frac', type=float, default=0.05, help='Minimum mean relative abundance for isoform to be included in isoform-level BED')
+    p_expr.add_argument('--max-frac', type=float, default=0.95, help='Maximum mean relative abundance for isoform to be included in isoform-level BED')
+    p_expr.add_argument('--units', choices=['tpm', 'est_counts'], default='tpm',
+                        help='Units to read from Salmon quant.sf (tpm or est_counts). Defaults to tpm')
+    p_expr.add_argument('--log2-expr', action='store_true',
+                        help='If set, gene-level expression values are log2 transformed (log2(x + 1)) before being written to BED file')
+
+    # latent
+    p_lat = sub.add_parser('latent', help='Assemble latent RNA PCs')
+    p_lat.add_argument('--input', type=Path, required=True, help='Phenotype table produced by LaDDR')
+    p_lat.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
+    p_lat.add_argument('--output', type=Path, required=True, help='Output BED file')
+
+    # RNA editing
+    p_edit = sub.add_parser('rna-editing', help='Assemble RNA editing phenotypes')
+    p_edit.add_argument('--input', type=Path, required=True, help='Prepared RNA editing phenotype matrix')
+    p_edit.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
+    p_edit.add_argument('--output', type=Path, required=True, help='Output BED file')
+
+    # splicing
+    p_sp = sub.add_parser('splicing', help='Assemble leafcutter splicing phenotypes')
+    p_sp.add_argument('--input', type=Path, required=True, help='leafcutter per-junction counts')
+    p_sp.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
+    p_sp.add_argument('--output', type=Path, required=True, help='Output BED file')
+    p_sp.add_argument('--min-frac', type=float, default=0.05, help='Minimum mean fraction for junction to be included')
+    p_sp.add_argument('--max-frac', type=float, default=0.95, help='Maximum mean fraction for junction to be included')
+
+    # intron retention
+    p_ir = sub.add_parser('intron-retention', help='Assemble MAJIQ retained-intron PSI phenotypes')
+    p_ir.add_argument('--input', type=Path, required=True, help='Retained-intron PSI table from extract_ir_psi.py')
+    p_ir.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
+    p_ir.add_argument('--output', type=Path, required=True, help='Output BED file')
+
+    # stability
+    p_stab = sub.add_parser('stability', help='Assemble mRNA stability (exon/intron ratios)')
+    p_stab.add_argument('--samples', type=Path, required=True, help='Path to sample IDs file (one sample ID per line)')
+    p_stab.add_argument('--input-dir', type=Path, required=True, help='Directory containing {sample}.exonic.counts.txt and {sample}.intronic.counts.txt files')
+    p_stab.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
+    p_stab.add_argument('--output', type=Path, required=True, help='Output BED file')
+
+    args = parser.parse_args()
+
+    if args.cmd == 'alt-tss-polya':
+        samples = _load_samples(args.samples)
+        assemble_alt_TSS_polyA(samples, args.group1_dir, args.group2_dir, 'tpm',
+                               args.ref_anno, args.output,
+                               min_frac=args.min_frac, max_frac=args.max_frac)
+    elif args.cmd == 'expression':
+        samples = _load_samples(args.samples)
+        if args.output_isoforms is None and args.output_expression is None:
+            parser.error("expression: at least one of --output-isoforms / --output-expression is required")
+        assemble_expression(samples, args.input_dir, args.units,
+                            args.ref_anno, args.output_isoforms, args.output_expression,
+                            min_count=args.min_count,
+                            min_frac=args.min_frac, max_frac=args.max_frac,
+                            log2_expr=args.log2_expr)
+    elif args.cmd == 'intron-retention':
+        assemble_intron_retention(args.input, args.ref_anno, args.output)
+    elif args.cmd == 'latent':
+        assemble_latent(args.input, args.ref_anno, args.output)
+    elif args.cmd == 'rna-editing':
+        assemble_RNA_editing(args.input, args.ref_anno, args.output)
+    elif args.cmd == 'splicing':
+        assemble_splicing(args.input, args.ref_anno, args.output,
+                          min_frac=args.min_frac, max_frac=args.max_frac)
+    elif args.cmd == 'stability':
+        samples = _load_samples(args.samples)
+        assemble_stability(samples, args.input_dir, args.ref_anno, args.output)
+
+if __name__ == '__main__':
+    main()

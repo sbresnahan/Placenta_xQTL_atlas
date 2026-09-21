@@ -1,0 +1,15 @@
+#!/bin/bash
+#BSUB -q long
+#BSUB -n 8
+#BSUB -M 64
+#BSUB -R "rusage[mem=64]"
+#BSUB -W 25:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs3
+
+source /etc/profile.d/modules.sh
+module load bwa
+
+REF=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/GenomicReferences/genome/GCA_000001405.15_GRCh38_no_alt_analysis_set_cleaned_ready_for_salmon.fasta
+
+bwa index ${REF}

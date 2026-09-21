@@ -1,0 +1,15 @@
+#!/bin/bash
+#BSUB -q transfer
+#BSUB -n 1
+#BSUB -M 8
+#BSUB -R "rusage[mem=8]"
+#BSUB -W 8:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+
+cd /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/imputed
+
+while IFS= read -r url; do
+    echo "Downloading: $url"
+    curl -L -C - -O "$url"
+done < /rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/mapqtl/SNUH/genotypes/imputed/files.txt

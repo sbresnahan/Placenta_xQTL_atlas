@@ -1,0 +1,16 @@
+#!/bin/bash
+#BSUB -q transfer
+#BSUB -n 1
+#BSUB -M 12
+#BSUB -R "rusage[mem=12]"
+#BSUB -W 2:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+source /etc/profile.d/modules.sh
+module add sratoolkit
+
+OUTPUT_DIR=/rsrch5/home/epi/bhattacharya_lab/data/mapqtl/SNUH/RNA
+
+prefetch ${ACC} -O ${OUTPUT_DIR}
+fasterq-dump ${OUTPUT_DIR}/${ACC}/${ACC}.sra -O ${OUTPUT_DIR} --split-files
+gzip ${OUTPUT_DIR}/${ACC}.fastq

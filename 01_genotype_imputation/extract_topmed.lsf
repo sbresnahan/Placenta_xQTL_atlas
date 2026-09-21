@@ -1,0 +1,16 @@
+#!/bin/bash
+#BSUB -q short
+#BSUB -n 2
+#BSUB -M 32
+#BSUB -R "rusage[mem=32]"
+#BSUB -W 3:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/logs
+
+# Set DIR & PASSWORD in bsub call with bsub -env DIR="DIRECTORY",PASSWORD="PASSWORD"
+
+cd ${DIR}
+
+for f in *.zip; do
+    unzip -P "$PASSWORD" "$f"
+done
