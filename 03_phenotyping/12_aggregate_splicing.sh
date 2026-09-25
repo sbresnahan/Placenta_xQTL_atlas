@@ -89,11 +89,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" splicing \
     --ref-anno "$REF_ANNO" \
     --output "${UNNORM_DIR}/splicing.bed"
 
-# ---- Normalize ----
-python3 "${PANTRY_SCRIPTS}/normalize_phenotypes.py" \
-    --input "${UNNORM_DIR}/splicing.bed" \
-    --samples "$SAMPLES_FILE" \
-    --output "${OUTPUT_DIR}/splicing.bed"
+# ---- Canonical BED = unnorm (2026-09 schema: normalization moved to stage 5) ----
+cp "${UNNORM_DIR}/splicing.bed" "${OUTPUT_DIR}/splicing.bed"
 
 conda deactivate 2>/dev/null || true
 

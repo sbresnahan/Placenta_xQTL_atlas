@@ -1,10 +1,25 @@
 # Round history — design evolution of the xQTL mapping
 
 The mapping design went through three rounds (plus one intermediate) for the
-EAS + EUR strata. Round 3 ("GTEx conventions") is the current baseline and the
-version shipped in this repository. This document records what changed, why, and
-which approaches were retired — so that superseded results are never mistaken for
-current ones.
+EAS + EUR strata, followed by a normalization-schema revision (round 4). Round 4
+("devBrain schema") is the version shipped in this repository; round-3 results
+stand until the round-4 rerun completes. This document records what changed,
+why, and which approaches were retired — so that superseded results are never
+mistaken for current ones.
+
+**Update (2026-09-25) — round 4: normalization-schema revision (devBrain xQTL
+conventions).** Coauthor review determined the phenotype
+normalization/transformation schema was wrong. Round 4 reorders it to match the
+devBrain xQTL atlas (Wen et al., Science 2024, 384:eadh0829): **pool (unnorm)
+→ QN → INT → ComBat(batch=cohort, last)**, with devBrain detection filters
+(TPM > 0.1 in > 25% for expression/isoforms; detected in ≥ 40% for proportion
+modalities), connectivity-based expression-outlier removal (signed bicor
+network, z < −3; extended to isoforms), no log2/logit pre-transforms (no-ops
+under rank-based QN+INT), and a new pre-mapping module (25a) that optimizes the
+HCP count per ancestry by maximizing chr1 eGene discovery (k ∈ {0,5,…,30},
+HCP re-estimated at each k). Per-cohort QN+INT in stage 3 is retired — stage-3
+`output/<modality>.bed.gz` files are now unnormalized. Round-3 results (below)
+are superseded once the round-4 rerun completes.
 
 **Update (2026-09-21) — EAS stratum re-mapped after a genotype-pooling fix.**
 A post-round-3 audit found that GUSTO EAS/SAS samples had been silently dropped
@@ -23,8 +38,35 @@ refreshed EAS stratum.
 | 1.5 | MAF ≥ 0.05, original covariates | Null (0 FDR hits) |
 | 2 | MAF ≥ 0.05, optimized covariates (24; genetically correlated HCPs/cell types removed after an HCP–genotype diagnostic) | 1 locus: EAS splicing at *LARP4B* (combined q = 0.007; lead 10:125824:C:G, 27 carriers) |
 | 3 | **GTEx conventions** (below) | **2 FDR hits**: EAS isoforms at *TSPAN3* (ungrouped q = 0.021, grouped q = 0.022) and EUR RNA editing at *NCOA4* (ungrouped q = 0.029); *LARP4B* collapsed (p 5.8e-7 → 0.91) — treated as retracted |
+| 4 | **devBrain schema** (below): pool → QN → INT → ComBat last; devBrain filters + outlier removal; HCP k optimized on chr1 | rerun pending |
 
-## Round-3 design (current baseline)
+## Round-4 design (current shipped version)
+
+- **Normalization order**: pool unnorm BEDs within ancestry → quantile
+  normalization (samples) → rank-based INT (features) → ComBat (batch=cohort)
+  **last** (Wen et al., Science 2024, 384:eadh0829, §3.4 splicing convention,
+  applied to all modalities). Retired: per-cohort QN+INT (stage 3), log2/logit
+  pre-transforms, ComBat-before-INT.
+- **Feature filters** (devBrain §3.3/§3.4): expression/isoforms TPM > 0.1 in
+  > 25% of stratum samples; proportion modalities + stability detected
+  (non-NA) in ≥ 40%; zeros are real PSI values (the >50%-zeros rule is
+  retired). No-variance and per-batch ≥ 2 non-NA guards retained.
+- **Sample outliers**: connectivity outliers (signed biweight midcorrelation
+  network, z < −3) removed from expression and isoforms (devBrain §3.3);
+  splicing/proportion modalities keep all samples.
+- **HCP count**: optimized per ancestry by maximizing chr1 cis-eGenes
+  (Storey q ≤ 0.05) over k ∈ {0,5,10,15,20,25,30}, HCP re-estimated at each k
+  (devBrain §4.2; module 25a). Script 19 runs with provisional k=15 to feed
+  the script-23 intersection; 25a installs the k\* solution before canonical
+  covariate assembly (25).
+- **ComBat-last consequence**: final phenotypes are approximately but not
+  exactly N(0,1) per feature — accepted; QQ calibration is checked in the
+  rerun report.
+- All other round-3 design elements unchanged (MAC ≥ 5 floor, cohort-only
+  genotype PCA + 5 PCs, 6-SD PC outliers, covariate pruning/cap, Storey q,
+  grouped/ungrouped + independent mapping).
+
+## Round-3 design
 
 - **Variant floor**: MAF ≥ 0.01 **+ MAC ≥ 5** at the genotype intersection
   (script 23) — blocks the round-1 low-carrier artifact class while keeping the

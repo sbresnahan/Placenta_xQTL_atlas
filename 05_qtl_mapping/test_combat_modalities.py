@@ -4,10 +4,10 @@ test_combat_modalities.py — Synthetic test suite for the cross-cohort ComBat +
 pooling helpers (roadmap step 4).
 
 Tests:
-  T1: logit transform correctness (R script, via subprocess)
+  T1: detection filter + QN/INT correctness (R script, single cohort)
   T2: pooling phenotype_id intersection (Python pooler)
   T3: namespaced pass-through for pre-pooled modalities (Python pooler)
-  T4: ComBat end-to-end on synthetic batched data (R script)
+  T4: ComBat-last end-to-end on synthetic batched data (R script)
   T5: single-batch fallback (R script)
 
 Run:
@@ -52,33 +52,46 @@ def run(cmd, **kw):
 
 
 # ---------------------------------------------------------------------------
-# T1: logit transform correctness (R)
+# T1: detection filter + QN/INT correctness (R, single cohort)
 # ---------------------------------------------------------------------------
 
-def test_logit_transform():
-    print("\n=== T1: logit transform correctness ===")
+def test_detection_filter_and_int():
+    print("\n=== T1: detection filter + QN/INT (single cohort) ===")
     tmp = Path(tempfile.mkdtemp())
 
-    # Build a tiny proportion BED: 3 features x 4 samples, values in [0,1]
-    # including exact 0 and 1 to test clipping.
+    # 202 features x 40 samples, ONE cohort (ComBat skipped -> output is
+    # exactly QN + INT). Proportion-scale values including exact 0s.
+    # (QN needs a realistic feature count to be smooth — with only a handful
+    # of features every sample collapses onto the same few quantile means and
+    # the per-feature INT sd is artificially deflated by ties.)
+    rng = np.random.RandomState(1)
+    n_samp = 40
+    n_bg = 200
+    samples = [f"s{i}" for i in range(n_samp)]
+    feats = {f"BG{i}__f{i}": rng.rand(n_samp).tolist() for i in range(n_bg)}
+    feats["G1__ok1"] = rng.rand(n_samp).tolist()
+    # 75% exact zeros but detected in all samples -> KEPT under the
+    # 2026-09 schema (zeros are real PSI values; the old >50%-zeros rule
+    # was removed)
+    feats["G2__zeros"] = [0.0] * 30 + rng.rand(10).tolist()
+    # detected (non-NA) in only 10/40 = 25% < 40% -> dropped (devBrain
+    # detection filter for proportion modalities)
+    feats["G3__lowdetect"] = rng.rand(10).tolist() + [np.nan] * 30
+    feat_names = list(feats.keys())
     bed = pd.DataFrame({
-        "#chr": ["chr1"] * 3,
-        "start": [100, 200, 300],
-        "end": [101, 201, 301],
-        "phenotype_id": ["G1__e1", "G1__e2", "G2__e3"],
-        "s1": [0.0, 0.5, 1.0],
-        "s2": [0.1, 0.9, 0.3],
-        "s3": [0.2, 0.0, 0.8],
-        "s4": [1.0, 0.4, 0.6],
+        "#chr": ["chr1"] * len(feat_names),
+        "start": [100 + 10 * i for i in range(len(feat_names))],
+        "end": [101 + 10 * i for i in range(len(feat_names))],
+        "phenotype_id": feat_names,
+        **{s: [feats[f][j] for f in feat_names] for j, s in enumerate(samples)},
     })
-    bed_path = tmp / "test_logit.bed"
+    bed_path = tmp / "test_detect.bed"
     bed.to_csv(bed_path, sep="\t", index=False, float_format="%g")
 
-    # Ancestry map: all 4 samples in one ancestry, 2 cohorts
     anc = pd.DataFrame({
-        "sample_id": ["s1", "s2", "s3", "s4"],
-        "assigned_ancestry": ["EUR"] * 4,
-        "cohort": ["cA", "cA", "cB", "cB"],
+        "sample_id": samples,
+        "assigned_ancestry": ["EUR"] * n_samp,
+        "cohort": ["cA"] * n_samp,  # single cohort -> ComBat skipped
     })
     anc_path = tmp / "ancestry.tsv"
     anc.to_csv(anc_path, sep="\t", index=False)
@@ -91,37 +104,41 @@ def test_logit_transform():
         "--input", str(bed_path),
         "--ancestry-map", str(anc_path),
         "--ancestry", "EUR",
-        "--modality", "alt_TSS",  # logit modality
+        "--modality", "splicing",
         "--output-dir", str(out_dir),
     ])
     if r.returncode != 0:
         report("T1 Rscript runs", False, r.stderr[-500:])
         return
 
-    out_bed = out_dir / "EUR_alt_TSS_combat_int.bed"
+    out_bed = out_dir / "EUR_splicing_combat_int.bed"
     if not out_bed.exists():
         report("T1 output BED exists", False, str(out_bed))
         return
     report("T1 Rscript runs + output exists", True)
 
-    # Check: no Inf / NaN in output (logit clipping worked)
     df = pd.read_csv(out_bed, sep="\t")
-    data = df.drop(columns=BED_META)
-    has_inf = np.isinf(data.values).any()
-    has_nan = data.isna().any().any()
-    report("T1 no Inf in output (clipping works)", not has_inf,
-           f"has_inf={has_inf}")
-    report("T1 no NaN in output", not has_nan, f"has_nan={has_nan}")
+    out_feats = list(df["phenotype_id"])
+    report("T1 low-detection feature dropped (<40% detected)",
+           "G3__lowdetect" not in out_feats, f"features: {out_feats}")
+    report("T1 zero-heavy feature kept (zeros are real values)",
+           "G2__zeros" in out_feats, f"features: {out_feats}")
 
-    # Check: INT output is approximately standard normal per feature
-    # (mean ~0, sd ~1). With only 4 samples this is loose, so check |mean|<1
-    # and 0.3<sd<2 as a sanity bound.
-    means = data.mean(axis=1).abs()
-    sds = data.std(axis=1)
-    mean_ok = (means < 1.0).all()
-    sd_ok = ((sds > 0.3) & (sds < 2.0)).all()
-    report("T1 INT means ~0", mean_ok, f"max|mean|={means.max():.3f}")
-    report("T1 INT sds ~1", sd_ok, f"sd range=[{sds.min():.3f},{sds.max():.3f}]")
+    data = df.drop(columns=BED_META)
+    report("T1 no NaN/Inf in output",
+           not data.isna().any().any() and not np.isinf(data.values).any())
+
+    # Single cohort => ComBat skipped => output is exactly QN+INT.
+    # Check the continuous features are ~N(0,1) (the zero-heavy feature has
+    # tied ranks, so it is checked only for presence above).
+    cont = df[df["phenotype_id"].str.startswith(("BG", "G1__"))]
+    cont_data = cont.drop(columns=BED_META)
+    means = cont_data.mean(axis=1).abs()
+    sds = cont_data.std(axis=1)
+    report("T1 INT means ~0", (means < 0.05).all(),
+           f"max|mean|={means.max():.4f}")
+    report("T1 INT sds ~1", ((sds > 0.9) & (sds < 1.1)).all(),
+           f"sd range=[{sds.min():.3f},{sds.max():.3f}]")
 
 
 # ---------------------------------------------------------------------------
@@ -273,18 +290,21 @@ def test_prepooled_passthrough():
 # ---------------------------------------------------------------------------
 
 def test_combat_endtoend():
-    print("\n=== T4: ComBat end-to-end (batch removal) ===")
+    print("\n=== T4: ComBat-last end-to-end (batch removal) ===")
     tmp = Path(tempfile.mkdtemp())
 
     # Synthetic data: 50 features x 40 samples, 2 cohorts (20 each).
     # Inject a cohort-specific mean shift so ComBat has something to remove.
     rng = np.random.RandomState(42)
     n_feat, n_samp = 50, 40
-    base = rng.randn(n_feat, n_samp)
-    # Cohort B (cols 20:40) gets +3 shift on all features
-    base[:, 20:] += 3.0
-    # Clip to [0.01, 0.99] to simulate proportions
-    base = np.clip(np.abs(base) / (np.abs(base).max() + 1), 0.01, 0.99)
+    # Proportions in [0.2, 0.5]. Cohort B gets a +0.35 shift on the FIRST HALF
+    # of features only (-> [0.55, 0.85], no boundary clipping). The shift must
+    # be feature-specific: a uniform all-feature shift is invisible to
+    # within-sample ranks and is erased by QN itself, leaving ComBat nothing
+    # to remove.
+    base = 0.2 + 0.3 * rng.rand(n_feat, n_samp)
+    affected = np.arange(n_feat // 2)
+    base[affected, 20:] += 0.35
 
     samples = [f"s{i}" for i in range(n_samp)]
     cohorts = ["cA"] * 20 + ["cB"] * 20
@@ -300,65 +320,79 @@ def test_combat_endtoend():
     bed_path = tmp / "test_combat.bed"
     bed.to_csv(bed_path, sep="\t", index=False, float_format="%g")
 
-    anc = pd.DataFrame({
+    # Paired design: run the SAME input twice.
+    #   Run A: single-cohort ancestry map -> ComBat skipped -> QN+INT only
+    #          (the pre-ComBat reference state under the 2026-09 schema)
+    #   Run B: two-cohort ancestry map -> QN+INT then ComBat (ComBat last)
+    anc_single = pd.DataFrame({
+        "sample_id": samples,
+        "assigned_ancestry": ["EUR"] * n_samp,
+        "cohort": ["cA"] * n_samp,
+    })
+    anc_single_path = tmp / "ancestry_single.tsv"
+    anc_single.to_csv(anc_single_path, sep="\t", index=False)
+
+    anc_two = pd.DataFrame({
         "sample_id": samples,
         "assigned_ancestry": ["EUR"] * n_samp,
         "cohort": cohorts,
     })
-    anc_path = tmp / "ancestry.tsv"
-    anc.to_csv(anc_path, sep="\t", index=False)
+    anc_two_path = tmp / "ancestry_two.tsv"
+    anc_two.to_csv(anc_two_path, sep="\t", index=False)
 
-    out_dir = tmp / "out"
-    out_dir.mkdir()
+    datas = {}
+    for tag, anc_path in [("before", anc_single_path), ("after", anc_two_path)]:
+        out_dir = tmp / f"out_{tag}"
+        out_dir.mkdir()
+        r = run([
+            "Rscript", str(R_SCRIPT),
+            "--input", str(bed_path),
+            "--ancestry-map", str(anc_path),
+            "--ancestry", "EUR",
+            "--modality", "splicing",
+            "--output-dir", str(out_dir),
+        ])
+        if r.returncode != 0:
+            report(f"T4 Rscript runs ({tag})", False, r.stderr[-800:])
+            return
+        datas[tag] = pd.read_csv(out_dir / "EUR_splicing_combat_int.bed",
+                                 sep="\t").drop(columns=BED_META)
+    report("T4 Rscript runs (both)", True)
 
-    r = run([
-        "Rscript", str(R_SCRIPT),
-        "--input", str(bed_path),
-        "--ancestry-map", str(anc_path),
-        "--ancestry", "EUR",
-        "--modality", "splicing",  # logit
-        "--output-dir", str(out_dir),
-    ])
-    if r.returncode != 0:
-        report("T4 Rscript runs", False, r.stderr[-800:])
-        return
-    report("T4 Rscript runs", True)
-
-    out_bed = out_dir / "EUR_splicing_combat_int.bed"
-    df = pd.read_csv(out_bed, sep="\t")
-    data = df.drop(columns=BED_META)
-
-    # Check: after ComBat, cohort separation in PCA space should be reduced.
-    # We measure the centroid distance between cohorts on PC1, before (logit
-    # of input proportions) and after (ComBat+INT output). This is scale-
-    # invariant, unlike comparing raw vs INT-transformed means directly.
     from sklearn.decomposition import PCA
-    ca, cb = samples[:20], samples[20:]
+    ca_idx, cb_idx = np.arange(20), np.arange(20, 40)
 
-    # Before: logit-transform the input proportions (matching what ComBat sees)
-    in_data = bed.set_index("phenotype_id")[samples]  # features x samples
-    eps = 1e-4
-    in_logit = np.log((in_data.clip(eps, 1 - eps)) / (1 - in_data.clip(eps, 1 - eps)))
-    pca_before = PCA(n_components=2).fit_transform(in_logit.T)  # samples x PC
-    before_centroid = abs(pca_before[:20, 0].mean() - pca_before[20:, 0].mean())
-
-    # After: ComBat+INT output (features x samples)
-    pca_after = PCA(n_components=2).fit_transform(data.T)
-    after_centroid = abs(pca_after[:20, 0].mean() - pca_after[20:, 0].mean())
-
+    # Cohort separation on PC1, before vs after ComBat
+    centroids = {}
+    for tag, data in datas.items():
+        pca = PCA(n_components=2).fit_transform(data.T.values)
+        centroids[tag] = abs(pca[ca_idx, 0].mean() - pca[cb_idx, 0].mean())
     report("T4 cohort separation reduced by ComBat (PC1 centroid distance)",
-           after_centroid < before_centroid * 0.5,
-           f"before={before_centroid:.3f}, after={after_centroid:.3f}")
+           centroids["after"] < centroids["before"] * 0.5,
+           f"before={centroids['before']:.3f}, after={centroids['after']:.3f}")
 
-    # INT output ~ standard normal (per feature = per row in BED orientation)
+    # Per-feature cohort mean difference on the AFFECTED features (ComBat
+    # removes location effects; unaffected features have nothing to remove)
+    d_before = (datas["before"].iloc[affected][samples[:20]].mean(axis=1)
+                - datas["before"].iloc[affected][samples[20:]].mean(axis=1)).abs().mean()
+    d_after = (datas["after"].iloc[affected][samples[:20]].mean(axis=1)
+               - datas["after"].iloc[affected][samples[20:]].mean(axis=1)).abs().mean()
+    report("T4 per-feature cohort mean difference removed",
+           d_after < d_before * 0.5,
+           f"before={d_before:.3f}, after={d_after:.3f}")
+
+    # With ComBat last the output is approximately but not exactly N(0,1)
+    # per feature — loose sanity bounds only.
+    data = datas["after"]
     means = data.mean(axis=1).abs()
     sds = data.std(axis=1)
-    report("T4 INT means ~0", (means < 0.5).all(), f"max|mean|={means.max():.3f}")
-    report("T4 INT sds ~1", ((sds > 0.7) & (sds < 1.3)).all(),
+    report("T4 final means ~0 (loose)", (means < 0.5).all(),
+           f"max|mean|={means.max():.3f}")
+    report("T4 final sds ~1 (loose)", ((sds > 0.5) & (sds < 1.5)).all(),
            f"sd range=[{sds.min():.3f},{sds.max():.3f}]")
 
     # Diagnostics PDF produced
-    diag = out_dir / "EUR_splicing_combat_diagnostics.pdf"
+    diag = tmp / "out_after" / "EUR_splicing_combat_diagnostics.pdf"
     report("T4 diagnostics PDF produced", diag.exists(), str(diag))
 
 
@@ -402,7 +436,7 @@ def test_single_batch_fallback():
         "--input", str(bed_path),
         "--ancestry-map", str(anc_path),
         "--ancestry", "EUR",
-        "--modality", "RNA_editing",  # logit
+        "--modality", "RNA_editing",
         "--output-dir", str(out_dir),
     ])
     if r.returncode != 0:
@@ -435,7 +469,7 @@ def main():
         print(f"ERROR: R script not found at {R_SCRIPT}")
         sys.exit(1)
 
-    test_logit_transform()
+    test_detection_filter_and_int()
     test_pooling_intersection()
     test_prepooled_passthrough()
     test_combat_endtoend()

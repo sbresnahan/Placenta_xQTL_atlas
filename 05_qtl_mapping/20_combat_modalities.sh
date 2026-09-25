@@ -18,7 +18,10 @@
 #     - splicing, intron_retention:
 #       pass through pre-pooled BEDs from harmonize_within_ancestry.py
 #       (namespaced sample IDs)
-#   Stage 2: ComBat + INT per ancestry x modality (R via singularity)
+#   Stage 2: QN + INT + ComBat per ancestry x modality (R via singularity)
+#     - normalization first, ComBat last (devBrain xQTL schema, 2026-09 revision)
+#     - isoforms additionally exclude the expression-outlier samples written
+#       by 19_hcp_factors.sh (devBrain §3.3)
 #
 # Usage:
 #   bsub -env "CONFIG=\"config.yml\",SCRIPTS_DIR=\"/path/to/scripts\",ANCESTRY_MAP=\"/path/to/pooled_sample_ancestry_RNAseq.tsv\"" < 20_combat_modalities.sh
@@ -163,7 +166,7 @@ done
 # Stage 2: ComBat + INT per ancestry x modality (R via singularity)
 # =============================================================================
 echo ""
-echo "[$(date)] Stage 2: ComBat + INT per ancestry x modality"
+echo "[$(date)] Stage 2: QN + INT + ComBat per ancestry x modality"
 
 COMBAT_DIR="${OUTPUT_DIR}/combat_int"
 mkdir -p "$COMBAT_DIR"
@@ -200,6 +203,19 @@ for ANCESTRY in $ANCESTRY_LIST; do
             else
                 echo "      WARN: cohort-label sidecar not found: $LABEL_FILE"
                 echo "             falling back to ancestry map for batch labels"
+            fi
+        fi
+
+        # Expression-outlier exclusion for isoforms (devBrain §3.3): apply the
+        # connectivity-outlier list written by 19_hcp_factors.sh to isoforms
+        # only (not splicing / proportion modalities).
+        if [ "$MODALITY" = "isoforms" ]; then
+            OUTLIER_FILE="${OUTPUT_BASE}/hcp/hcp_factors/${ANCESTRY}_expression_outliers.tsv"
+            if [ -f "$OUTLIER_FILE" ]; then
+                EXTRA_ARGS="${EXTRA_ARGS} --exclude-samples ${OUTLIER_FILE}"
+            else
+                echo "      WARN: expression outlier list not found: $OUTLIER_FILE"
+                echo "             isoforms will keep all samples"
             fi
         fi
 

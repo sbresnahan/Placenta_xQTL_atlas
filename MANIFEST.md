@@ -122,8 +122,11 @@ wrappers here document the initial fetch/trim/quant for RICHS and SNUH.
 📁 [`03_phenotyping/`](03_phenotyping/)
 
 **Purpose.** From per-cohort FASTQs, generate **8 RNA-modality phenotype BEDs**
-(quantile-normalized + rank-based inverse-normal transformed, bgzipped +
-tabix-indexed, with `phenotype_groups.txt` gene groupings) ready for tensorQTL.
+(unnormalized, bgzipped + tabix-indexed, with `phenotype_groups.txt` gene
+groupings) ready for cross-cohort pooling. Per-cohort QN+INT was retired in the
+2026-09 schema revision: normalization is applied once after ancestry-stratified
+pooling in stage 5 (scripts 19/20), modeled on the devBrain xQTL atlas
+(Wen et al., Science 2024, 384:eadh0829).
 
 | Module | Modalities | Tool(s) |
 |---|---|---|
@@ -220,13 +223,14 @@ cis-xQTL summary statistics. Current baseline = the GTEx-conventions design
 
 | # | Script | What it does |
 |---|---|---|
-| 19 | `19_hcp_factors.sh` (+ `19a_picard_sharded.sh`, `19b_fix_missing_metrics.sh`) | HCP pipeline: Picard QC per sample (`picard_qc.py`) → pool metrics (`fix_missing_metrics.py`) → pool expression within ancestry (`pool_expression_within_ancestry.py`) → ComBat + INT + HCP estimation, k=15 (`combat_normalize_hcp.R`, `peer_factors.py`) |
-| 20 | `20_combat_modalities.sh` | Pool + ComBat + INT for the 7 non-expression modalities (`pool_modalities_within_ancestry.py`, `combat_normalize_modalities.R`); isoforms are log2(x+1) isoform *expression*; splicing/IR pass through stage-17 pre-pooled BEDs. HCP factors from 19 are reused, not re-estimated |
+| 19 | `19_hcp_factors.sh` (+ `19a_picard_sharded.sh`, `19b_fix_missing_metrics.sh`) | HCP pipeline: Picard QC per sample (`picard_qc.py`) → pool metrics (`fix_missing_metrics.py`) → pool expression within ancestry (`pool_expression_within_ancestry.py`) → TPM > 0.1 in > 25% filter → QN + INT → connectivity-outlier removal (signed bicor network, z < −3; writes `{ANC}_expression_outliers.tsv`) → ComBat (batch=cohort, **last**) → HCP estimation, provisional k=15 (`combat_normalize_hcp.R`, `peer_factors.py`) |
+| 20 | `20_combat_modalities.sh` | Pool + QN + INT + ComBat (ComBat **last**) for the 7 non-expression modalities (`pool_modalities_within_ancestry.py`, `combat_normalize_modalities.R`); devBrain filters (isoforms TPM > 0.1 in > 25%; proportion modalities detected in ≥ 40%); no log2/logit pre-transform (no-op under rank-based QN+INT); isoforms exclude the expression-outlier samples from 19 (`--exclude-samples`); splicing/IR pass through stage-17 pre-pooled BEDs. HCP factors from 19 are reused, not re-estimated |
 | 21 | `21_install_tensorqtl.sh` | One-time env setup: python-only tensorqtl conda env + R `qvalue` into the singularity R library + Storey-bridge smoke test |
 | 22 | `22_genotype_pca.sh` | Cohort-only genotype PCA (GTEx convention): LD-prune (`--indep-pairwise 200 50 0.2`) → `plink2 --pca 20 exact` → `genotype_pca_format.py` → `{ANC}_genotype_pcs.tsv` + scree (`PCA_scree.R`) |
 | 23 | `23_prepare_intersection.py` | Genotype×phenotype intersection on the RNA→DNA map; pgen filtered to intersection samples with **MAC ≥ 5** (`--mac 5`; `--mac 0` disables); sample columns renamed rnaseq_id → array_id |
 | 24 | `24_outlier_exclusion.py` | Select first 5 genotype PCs; 6-SD outlier exclusion on PC1–5; removes outliers from pgen/BED/HCP/deconvolution/metadata. **Edits intersection files in place — always rerun 23 before 24** |
-| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–15 + sex + GA + cell types (dominant type as compositional reference); near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs); cap ≤ 25. **Note: the maternal cell-fraction covariate was manually removed after script 25 (25 → 24 covariates); rerunning 25 restores it — re-apply the edit or script it** |
+| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–k + sex + GA + cell types (dominant type as compositional reference); near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs); cap ≤ 25. Supports `--hcp-file`/`--hcp-k`/`--out-suffix` for the 25a optimization module. **Note: the maternal cell-fraction covariate was manually removed after script 25 (25 → 24 covariates); rerunning 25 restores it — re-apply the edit or script it** |
+| 25a | `25a_optimize_hcp.sh` + `optimize_hcp_chr1.py` | Pre-mapping HCP-count optimization (devBrain §4.2), run after 23/24, before canonical 25: per ancestry, re-estimate HCP at each k ∈ {0,5,10,15,20,25,30}, build per-k covariates, map **chr1 expression only** with tensorQTL (1 Mb window, MAF ≥ 0.01), count eGenes at Storey q ≤ 0.05; k\* = argmax (ties → smaller k). Installs the k\* solution as `{ANC}_hcp_factors_harmonized.tsv` (provisional file backed up to `*.pre25a_backup.tsv`); writes `{ANC}_optimal_hcp.tsv` + `.png` |
 | 26 | `26_harmonize_modalities.py` | Harmonize the 7 non-expression modality BEDs to the final array_id sample set (handles stage-17 namespaced IDs for splicing/IR) |
 | 30 | `30_combine_modalities.py` | Build the combined cross-modality BED (phenotype IDs namespaced `{modality}__{id}`; cross-modality gene groups; modality sidecar TSV) |
 | 27 | `27_run_tensorqtl.sh` + `27_run_tensorqtl.py` | cis mapping per ancestry × modality: grouped (`group_s`, one lead per gene) when a `phenotype_groups.txt` exists, ungrouped otherwise; `--independent` for PANTRY-style stepwise conditional signals; q-values on `pval_beta` via `--qvalue-method storey` (default; R `qvalue` through the `compute_qvalues.R` file bridge, `QVALUE_RSCRIPT` env var) or `bh` (escape hatch) |
@@ -304,6 +308,14 @@ rmarkdown::render(
    and the hardcoded `#BSUB -J "txrevise[1-100]"` array range in `002`.
 8. **The modified `assemble_bed.py` must replace the bundled PANTRY original** in
    the PANTRY scripts directory on deployment (Salmon `quant.sf` reader).
+9. **`optimize_hcp_chr1.py` (25a) overwrites `{ANC}_hcp_factors_harmonized.tsv`**
+   with the k\* solution (the provisional k=15 file is backed up to
+   `*.pre25a_backup.tsv`). Always rerun 25 after 25a — and re-apply the
+   maternal-fraction removal (landmine 4).
+10. **Stage-3 `output/<modality>.bed.gz` files are now UNNORMALIZED** (2026-09
+    schema: normalization moved to stage 5). Legacy consumers expecting
+    per-cohort normalized BEDs (e.g. `combine_modalities.sh`) must be pointed
+    at stage-5 outputs instead.
 
 ## Porting to another system
 

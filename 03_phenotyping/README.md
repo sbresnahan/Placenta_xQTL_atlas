@@ -3,9 +3,11 @@
 In-house rewrite of [PejLab/Pantry](https://github.com/PejLab/Pantry) for the MD
 Anderson seadragon HPC (LSF/BSUB instead of Snakemake; Salmon instead of
 kallisto), targeting the long-read **HPLRv2** transcript annotation. Generates
-**8 RNA-modality phenotype BEDs** per cohort — quantile-normalized + rank-based
-inverse-normal transformed, bgzipped + tabix-indexed, with
-`phenotype_groups.txt` gene groupings — ready for tensorQTL.
+**8 RNA-modality phenotype BEDs** per cohort — unnormalized, bgzipped +
+tabix-indexed, with `phenotype_groups.txt` gene groupings. Per-cohort QN+INT
+was retired in the 2026-09 schema revision: normalization (QN + INT) is applied
+once after ancestry-stratified pooling in stage 5 (scripts 19/20), followed by
+ComBat (devBrain xQTL schema; Wen et al., Science 2024, 384:eadh0829).
 
 Full stage documentation: [`../MANIFEST.md`](../MANIFEST.md) stage 3.
 
@@ -35,7 +37,8 @@ driver as a single LSF job (`COHORT=cohort1 bsub < 00_run_pipeline.sh`).
 04_regtools_junctions.sh     splice-junction extraction
 05_featureCounts.sh          exonic + intronic counts (stability)
 06_rna_editing_pileup.sh     RNA-editing levels (mpileup at REDIportal sites)
-10–15                        per-modality aggregation → normalized BEDs
+10–15                        per-modality aggregation → unnorm BEDs (canonical
+                             output/<modality>.bed.gz; normalization in stage 5)
 16_index_outputs.sh          verify + tabix-index all outputs
 ```
 

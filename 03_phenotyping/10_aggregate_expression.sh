@@ -117,17 +117,13 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
     --ref-anno "$REF_ANNO" \
     --output-isoforms "${UNNORM_DIR}/isoforms.bed"
 
-# ---- Normalize expression ----
-python3 "${PANTRY_SCRIPTS}/normalize_phenotypes.py" \
-    --input "${UNNORM_DIR}/expression.bed" \
-    --samples "$SAMPLES_FILE" \
-    --output "${OUTPUT_DIR}/expression.bed"
-
-# ---- Normalize isoforms ----
-python3 "${PANTRY_SCRIPTS}/normalize_phenotypes.py" \
-    --input "${UNNORM_DIR}/isoforms.bed" \
-    --samples "$SAMPLES_FILE" \
-    --output "${OUTPUT_DIR}/isoforms.bed"
+# ---- Canonical BEDs = unnorm (2026-09 schema) ----
+# Per-cohort QN+INT is discontinued: normalization now happens once, after
+# cross-cohort pooling, in stage 5 (19_hcp_factors.sh / 20_combat_modalities.sh).
+# The canonical output/<modality>.bed is the unnorm BED so downstream paths
+# (16_index_outputs.sh, combine_modalities.sh) are unchanged.
+cp "${UNNORM_DIR}/expression.bed" "${OUTPUT_DIR}/expression.bed"
+cp "${UNNORM_DIR}/isoforms.bed" "${OUTPUT_DIR}/isoforms.bed"
 
 conda deactivate 2>/dev/null || true
 

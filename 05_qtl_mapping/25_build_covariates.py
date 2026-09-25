@@ -42,6 +42,13 @@ Usage:
       --cor-threshold 0.9 \
       --min-sd 1e-8 \
       --max-covariates 25
+
+25a optimization module usage (per-k covariate tables):
+  python3 25_build_covariates.py \
+      --qtl-dir <staging dir> --pcair-dir <genotype_pcs dir> \
+      --ancestries EAS --hcp-file <per-k HCP tsv> --hcp-k 10 \
+      --out-suffix _k10
+  (--hcp-k 0 omits HCP covariates; the HCP file still defines the sample set.)
 """
 
 import argparse
@@ -144,6 +151,16 @@ def main():
                         help="Hard cap on final covariate count, applied after "
                              "correlation pruning (default: 25). Lowest-priority "
                              "covariates (highest-index HCPs first) are dropped.")
+    parser.add_argument("--hcp-file", default=None,
+                        help="HCP factors file (default: {qtl-dir}/{ANC}_hcp_factors_harmonized.tsv). "
+                             "The 25a optimization module uses this to pass per-k HCP solutions.")
+    parser.add_argument("--hcp-k", type=int, default=None,
+                        help="Use only the first k HCP factors (rows). 0 = omit HCP "
+                             "covariates entirely (the HCP file is still read for the "
+                             "sample list). Default: use all rows in the file.")
+    parser.add_argument("--out-suffix", default="",
+                        help="Suffix appended to output filenames, e.g. '_k10' -> "
+                             "{ANC}_covariates_k10.tsv (default: none)")
     args = parser.parse_args()
 
     ancestries = args.ancestries.split()
@@ -158,20 +175,32 @@ def main():
         dropped_records = []
 
         # ---- 1. HCP factors ----
-        hcp_path = os.path.join(args.qtl_dir, f"{anc}_hcp_factors_harmonized.tsv")
+        hcp_path = args.hcp_file or os.path.join(args.qtl_dir, f"{anc}_hcp_factors_harmonized.tsv")
         if not os.path.exists(hcp_path):
             print(f"  ERROR: HCP factors not found: {hcp_path}")
             continue
         hcp_df = pd.read_csv(hcp_path, sep='\t', index_col=0)
-        # HCP factors: rows = HCP_1..15, columns = samples
-        print(f"  HCP factors: {hcp_df.shape[0]} factors, {hcp_df.shape[1]} samples")
-        for name in hcp_df.index:
-            try:
-                idx = int(str(name).split('_')[1])
-            except (IndexError, ValueError):
-                idx = 999
-            priority[name] = (TIER_HCP, idx)
-        covariate_blocks.append(hcp_df)
+        # HCP factors: rows = HCP_1..k, columns = samples
+        print(f"  HCP factors: {hcp_df.shape[0]} factors, {hcp_df.shape[1]} samples "
+              f"(from {os.path.basename(hcp_path)})")
+        if args.hcp_k is not None:
+            if args.hcp_k > hcp_df.shape[0]:
+                print(f"  ERROR: --hcp-k {args.hcp_k} exceeds available HCP factors "
+                      f"({hcp_df.shape[0]}) in {hcp_path}")
+                continue
+            hcp_df = hcp_df.iloc[:args.hcp_k]
+            print(f"  --hcp-k {args.hcp_k}: using first {hcp_df.shape[0]} HCP factors")
+        if hcp_df.shape[0] > 0:
+            for name in hcp_df.index:
+                try:
+                    idx = int(str(name).split('_')[1])
+                except (IndexError, ValueError):
+                    idx = 999
+                priority[name] = (TIER_HCP, idx)
+            covariate_blocks.append(hcp_df)
+        else:
+            print("  --hcp-k 0: HCP covariates omitted "
+                  "(HCP file still defines the sample set)")
 
         # ---- 2. Genotype PCs (selected by script 24) ----
         sel_path = os.path.join(args.qtl_dir, f"{anc}_selected_pcs.txt")
@@ -277,8 +306,10 @@ def main():
             print(f"  WARN: deconvolution not found: {deconv_path}, skipping cell-type covariates")
 
         # ---- Combine all covariate blocks ----
+        # Seed with the HCP sample set (post-outlier samples) even when the
+        # HCP block itself is omitted (--hcp-k 0), then intersect every block.
         all_samples = set(hcp_df.columns)
-        for block in covariate_blocks[1:]:
+        for block in covariate_blocks:
             all_samples = all_samples & set(block.columns)
 
         print(f"\n  Final sample count (intersection of all covariate blocks): {len(all_samples)}")
@@ -389,18 +420,18 @@ def main():
         if cond > 1000:
             print(f"  WARN: condition number > 1000 — residual collinearity remains")
 
-        png_path = os.path.join(args.qtl_dir, f"{anc}_covariate_correlation.png")
+        png_path = os.path.join(args.qtl_dir, f"{anc}_covariate_correlation{args.out_suffix}.png")
         plot_cor_heatmaps(cor_before, cor_after, png_path, anc)
         print(f"  Written: {png_path}")
 
-        pruning_path = os.path.join(args.qtl_dir, f"{anc}_covariate_pruning.tsv")
+        pruning_path = os.path.join(args.qtl_dir, f"{anc}_covariate_pruning{args.out_suffix}.tsv")
         pd.DataFrame(dropped_records,
                      columns=['covariate', 'reason', 'correlated_with', 'r_value']
                      ).to_csv(pruning_path, sep='\t', index=False)
         print(f"  Written: {pruning_path}")
 
         # ---- Write covariate table (tensorQTL format) ----
-        out_path = os.path.join(args.qtl_dir, f"{anc}_covariates.tsv")
+        out_path = os.path.join(args.qtl_dir, f"{anc}_covariates{args.out_suffix}.tsv")
         covariates.index.name = 'covariate_id'
         covariates.to_csv(out_path, sep='\t')
 

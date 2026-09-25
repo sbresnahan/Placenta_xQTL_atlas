@@ -1,19 +1,26 @@
 #!/usr/bin/env Rscript
 #
-# combat_normalize_hcp.R — ComBat + INT + HCP estimation per ancestry stratum
+# combat_normalize_hcp.R — QN + INT + ComBat + HCP estimation per ancestry stratum
 #
-# Batch-correct (ComBat, batch=cohort), quantile-normalize + rank-based INT,
-# then estimate HCP latent factors using PicardTools QC metrics as priors.
-# HCP factors are output as a tensorQTL covariate table.
+# SCHEMA (2026-09 revision, modeled on the devBrain xQTL atlas — Wen et al.,
+# Science 2024, 384:eadh0829): normalization FIRST, batch correction LAST.
+#   1. Load pooled unnorm expression BED (TPM)
+#   2. Gene filter: TPM > 0.1 in > 25% of stratum samples (devBrain §3.3)
+#      + no-variance removal
+#   3. Quantile normalization (across samples) + rank-based INT (per gene)
+#   4. Expression-outlier removal: sample connectivity (signed biweight
+#      midcorrelation network) z < -3 (devBrain §3.3; pure-R bicor, no WGCNA
+#      dependency). Outlier list is written for the isoform modality
+#      (script 20 --exclude-samples).
+#   5. ComBat (batch = cohort, par.prior = TRUE; fallback non-parametric)
+#   6. Write ComBat'd expression BED
+#   7. Standardize (center + unit SS) for HCP
+#   8. HCP: hcp(Z = QC metrics, Y = ComBat'd expression, k, lambda1-3)
+#   9. Extract hidden covariates W (n_samples x k) as tensorQTL covariate table
 #
-# Normalization flow (Brain xQTL / Wen et al. 2024 approach):
-#   1. Load pooled unnorm expression BED
-#   2. log2(TPM + 1)
-#   3. ComBat (batch = cohort, par.prior = TRUE)
-#   4. Quantile normalization + rank-based INT
-#   5. Standardize (center + unit SS) for HCP
-#   6. HCP: hcp(Z = QC metrics, Y = INT'd expression, k, lambda1, lambda2, lambda3)
-#   7. Extract hidden covariates W (n_samples x k) from HCP result
+# Note: with ComBat last, the written BED is approximately but not exactly
+# N(0,1) per gene — accepted per the coauthors' schema (devBrain splicing
+# convention: "ComBat was applied to the normalized data").
 #
 # Usage:
 #   Rscript combat_normalize_hcp.R \
@@ -70,9 +77,15 @@ option_list <- list(
   make_option("--min-samples", type = "integer", default = 10,
               help = "Minimum samples required to run a stratum; smaller strata are skipped gracefully (default: 10)"),
   make_option("--skip-hcp", action = "store_true", default = FALSE,
-              help = "Skip HCP factor estimation (ComBat+INT expression BED is still written). Use when HCP fails and PEER is run separately."),
+              help = "Skip HCP factor estimation (ComBat expression BED is still written). Use when HCP is run separately (e.g. the 25a optimization module)."),
   make_option("--qc-cor-threshold", type = "double", default = 0.9,
-              help = "Drop QC metrics with |correlation| above this threshold to avoid singular Z'Z in HCP (default: 0.9)")
+              help = "Drop QC metrics with |correlation| above this threshold to avoid singular Z'Z in HCP (default: 0.9)"),
+  make_option("--tpm-min", type = "double", default = 0.1,
+              help = "Gene filter: minimum TPM (default: 0.1, devBrain §3.3)"),
+  make_option("--tpm-min-prop", type = "double", default = 0.25,
+              help = "Gene filter: required fraction of samples above --tpm-min (default: 0.25, devBrain §3.3)"),
+  make_option("--outlier-z", type = "double", default = -3,
+              help = "Connectivity z-score threshold for expression-outlier removal (default: -3, devBrain §3.3)")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list))
@@ -92,6 +105,9 @@ opt_skip_combat   <- opt[["skip-combat"]]
 opt_min_samples   <- opt[["min-samples"]]
 opt_qc_cor_threshold <- opt[["qc-cor-threshold"]]
 opt_skip_hcp      <- opt[["skip-hcp"]]
+opt_tpm_min       <- opt[["tpm-min"]]
+opt_tpm_min_prop  <- opt[["tpm-min-prop"]]
+opt_outlier_z     <- opt[["outlier-z"]]
 
 if (is.null(opt_expression) || is.null(opt_qc_metrics) ||
     is.null(opt_ancestry_map) || is.null(opt_ancestry)) {
@@ -100,7 +116,7 @@ if (is.null(opt_expression) || is.null(opt_qc_metrics) ||
 
 dir.create(opt_output_dir, showWarnings = FALSE, recursive = TRUE)
 ancestry <- opt_ancestry
-cat(sprintf("[%s] HCP estimation for ancestry: %s\n", date(), ancestry))
+cat(sprintf("[%s] QN + INT + ComBat + HCP for ancestry: %s\n", date(), ancestry))
 
 # ---- Helper functions ----
 
@@ -108,8 +124,8 @@ cat(sprintf("[%s] HCP estimation for ancestry: %s\n", date(), ancestry))
 # Input mat is samples x genes. Transposes to genes x samples, normalizes
 # columns (samples), transposes back. Matches PANTRY normalize_phenotypes.py.
 quantile_normalize_rows <- function(mat) {
-  # Impute NAs with column (sample) medians so that apply(,2,sort) returns
-  # a proper matrix. Without this, sort() drops NAs and columns with
+  # Impute NAs with column (gene) medians so that apply(,2,sort) below
+  # returns a proper matrix. Without this, sort() drops NAs and columns with
   # different NA counts produce vectors of inconsistent length, causing
   # rowMeans() to fail.
   if (any(is.na(mat))) {
@@ -125,10 +141,25 @@ quantile_normalize_rows <- function(mat) {
   t_mat <- t(mat)  # genes x samples
   sorted_mat <- apply(t_mat, 2, sort)
   mean_dist <- rowMeans(sorted_mat)
-  ranked_mat <- apply(t_mat, 2, rank, ties.method = "average")
   result <- matrix(0, nrow = nrow(t_mat), ncol = ncol(t_mat))
+  # Assign by ORDER (preprocessCore / PANTRY normalize_phenotypes.py
+  # convention): the smallest value in a sample gets the smallest mean
+  # quantile. Tied values get the mean of the quantiles they span.
+  # (The previous implementation assigned result[ranked, j] <- mean_dist,
+  # which applies the INVERSE permutation and scrambles values across
+  # features — fixed 2026-09-25.)
   for (j in seq_len(ncol(t_mat))) {
-    result[ranked_mat[, j], j] <- mean_dist
+    o <- order(t_mat[, j])
+    result[o, j] <- mean_dist
+    xs <- t_mat[o, j]
+    tie_runs <- rle(xs)
+    if (any(tie_runs$lengths > 1)) {
+      ends <- cumsum(tie_runs$lengths)
+      starts <- ends - tie_runs$lengths + 1
+      for (g in which(tie_runs$lengths > 1)) {
+        result[o[starts[g]:ends[g]], j] <- mean(mean_dist[starts[g]:ends[g]])
+      }
+    }
   }
   dimnames(result) <- dimnames(t_mat)
   t(result)  # back to samples x genes
@@ -154,6 +185,46 @@ standardize_for_hcp <- function(mat) {
   ss <- sqrt(colSums(mat^2))
   ss[ss == 0] <- 1
   sweep(mat, 2, ss, "/")
+}
+
+# Biweight midcorrelation between samples (WGCNA::bicor equivalent), pure R.
+# mat: samples x genes. Returns the samples x samples bicor matrix.
+#   u = (x - median(x)) / (9 * mad(x));  w = (1 - u^2)^2 for |u| < 1, else 0
+#   bicor(x,y) = sum((x-mx)*wx * (y-my)*wy) /
+#                sqrt( sum(((x-mx)*wx)^2) * sum(((y-my)*wy)^2) )
+bicor_samples <- function(mat) {
+  X <- as.matrix(mat)  # samples x genes
+  med <- apply(X, 1, median, na.rm = TRUE)
+  mad1 <- apply(X, 1, function(x) mad(x, constant = 1, na.rm = TRUE))
+  mad1[!is.finite(mad1) | mad1 == 0] <- NA
+  U <- (X - med) / (9 * mad1)          # length(med) == nrow(X): row-wise
+  W <- (1 - U^2)^2
+  W[!is.finite(W) | abs(U) >= 1] <- 0
+  Y <- (X - med) * W
+  Y[!is.finite(Y)] <- 0
+  num <- tcrossprod(Y)                 # samples x samples
+  den2 <- rowSums(Y^2)
+  bc <- num / sqrt(outer(den2, den2))
+  bc[!is.finite(bc)] <- 0
+  dimnames(bc) <- list(rownames(X), rownames(X))
+  bc
+}
+
+# Connectivity outlier detection (devBrain §3.3: WGCNA signed network,
+# connectivity z < -3). Signed adjacency a = (1 + bicor)/2, power 1;
+# connectivity = row sum excluding self.
+connectivity_outliers <- function(mat, z_thresh) {
+  bc <- bicor_samples(mat)
+  adj <- (1 + bc) / 2
+  diag(adj) <- 0
+  conn <- rowSums(adj, na.rm = TRUE)
+  conn_sd <- sd(conn)
+  if (!is.finite(conn_sd) || conn_sd == 0) {
+    return(list(outliers = character(0), z = rep(0, nrow(mat))))
+  }
+  z <- (conn - mean(conn)) / conn_sd
+  names(z) <- rownames(mat)
+  list(outliers = rownames(mat)[z < z_thresh], z = z)
 }
 
 # ---- Load data ----
@@ -214,20 +285,43 @@ colnames(expr_data) <- expr_bed$phenotype_id
 cat(sprintf("  Expression matrix: %d samples x %d genes\n",
             nrow(expr_data), ncol(expr_data)))
 
-# ---- Filter genes: remove those with >50% zeros or no variance ----
-zero_frac <- colMeans(expr_data == 0, na.rm = TRUE)
+# ---- Gene filter: TPM > --tpm-min in > --tpm-min-prop of samples (devBrain
+# §3.3), plus no-variance removal ----
+detect_frac <- colMeans(expr_data > opt_tpm_min, na.rm = TRUE)
 no_var <- apply(expr_data, 2, function(x) length(unique(x[!is.na(x)])) <= 1)
-keep_genes <- (zero_frac <= 0.5) & !no_var
-cat(sprintf("  Gene filtering: %d -> %d (removed %d with >50%% zeros, %d no-variance)\n",
+keep_genes <- (detect_frac > opt_tpm_min_prop) & !no_var
+cat(sprintf("  Gene filtering: %d -> %d (removed %d with TPM <= %g in >= %d%% of samples, %d no-variance)\n",
             ncol(expr_data), sum(keep_genes),
-            sum(zero_frac > 0.5), sum(no_var & zero_frac <= 0.5)))
+            sum(detect_frac <= opt_tpm_min_prop), opt_tpm_min,
+            as.integer(opt_tpm_min_prop * 100),
+            sum(no_var & detect_frac > opt_tpm_min_prop)))
 expr_data <- expr_data[, keep_genes, drop = FALSE]
 
-# ---- log2(TPM + 1) ----
-cat(sprintf("[%s] log2(TPM+1) transform\n", date()))
-expr_log <- log2(expr_data + 1)
+# ---- Quantile normalization + rank-based INT ----
+cat(sprintf("[%s] Quantile normalization + rank-based INT\n", date()))
+expr_qn <- quantile_normalize_rows(expr_data)
+expr_int <- inverse_normal_transform(expr_qn)
+cat(sprintf("  INT done: mean=%.4f, sd=%.4f (should be ~0, ~1)\n",
+            mean(expr_int, na.rm = TRUE), sd(expr_int, na.rm = TRUE)))
 
-# ---- ComBat (batch = cohort) ----
+# ---- Expression-outlier removal: connectivity z < --outlier-z (devBrain §3.3) ----
+cat(sprintf("[%s] Connectivity outlier detection (signed bicor network, z < %g)\n",
+            date(), opt_outlier_z))
+conn <- connectivity_outliers(expr_int, opt_outlier_z)
+outlier_samples <- conn$outliers
+outlier_path <- file.path(opt_output_dir, sprintf("%s_expression_outliers.tsv", ancestry))
+write.table(data.frame(sample_id = outlier_samples), outlier_path,
+            sep = "\t", row.names = FALSE, quote = FALSE)
+cat(sprintf("  Outliers: %d of %d samples (z < %g) -> %s\n",
+            length(outlier_samples), nrow(expr_int), opt_outlier_z, outlier_path))
+if (length(outlier_samples) > 0) {
+  cat(sprintf("  Removed: %s\n", paste(outlier_samples, collapse = ", ")))
+  keep_samples <- setdiff(rownames(expr_int), outlier_samples)
+  expr_int <- expr_int[keep_samples, , drop = FALSE]
+  expr_samples <- keep_samples
+}
+
+# ---- ComBat (batch = cohort), on the INT'd values (ComBat LAST) ----
 cohort_labels <- stratum_samples$cohort[match(expr_samples, stratum_samples$sample_id)]
 names(cohort_labels) <- expr_samples
 
@@ -239,7 +333,7 @@ for (b in names(batch_table)) {
 
 if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
   cat(sprintf("[%s] Skipping ComBat (single cohort or --skip-combat)\n", date()))
-  expr_combat <- expr_log
+  expr_combat <- expr_int
 } else {
   # Merge single-sample batches into "other"
   single_batches <- names(batch_table[batch_table < 2])
@@ -257,7 +351,7 @@ if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
   mod <- model.matrix(~1, data = data.frame(row.names = expr_samples))
 
   expr_combat <- tryCatch({
-    ComBat(dat = t(expr_log),  # ComBat expects genes x samples
+    ComBat(dat = t(expr_int),  # ComBat expects genes x samples
            batch = as.factor(cohort_labels),
            mod = mod,
            par.prior = !opt_nonparametric,
@@ -265,7 +359,7 @@ if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
   }, error = function(e) {
     cat(sprintf("  ComBat (parametric) failed: %s\n", e$message))
     cat("  Retrying with non-parametric prior...\n")
-    ComBat(dat = t(expr_log),
+    ComBat(dat = t(expr_int),
            batch = as.factor(cohort_labels),
            mod = mod,
            par.prior = FALSE,
@@ -276,22 +370,15 @@ if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
               nrow(expr_combat), ncol(expr_combat)))
 }
 
-# ---- Quantile normalization + rank-based INT ----
-cat(sprintf("[%s] Quantile normalization + rank-based INT\n", date()))
-expr_qn <- quantile_normalize_rows(expr_combat)
-expr_int <- inverse_normal_transform(expr_qn)
-cat(sprintf("  INT done: mean=%.4f, sd=%.4f (should be ~0, ~1)\n",
-            mean(expr_int, na.rm = TRUE), sd(expr_int, na.rm = TRUE)))
-
-# ---- Write ComBat + INT expression BED ----
+# ---- Write ComBat expression BED ----
 # Match gene metadata from the original BED by phenotype_id.
-gene_idx <- match(colnames(expr_int), expr_bed$phenotype_id)
+gene_idx <- match(colnames(expr_combat), expr_bed$phenotype_id)
 expr_out <- data.frame(
   chr = expr_bed[["#chr"]][gene_idx],
   start = expr_bed$start[gene_idx],
   end = expr_bed$end[gene_idx],
-  phenotype_id = colnames(expr_int),
-  t(expr_int),
+  phenotype_id = colnames(expr_combat),
+  t(expr_combat),
   check.names = FALSE
 )
 colnames(expr_out)[1] <- "#chr"
@@ -302,8 +389,8 @@ cat(sprintf("  Written: %s (%d genes x %d samples)\n",
 
 # ---- Skip HCP if requested (--skip-hcp) ----
 if (opt_skip_hcp) {
-  cat(sprintf("\n[%s] --skip-hcp: skipping HCP estimation. ComBat+INT expression BED written.\n", date()))
-  cat(sprintf("  Run peer_factors.py separately to extract latent factors.\n"))
+  cat(sprintf("\n[%s] --skip-hcp: skipping HCP estimation. ComBat expression BED written.\n", date()))
+  cat(sprintf("  Run the 25a optimization module / peer_factors.py separately to extract latent factors.\n"))
   quit(save = "no", status = 0)
 }
 
@@ -368,7 +455,7 @@ cat(sprintf("  QC metrics after pruning: %d\n", ncol(qc_subset)))
 
 # Standardize for HCP (center + unit SS)
 qc_std <- standardize_for_hcp(qc_subset)
-expr_std <- standardize_for_hcp(expr_int)
+expr_std <- standardize_for_hcp(expr_combat)
 
 cat(sprintf("  QC standardized: %d x %d\n", nrow(qc_std), ncol(qc_std)))
 cat(sprintf("  Expression standardized: %d x %d\n", nrow(expr_std), ncol(expr_std)))
@@ -481,22 +568,28 @@ if (ncol(cor_mat_sub) > 0) {
   axis(2, seq_len(nrow(cor_mat_sub)), rev(rownames(cor_mat_sub)), las = 1, cex.axis = 0.7)
 }
 
-# 3. PCA of expression before/after ComBat (colored by cohort)
-pca_before <- prcomp(expr_log, scale. = FALSE, center = TRUE)
-pca_after <- prcomp(expr_int, scale. = FALSE, center = TRUE)
-cohort_colors <- as.numeric(as.factor(cohort_labels[rownames(expr_log)]))
+# 3. Connectivity z-scores (outlier diagnostic)
+plot(sort(conn$z), pch = 19, cex = 0.6,
+     xlab = "Sample (rank)", ylab = "Connectivity z-score",
+     main = "Sample connectivity (outliers removed)")
+abline(h = opt_outlier_z, col = "red", lty = 2)
+
+# 4. PCA after QN+INT (pre-ComBat) vs after ComBat (colored by cohort)
+pca_before <- prcomp(expr_int, scale. = FALSE, center = TRUE)
+pca_after <- prcomp(expr_combat, scale. = FALSE, center = TRUE)
+cohort_colors <- as.numeric(as.factor(cohort_labels[rownames(expr_int)]))
 
 plot(pca_before$x[, 1:2], col = cohort_colors, pch = 19, cex = 0.8,
      xlab = sprintf("PC1 (%.1f%%)", summary(pca_before)$importance[2, 1] * 100),
      ylab = sprintf("PC2 (%.1f%%)", summary(pca_before)$importance[2, 2] * 100),
-     main = "PCA before ComBat (log2 TPM)")
+     main = "PCA after QN + INT (pre-ComBat)")
 legend("topright", legend = levels(as.factor(cohort_labels)),
        col = seq_along(levels(as.factor(cohort_labels))), pch = 19, cex = 0.6)
 
 plot(pca_after$x[, 1:2], col = cohort_colors, pch = 19, cex = 0.8,
      xlab = sprintf("PC1 (%.1f%%)", summary(pca_after)$importance[2, 1] * 100),
      ylab = sprintf("PC2 (%.1f%%)", summary(pca_after)$importance[2, 2] * 100),
-     main = "PCA after ComBat + INT")
+     main = "PCA after ComBat (final)")
 legend("topright", legend = levels(as.factor(cohort_labels)),
        col = seq_along(levels(as.factor(cohort_labels))), pch = 19, cex = 0.6)
 
@@ -506,4 +599,5 @@ cat(sprintf("  Written: %s\n", diag_path))
 cat(sprintf("[%s] Done: ancestry %s\n", date(), ancestry))
 cat(sprintf("  HCP factors: %s\n", hcp_out_path))
 cat(sprintf("  Expression: %s\n", expr_out_path))
+cat(sprintf("  Outliers: %s\n", outlier_path))
 cat(sprintf("  Diagnostics: %s\n", diag_path))

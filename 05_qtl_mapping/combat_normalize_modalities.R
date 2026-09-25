@@ -1,24 +1,32 @@
 #!/usr/bin/env Rscript
 #
-# combat_normalize_modalities.R — ComBat + INT for non-expression RNA modalities
+# combat_normalize_modalities.R — QN + INT + ComBat for non-expression RNA modalities
 #
 # Generalizes combat_normalize_hcp.R to all RNA phenotype modalities, WITHOUT
 # HCP estimation (HCP factors are estimated once on gene-level expression and
 # reused as covariates for every modality).
 #
+# SCHEMA (2026-09 revision, modeled on the devBrain xQTL atlas — Wen et al.,
+# Science 2024, 384:eadh0829): normalization FIRST, batch correction LAST.
 # Per ancestry stratum, per modality:
 #   1. Load pooled unnorm BED (samples x features)
-#   2. Modality-specific pre-transform:
-#        - Proportion modalities (bounded [0,1]): logit with epsilon clipping
-#             logit(p) = log((p + eps) / (1 - p + eps)),  eps = 1e-4
-#          Maps [0,1] -> R, handles exact 0/1 (common for PSI) without +/-Inf.
-#        - Unbounded-nonnegative modalities: log2(x + 1)
-#   3. ComBat (batch = cohort, par.prior = TRUE; fallback non-parametric)
-#   4. Quantile normalization (across samples) + rank-based INT (per feature)
-#   5. Write ComBat+INT BED + phenotype_groups.txt + diagnostics PDF
+#   2. Optional sample exclusion (--exclude-samples): expression-outlier list
+#      from script 19, applied to isoforms only (devBrain §3.3 excludes
+#      connectivity outliers from expression/isoforms but not splicing)
+#   3. Feature filter (devBrain §3.3/§3.4):
+#        - isoforms: TPM > 0.1 in > 25% of stratum samples
+#        - proportion/ratio modalities (alt_TSS, alt_polyA, splicing,
+#          intron_retention, RNA_editing) and stability: detected (non-NA)
+#          in >= 40% of stratum samples
+#        - no-variance removal; per-batch >= 2 non-NA guard for ComBat
+#      (Zeros are real PSI values — the old >50%-zeros rule is removed.)
+#   4. Batch-median NA imputation
+#   5. Quantile normalization (across samples) + rank-based INT (per feature)
+#   6. ComBat (batch = cohort, par.prior = TRUE; fallback non-parametric)
+#   7. Write ComBat'd BED + phenotype_groups.txt + diagnostics PDF
 #
-# Normalization order (ComBat -> INT) follows the Brain xQTL approach
-# (Wen et al. 2024) used in the expression/HCP pipeline.
+# No log2/logit pre-transform: rank-based QN + INT is invariant to monotone
+# transforms, so they were no-ops on the final scale.
 #
 # Usage:
 #   Rscript combat_normalize_modalities.R \
@@ -32,6 +40,9 @@
 # sidecar produced by pool_modalities_within_ancestry.py:
 #       --cohort-labels EUR_splicing_cohort_labels.tsv
 #
+# For isoforms, pass the expression-outlier list from script 19:
+#       --exclude-samples EUR_expression_outliers.tsv
+#
 # Dependencies:
 #   sva       (Bioconductor) — ComBat
 #   optparse  (CRAN)          — CLI parsing
@@ -43,23 +54,14 @@ suppressPackageStartupMessages({
   library(optparse)
 })
 
-# ---- Modality -> transform type map (single source of truth) ----
-# "logit"  : bounded [0,1] proportions  (alt_TSS, alt_polyA, splicing,
-#             intron_retention, RNA_editing)
-# "log2"   : unbounded non-negative     (isoforms, stability; expression
-#             handled by HCP script)
-# NOTE (GTEx-conventions round): isoforms is isoform EXPRESSION (Salmon
-# quantification), not a ratio — it is unbounded and must NOT be
-# logit-transformed. Fixed from "logit" to "log2".
-MODALITY_TRANSFORMS <- list(
-  isoforms         = "log2",
-  alt_TSS          = "logit",
-  alt_polyA        = "logit",
-  splicing         = "logit",
-  intron_retention = "logit",
-  RNA_editing      = "logit",
-  stability        = "log2"
-)
+# ---- Valid modalities (single source of truth) ----
+# expression is handled by combat_normalize_hcp.R (script 19).
+MODALITIES <- c("isoforms", "alt_TSS", "alt_polyA", "splicing",
+                "intron_retention", "RNA_editing", "stability")
+
+# Modalities filtered on TPM detection (devBrain §3.3); all others use the
+# >=40% detection filter (devBrain §3.4).
+TPM_MODALITIES <- c("isoforms")
 
 # ---- CLI ----
 option_list <- list(
@@ -74,48 +76,58 @@ option_list <- list(
               help = "Ancestry stratum to process (e.g. EUR, EAS, AFR, HIS)"),
   make_option("--modality", type = "character",
               help = paste("Modality name; one of:",
-                           paste(names(MODALITY_TRANSFORMS), collapse = ", "))),
-  make_option("--eps", type = "double", default = 1e-4,
-              help = "Epsilon for logit clipping (default 1e-4)"),
+                           paste(MODALITIES, collapse = ", "))),
+  make_option("--exclude-samples", type = "character", default = NA,
+              help = paste("Optional TSV of sample IDs to exclude before",
+                           "filtering (one column 'sample_id'; e.g. expression",
+                           "outliers from script 19, applied to isoforms)")),
+  make_option("--tpm-min", type = "double", default = 0.1,
+              help = "isoforms filter: minimum TPM (default: 0.1, devBrain §3.3)"),
+  make_option("--tpm-min-prop", type = "double", default = 0.25,
+              help = "isoforms filter: required fraction of samples above --tpm-min (default: 0.25)"),
+  make_option("--min-detect-prop", type = "double", default = 0.4,
+              help = "Proportion modalities filter: required fraction of samples with detected (non-NA) values (default: 0.4, devBrain §3.4)"),
   make_option("--output-dir", type = "character", default = ".",
               help = "Output directory"),
   make_option("--nonparametric", action = "store_true", default = FALSE,
               help = "Use non-parametric ComBat (if parametric fails to converge)"),
   make_option("--skip-combat", action = "store_true", default = FALSE,
-              help = "Skip ComBat (for single-cohort strata; INT only)")
+              help = "Skip ComBat (for single-cohort strata; QN + INT only)")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list))
 
-opt_input          <- opt[["input"]]
-opt_ancestry_map   <- opt[["ancestry-map"]]
-opt_cohort_labels  <- opt[["cohort-labels"]]
-opt_ancestry       <- opt[["ancestry"]]
-opt_modality       <- opt[["modality"]]
-opt_eps            <- opt[["eps"]]
-opt_output_dir     <- opt[["output-dir"]]
-opt_nonparametric  <- opt[["nonparametric"]]
-opt_skip_combat    <- opt[["skip-combat"]]
+opt_input           <- opt[["input"]]
+opt_ancestry_map    <- opt[["ancestry-map"]]
+opt_cohort_labels   <- opt[["cohort-labels"]]
+opt_ancestry        <- opt[["ancestry"]]
+opt_modality        <- opt[["modality"]]
+opt_exclude_samples <- opt[["exclude-samples"]]
+opt_tpm_min         <- opt[["tpm-min"]]
+opt_tpm_min_prop    <- opt[["tpm-min-prop"]]
+opt_min_detect_prop <- opt[["min-detect-prop"]]
+opt_output_dir      <- opt[["output-dir"]]
+opt_nonparametric   <- opt[["nonparametric"]]
+opt_skip_combat     <- opt[["skip-combat"]]
 
 if (is.null(opt_input) || is.null(opt_ancestry) || is.null(opt_modality)) {
   stop("--input, --ancestry, and --modality are required")
 }
-if (!(opt_modality %in% names(MODALITY_TRANSFORMS))) {
+if (!(opt_modality %in% MODALITIES)) {
   stop("Unknown modality '", opt_modality, "'. Valid: ",
-       paste(names(MODALITY_TRANSFORMS), collapse = ", "))
+       paste(MODALITIES, collapse = ", "))
 }
-transform_type <- MODALITY_TRANSFORMS[[opt_modality]]
 
 dir.create(opt_output_dir, showWarnings = FALSE, recursive = TRUE)
 ancestry <- opt_ancestry
-cat(sprintf("[%s] ComBat + INT for %s / %s (transform: %s)\n",
-            date(), ancestry, opt_modality, transform_type))
+cat(sprintf("[%s] QN + INT + ComBat for %s / %s\n",
+            date(), ancestry, opt_modality))
 
 # ---- Helper functions (match combat_normalize_hcp.R) ----
 
 quantile_normalize_rows <- function(mat) {
-  # Impute NAs with column (sample) medians so that apply(,2,sort) returns
-  # a proper matrix. Without this, sort() drops NAs and columns with
+  # Impute NAs with column (feature) medians so that apply(,2,sort) below
+  # returns a proper matrix. Without this, sort() drops NAs and columns with
   # different NA counts produce vectors of inconsistent length, causing
   # rowMeans() to fail with "'x' must be an array of at least two dimensions".
   if (any(is.na(mat))) {
@@ -131,10 +143,25 @@ quantile_normalize_rows <- function(mat) {
   t_mat <- t(mat)
   sorted_mat <- apply(t_mat, 2, sort)
   mean_dist <- rowMeans(sorted_mat)
-  ranked_mat <- apply(t_mat, 2, rank, ties.method = "average")
   result <- matrix(0, nrow = nrow(t_mat), ncol = ncol(t_mat))
+  # Assign by ORDER (preprocessCore / PANTRY normalize_phenotypes.py
+  # convention): the smallest value in a sample gets the smallest mean
+  # quantile. Tied values get the mean of the quantiles they span.
+  # (The previous implementation assigned result[ranked, j] <- mean_dist,
+  # which applies the INVERSE permutation and scrambles values across
+  # features — fixed 2026-09-25.)
   for (j in seq_len(ncol(t_mat))) {
-    result[ranked_mat[, j], j] <- mean_dist
+    o <- order(t_mat[, j])
+    result[o, j] <- mean_dist
+    xs <- t_mat[o, j]
+    tie_runs <- rle(xs)
+    if (any(tie_runs$lengths > 1)) {
+      ends <- cumsum(tie_runs$lengths)
+      starts <- ends - tie_runs$lengths + 1
+      for (g in which(tie_runs$lengths > 1)) {
+        result[o[starts[g]:ends[g]], j] <- mean(mean_dist[starts[g]:ends[g]])
+      }
+    }
   }
   dimnames(result) <- dimnames(t_mat)
   t(result)
@@ -149,23 +176,6 @@ inverse_normal_transform <- function(mat) {
   result
 }
 
-# ---- Pre-transforms ----
-
-logit_transform <- function(mat, eps) {
-  # Clip to [eps, 1-eps] to avoid +/-Inf at exact 0 or 1 (common for PSI).
-  mat <- as.matrix(mat)
-  mat[!is.finite(mat)] <- NA
-  p <- pmin(pmax(mat, eps), 1 - eps)
-  log(p / (1 - p))
-}
-
-log2_transform <- function(mat) {
-  mat <- as.matrix(mat)
-  mat[!is.finite(mat)] <- NA
-  mat[mat < 0] <- 0
-  log2(mat + 1)
-}
-
 # ---- Load data ----
 cat(sprintf("[%s] Loading BED: %s\n", date(), opt_input))
 # Read header first to size colClasses exactly (avoids the "cols != length"
@@ -178,6 +188,22 @@ bed <- read.delim(opt_input, sep = "\t", check.names = FALSE,
 meta_cols <- c("#chr", "start", "end", "phenotype_id")
 sample_cols <- setdiff(colnames(bed), meta_cols)
 cat(sprintf("  %d features x %d samples\n", nrow(bed), length(sample_cols)))
+
+# ---- Optional sample exclusion (expression outliers -> isoforms) ----
+if (!is.na(opt_exclude_samples) && file.exists(opt_exclude_samples)) {
+  excl <- read.delim(opt_exclude_samples, sep = "\t", stringsAsFactors = FALSE)
+  excl_ids <- excl[[1]]
+  drop <- intersect(sample_cols, excl_ids)
+  if (length(drop) > 0) {
+    cat(sprintf("  Excluding %d samples listed in %s: %s\n",
+                length(drop), basename(opt_exclude_samples),
+                paste(drop, collapse = ", ")))
+    sample_cols <- setdiff(sample_cols, excl_ids)
+  } else {
+    cat(sprintf("  Exclude list %s: no overlapping samples\n",
+                basename(opt_exclude_samples)))
+  }
+}
 
 # ---- Resolve cohort labels (batch variable for ComBat) ----
 # Two sources:
@@ -215,6 +241,19 @@ if (!is.na(opt_cohort_labels) && file.exists(opt_cohort_labels)) {
 
 cohort_labels <- as.character(cohort_labels)
 names(cohort_labels) <- sample_cols
+
+# Merge single-sample batches into "other" BEFORE filtering: the per-batch
+# >= 2 non-NA guard below must reflect the batch structure ComBat will
+# actually see. Batches with <2 samples after merging are excluded from the
+# guard (ComBat cannot estimate their effects; the fallback chain in the
+# ComBat step handles them).
+batch_table <- table(cohort_labels)
+single_batches <- names(batch_table[batch_table < 2])
+if (length(single_batches) > 0 && length(unique(cohort_labels)) > 1) {
+  cat(sprintf("  WARN: cohorts with <2 samples: %s -> merged into 'other'\n",
+              paste(single_batches, collapse = ", ")))
+  cohort_labels[cohort_labels %in% single_batches] <- "other"
+}
 batch_table <- table(cohort_labels)
 cat(sprintf("[%s] Batch (cohort) structure:\n", date()))
 for (b in names(batch_table)) {
@@ -228,22 +267,43 @@ colnames(data_mat) <- bed$phenotype_id
 cat(sprintf("  Data matrix: %d samples x %d features\n",
             nrow(data_mat), ncol(data_mat)))
 
-# ---- Filter features: >50% zeros, no variance, or excessive NAs ----
-zero_frac <- colMeans(data_mat == 0, na.rm = TRUE)
+# ---- Filter features (devBrain §3.3/§3.4) ----
+# isoforms: TPM > --tpm-min in > --tpm-min-prop of samples.
+# All other modalities: detected (non-NA) in >= --min-detect-prop of samples.
+# Zeros are real values for proportion modalities (PSI = 0), so the old
+# >50%-zeros rule is removed. No-variance and per-batch >= 2 non-NA guards
+# are retained.
 no_var <- apply(data_mat, 2, function(x) length(unique(x[!is.na(x)])) <= 1)
-# Drop features where any batch has <2 non-NA values (ComBat can't estimate
-# batch effects for them → singular design matrix)
-na_per_batch <- sapply(split(seq_len(nrow(data_mat)), cohort_labels), function(idx) {
-  colSums(!is.na(data_mat[idx, , drop = FALSE]))
-})
-min_batch_obs <- apply(na_per_batch, 1, min)
-na_excessive <- min_batch_obs < 2
-n_na_excessive <- sum(na_excessive & !(zero_frac > 0.5 | no_var))
-keep <- (zero_frac <= 0.5) & !no_var & !na_excessive
-cat(sprintf("  Feature filtering: %d -> %d (removed %d >50%% zeros, %d no-variance, %d insufficient obs per batch)\n",
+# Drop features where any ComBat-estimable batch (>= 2 samples) has <2 non-NA
+# values (ComBat can't estimate batch effects for them → singular design)
+estimable_batches <- names(batch_table[batch_table >= 2])
+if (length(estimable_batches) > 0) {
+  na_per_batch <- sapply(estimable_batches, function(b) {
+    colSums(!is.na(data_mat[cohort_labels == b, , drop = FALSE]))
+  })
+  min_batch_obs <- apply(na_per_batch, 1, min)
+  na_excessive <- min_batch_obs < 2
+} else {
+  na_excessive <- rep(FALSE, ncol(data_mat))
+}
+
+if (opt_modality %in% TPM_MODALITIES) {
+  detect_frac <- colMeans(data_mat > opt_tpm_min, na.rm = TRUE)
+  low_detect <- detect_frac <= opt_tpm_min_prop
+  filter_desc <- sprintf("TPM <= %g in >= %d%% of samples",
+                         opt_tpm_min, as.integer(opt_tpm_min_prop * 100))
+} else {
+  detect_frac <- colMeans(!is.na(data_mat))
+  low_detect <- detect_frac < opt_min_detect_prop
+  filter_desc <- sprintf("detected in < %d%% of samples",
+                         as.integer(opt_min_detect_prop * 100))
+}
+keep <- !low_detect & !no_var & !na_excessive
+cat(sprintf("  Feature filtering: %d -> %d (removed %d %s, %d no-variance, %d insufficient obs per batch)\n",
             ncol(data_mat), sum(keep),
-            sum(zero_frac > 0.5), sum(no_var & zero_frac <= 0.5 & !na_excessive),
-            n_na_excessive))
+            sum(low_detect), filter_desc,
+            sum(no_var & !low_detect & !na_excessive),
+            sum(na_excessive & !low_detect & !no_var)))
 data_mat <- data_mat[, keep, drop = FALSE]
 
 # ---- Impute remaining NAs with batch-specific medians ----
@@ -264,28 +324,18 @@ if (any(is.na(data_mat))) {
   cat(sprintf("  Imputed %d NA values with batch-specific medians\n", n_na))
 }
 
-# ---- Pre-transform ----
-if (transform_type == "logit") {
-  cat(sprintf("[%s] logit transform (eps=%g)\n", date(), opt_eps))
-  data_tx <- logit_transform(data_mat, opt_eps)
-} else {
-  cat(sprintf("[%s] log2(x+1) transform\n", date()))
-  data_tx <- log2_transform(data_mat)
-}
+# ---- Quantile normalization + rank-based INT ----
+cat(sprintf("[%s] Quantile normalization + rank-based INT\n", date()))
+data_qn <- quantile_normalize_rows(data_mat)
+data_int <- inverse_normal_transform(data_qn)
+cat(sprintf("  INT done: mean=%.4f, sd=%.4f (should be ~0, ~1)\n",
+            mean(data_int, na.rm = TRUE), sd(data_int, na.rm = TRUE)))
 
-# ---- ComBat (batch = cohort) ----
+# ---- ComBat (batch = cohort), on the INT'd values (ComBat LAST) ----
 if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
   cat(sprintf("[%s] Skipping ComBat (single cohort or --skip-combat)\n", date()))
-  data_combat <- data_tx
+  data_combat <- data_int
 } else {
-  # Merge single-sample batches into "other"
-  single_batches <- names(batch_table[batch_table < 2])
-  if (length(single_batches) > 0) {
-    cat(sprintf("  WARN: cohorts with <2 samples: %s -> merged into 'other'\n",
-                paste(single_batches, collapse = ", ")))
-    cohort_labels[cohort_labels %in% single_batches] <- "other"
-  }
-
   cat(sprintf("[%s] Running ComBat (batch = cohort, par.prior = %s)\n",
               date(), ifelse(opt_nonparametric, "FALSE", "TRUE")))
   suppressPackageStartupMessages(library(sva))
@@ -293,7 +343,7 @@ if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
   mod <- model.matrix(~1, data = data.frame(row.names = sample_cols))
 
   data_combat <- tryCatch({
-    ComBat(dat = t(data_tx),  # ComBat expects features x samples
+    ComBat(dat = t(data_int),  # ComBat expects features x samples
            batch = as.factor(cohort_labels),
            mod = mod,
            par.prior = !opt_nonparametric,
@@ -302,15 +352,15 @@ if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
     cat(sprintf("  ComBat (parametric) failed: %s\n", e$message))
     cat("  Retrying with non-parametric prior...\n")
     tryCatch({
-      ComBat(dat = t(data_tx),
+      ComBat(dat = t(data_int),
              batch = as.factor(cohort_labels),
              mod = mod,
              par.prior = FALSE,
              prior.plots = FALSE)
     }, error = function(e2) {
       cat(sprintf("  ComBat (non-parametric) also failed: %s\n", e2$message))
-      cat("  WARNING: Skipping ComBat for this stratum; using transformed data without batch correction\n")
-      t(data_tx)  # return features x samples, same as ComBat output
+      cat("  WARNING: Skipping ComBat for this stratum; using INT data without batch correction\n")
+      t(data_int)  # return features x samples, same as ComBat output
     })
   })
   data_combat <- t(data_combat)  # back to samples x features
@@ -318,21 +368,14 @@ if (opt_skip_combat || length(unique(cohort_labels)) < 2) {
               nrow(data_combat), ncol(data_combat)))
 }
 
-# ---- Quantile normalization + rank-based INT ----
-cat(sprintf("[%s] Quantile normalization + rank-based INT\n", date()))
-data_qn <- quantile_normalize_rows(data_combat)
-data_int <- inverse_normal_transform(data_qn)
-cat(sprintf("  INT done: mean=%.4f, sd=%.4f (should be ~0, ~1)\n",
-            mean(data_int, na.rm = TRUE), sd(data_int, na.rm = TRUE)))
-
-# ---- Write ComBat + INT BED ----
-feat_idx <- match(colnames(data_int), bed$phenotype_id)
+# ---- Write ComBat BED ----
+feat_idx <- match(colnames(data_combat), bed$phenotype_id)
 out_bed <- data.frame(
   chr = bed[["#chr"]][feat_idx],
   start = bed$start[feat_idx],
   end = bed$end[feat_idx],
-  phenotype_id = colnames(data_int),
-  t(data_int),
+  phenotype_id = colnames(data_combat),
+  t(data_combat),
   check.names = FALSE
 )
 colnames(out_bed)[1] <- "#chr"
@@ -360,26 +403,14 @@ diag_path <- file.path(opt_output_dir,
 pdf(diag_path, width = 12, height = 5)
 par(mfrow = c(1, 2))
 
-cohort_colors <- as.numeric(as.factor(cohort_labels[rownames(data_tx)]))
+cohort_colors <- as.numeric(as.factor(cohort_labels[rownames(data_int)]))
 
-# PCA before ComBat — impute NAs with column medians for prcomp
-pca_before_data <- data_tx
-if (any(is.na(pca_before_data))) {
-  for (j in seq_len(ncol(pca_before_data))) {
-    na_idx <- is.na(pca_before_data[, j])
-    if (any(na_idx)) {
-      med <- median(pca_before_data[!na_idx, j], na.rm = TRUE)
-      if (is.na(med)) med <- 0
-      pca_before_data[na_idx, j] <- med
-    }
-  }
-}
 tryCatch({
-  pca_before <- prcomp(pca_before_data, scale. = FALSE, center = TRUE)
+  pca_before <- prcomp(data_int, scale. = FALSE, center = TRUE)
   plot(pca_before$x[, 1:2], col = cohort_colors, pch = 19, cex = 0.8,
        xlab = sprintf("PC1 (%.1f%%)", summary(pca_before)$importance[2, 1] * 100),
        ylab = sprintf("PC2 (%.1f%%)", summary(pca_before)$importance[2, 2] * 100),
-       main = sprintf("PCA before ComBat (%s)", opt_modality))
+       main = sprintf("PCA after QN + INT, pre-ComBat (%s)", opt_modality))
   legend("topright", legend = levels(as.factor(cohort_labels)),
          col = seq_along(levels(as.factor(cohort_labels))), pch = 19, cex = 0.6)
 }, error = function(e) {
@@ -388,11 +419,11 @@ tryCatch({
 })
 
 tryCatch({
-  pca_after <- prcomp(data_int, scale. = FALSE, center = TRUE)
+  pca_after <- prcomp(data_combat, scale. = FALSE, center = TRUE)
   plot(pca_after$x[, 1:2], col = cohort_colors, pch = 19, cex = 0.8,
        xlab = sprintf("PC1 (%.1f%%)", summary(pca_after)$importance[2, 1] * 100),
        ylab = sprintf("PC2 (%.1f%%)", summary(pca_after)$importance[2, 2] * 100),
-       main = sprintf("PCA after ComBat + INT (%s)", opt_modality))
+       main = sprintf("PCA after ComBat, final (%s)", opt_modality))
   legend("topright", legend = levels(as.factor(cohort_labels)),
          col = seq_along(levels(as.factor(cohort_labels))), pch = 19, cex = 0.6)
 }, error = function(e) {

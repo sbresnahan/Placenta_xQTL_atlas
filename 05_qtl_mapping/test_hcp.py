@@ -5,7 +5,10 @@ test_hcp.py — Synthetic test suite for the HCP latent factor extraction pipeli
 Tests all components with synthetic data:
   1. test_picard_qc: mock PicardTools metric files → verify parsing
   2. test_pool_expression: synthetic BEDs for 2 cohorts, 2 ancestries → verify pooling
-  3. test_combat_normalize_hcp: synthetic expression + QC → verify ComBat, INT, HCP
+  3. test_combat_normalize_hcp: synthetic expression + QC → verify QN, INT,
+     ComBat-last batch removal, HCP
+  3b. test_connectivity_outliers: corrupted sample → verify bicor
+     connectivity outlier removal (z < -3)
   4. test_reflat_generation: verify GTF → refFlat conversion
   5. test_full_pipeline: small synthetic dataset through all scripts
 
@@ -304,9 +307,12 @@ def test_combat_normalize_hcp():
 
             # Base expression
             base = rng.lognormal(mean=5, sigma=0.5, size=len(all_samples))
-            # Inject batch effect: cohort2 has +2 log2 shift on half the genes
+            # Inject batch effect: cohort2 gets an 8x multiplicative shift on
+            # half the genes. Feature-specific (a uniform all-gene shift is
+            # erased by QN itself) and strong relative to the lognormal
+            # background, so ComBat has something to remove.
             if i < n_genes // 2:
-                base[n_samples_cohort1:] += np.exp(2)  # batch effect
+                base[n_samples_cohort1:] = base[n_samples_cohort1:] * 8
             data.append(base)
 
         df = pd.DataFrame(meta, columns=["#chr", "start", "end", "phenotype_id"])
@@ -326,7 +332,9 @@ def test_combat_normalize_hcp():
             ("cohort2", "EUR"): cohort2_samples,
         })
 
-        # Run ComBat + INT + HCP
+        # Run QN + INT + ComBat + HCP. --outlier-z -999 disables connectivity
+        # outlier removal so the sample set is deterministic in this test
+        # (outlier detection itself is covered by test_connectivity_outliers).
         output_dir = os.path.join(tmpdir, "hcp_output")
         cmd = [
             "Rscript", os.path.join(SCRIPTS_DIR, "combat_normalize_hcp.R"),
@@ -335,6 +343,7 @@ def test_combat_normalize_hcp():
             "--ancestry-map", anc_map_path,
             "--ancestry", "EUR",
             "--k", "5",
+            "--outlier-z", "-999",
             "--output-dir", output_dir,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -372,13 +381,54 @@ def test_combat_normalize_hcp():
         assert_true(len(expr_samples) == len(all_samples),
                     f"Expected {len(all_samples)} samples in output, got {len(expr_samples)}")
 
-        # Check that INT'd values are approximately standard normal
+        # Check that values are approximately standard normal. With ComBat
+        # LAST (2026-09 schema) the output is approximately but not exactly
+        # N(0,1) per gene — use a looser tolerance than the old ComBat->INT
+        # ordering allowed.
         data_values = expr_out[expr_samples].values.flatten()
         data_values = data_values[~np.isnan(data_values)]
         mean_val = np.mean(data_values)
         std_val = np.std(data_values)
-        assert_true(abs(mean_val) < 0.1, f"INT mean should be ~0, got {mean_val:.4f}")
-        assert_true(abs(std_val - 1.0) < 0.1, f"INT std should be ~1, got {std_val:.4f}")
+        assert_true(abs(mean_val) < 0.2, f"Final mean should be ~0, got {mean_val:.4f}")
+        assert_true(abs(std_val - 1.0) < 0.2, f"Final std should be ~1, got {std_val:.4f}")
+
+        # Outlier list: written even when empty (0 outliers with -999 threshold)
+        outlier_path = os.path.join(output_dir, "EUR_expression_outliers.tsv")
+        assert_true(os.path.exists(outlier_path), "Expression outliers file not found")
+        outliers_df = pd.read_csv(outlier_path, sep="\t")
+        assert_true(len(outliers_df) == 0,
+                    f"Expected 0 outliers with --outlier-z -999, got {len(outliers_df)}")
+
+        # ComBat-last batch removal: paired run with --skip-combat gives the
+        # pre-ComBat (QN+INT) reference; the cohort mean difference on the
+        # batch-affected genes must shrink after ComBat.
+        nocombat_dir = os.path.join(tmpdir, "hcp_nocombat")
+        cmd_nc = [
+            "Rscript", os.path.join(SCRIPTS_DIR, "combat_normalize_hcp.R"),
+            "--expression", expr_path,
+            "--qc-metrics", qc_path,
+            "--ancestry-map", anc_map_path,
+            "--ancestry", "EUR",
+            "--k", "5",
+            "--outlier-z", "-999",
+            "--skip-combat", "--skip-hcp",
+            "--output-dir", nocombat_dir,
+        ]
+        result_nc = subprocess.run(cmd_nc, capture_output=True, text=True)
+        assert_true(result_nc.returncode == 0,
+                    f"--skip-combat run failed:\n{result_nc.stderr}")
+        expr_nc = pd.read_csv(
+            os.path.join(nocombat_dir, "EUR_combat_int_expression.bed"), sep="\t")
+        c1, c2 = cohort1_samples, cohort2_samples
+        affected = [f"GENE{i:05d}" for i in range(n_genes // 2)]
+        def cohort_gap(df):
+            sub = df[df["phenotype_id"].isin(affected)]
+            return (sub[c1].mean(axis=1) - sub[c2].mean(axis=1)).abs().mean()
+        gap_before = cohort_gap(expr_nc)
+        gap_after = cohort_gap(expr_out)
+        assert_true(gap_after < gap_before * 0.5,
+                    f"ComBat should remove cohort shift: before={gap_before:.3f}, "
+                    f"after={gap_after:.3f}")
 
         # Check diagnostics PDF
         diag_path = os.path.join(output_dir, "EUR_hcp_diagnostics.pdf")
@@ -387,6 +437,109 @@ def test_combat_normalize_hcp():
 
         print("  PASSED: ComBat removes batch effect, INT produces ~N(0,1), "
               "HCP factors have correct dimensions")
+
+
+# =============================================================================
+# Test 3b: Connectivity outlier removal (devBrain §3.3)
+# =============================================================================
+
+def test_connectivity_outliers():
+    """Test bicor connectivity outlier detection (z < -3) with one corrupted
+    sample. Requires R + sva + Rhcpp."""
+    print("\n--- test_connectivity_outliers ---")
+
+    r_available = shutil.which("Rscript") is not None
+    if not r_available:
+        print("  SKIPPED: Rscript not available")
+        return
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        rng = np.random.RandomState(7)
+        n_genes = 500
+        n_good = 40
+        # Co-varying gene module shared by all good samples: a same-sign
+        # per-sample score shifts the first 250 genes, so good samples have
+        # homogeneous, mutually correlated expression profiles while the
+        # corrupted sample is uncorrelated with everyone. (Connectivity
+        # outlier detection needs this shared structure — fully independent
+        # samples are all equally "disconnected".)
+        values = 2 + rng.rand(n_genes, n_good + 1)  # background in [2, 3]
+        module = np.arange(n_genes // 2)
+        grp = 1 + 0.3 * rng.normal(size=n_good + 1)
+        values[module, :] += 2.0 * grp
+
+        good_samples = [f"S{i}" for i in range(n_good)]
+        bad_sample = "S_BAD"
+        all_samples = good_samples + [bad_sample]
+
+        # Corrupt the last sample: permute values across genes, destroying
+        # its correlation with every other sample
+        bad_col = all_samples.index(bad_sample)
+        values[:, bad_col] = values[rng.permutation(n_genes), bad_col]
+
+        meta = [("chr1", i * 1000, i * 1000 + 500, f"GENE{i:05d}")
+                for i in range(n_genes)]
+        expr_df = pd.concat([
+            pd.DataFrame(meta, columns=["#chr", "start", "end", "phenotype_id"]),
+            pd.DataFrame(values, columns=all_samples),
+        ], axis=1)
+        expr_path = os.path.join(tmpdir, "EUR_pooled_expression.bed")
+        expr_df.to_csv(expr_path, sep="\t", index=False, float_format="%g")
+
+        qc_path = os.path.join(tmpdir, "qc_metrics.tsv")
+        make_synthetic_qc(qc_path, all_samples, n_metrics=6, seed=11)
+
+        # Single cohort: ComBat skipped, isolating the outlier-removal step
+        anc_map_path = os.path.join(tmpdir, "ancestry_map.tsv")
+        make_synthetic_ancestry_map(anc_map_path, {
+            ("cohort1", "EUR"): all_samples,
+        })
+
+        output_dir = os.path.join(tmpdir, "hcp_output")
+        cmd = [
+            "Rscript", os.path.join(SCRIPTS_DIR, "combat_normalize_hcp.R"),
+            "--expression", expr_path,
+            "--qc-metrics", qc_path,
+            "--ancestry-map", anc_map_path,
+            "--ancestry", "EUR",
+            "--k", "3",
+            "--output-dir", output_dir,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            if "there is no package called" in result.stderr or \
+               "could not find function" in result.stderr:
+                print("  SKIPPED: missing R package")
+                return
+            raise AssertionError(
+                f"combat_normalize_hcp.R failed:\nSTDOUT:\n{result.stdout}\n"
+                f"STDERR:\n{result.stderr}")
+
+        # The corrupted sample must be flagged and removed
+        outlier_path = os.path.join(output_dir, "EUR_expression_outliers.tsv")
+        assert_true(os.path.exists(outlier_path), "Outliers file not found")
+        outliers = pd.read_csv(outlier_path, sep="\t")["sample_id"].tolist()
+        assert_true(bad_sample in outliers,
+                    f"Corrupted sample {bad_sample} not flagged; outliers: {outliers}")
+
+        expr_out = pd.read_csv(
+            os.path.join(output_dir, "EUR_combat_int_expression.bed"), sep="\t")
+        out_samples = [c for c in expr_out.columns
+                       if c not in ["#chr", "start", "end", "phenotype_id"]]
+        assert_true(bad_sample not in out_samples,
+                    "Corrupted sample still in expression BED")
+        assert_true(len(out_samples) == n_good,
+                    f"Expected {n_good} samples after outlier removal, "
+                    f"got {len(out_samples)}")
+
+        hcp_df = pd.read_csv(os.path.join(output_dir, "EUR_hcp_factors.tsv"),
+                             sep="\t")
+        assert_true(len(hcp_df.columns) - 1 == n_good,
+                    f"HCP file should have {n_good} sample columns, "
+                    f"got {len(hcp_df.columns) - 1}")
+
+        print(f"  PASSED: connectivity outlier removal flagged {outliers} "
+              f"and excluded them from BED + HCP outputs")
 
 
 # =============================================================================
@@ -415,19 +568,19 @@ def test_reflat_generation():
         # 5 genes × 2 isoforms = 10 transcript lines
         assert_true(len(lines) == 10, f"Expected 10 refFlat lines, got {len(lines)}")
 
-        # Verify format: 10 tab-delimited fields
+        # Verify format: 11 tab-delimited fields (UCSC refFlat)
         for line in lines:
             fields = line.strip().split("\t")
-            assert_true(len(fields) == 10,
-                        f"Expected 10 fields, got {len(fields)}: {line.strip()}")
-            # geneName, chrom, strand, txStart, txEnd, cdsStart, cdsEnd,
-            # exonCount, exonStarts, exonEnds
-            assert_true(fields[1].startswith("chr"), f"Chrom should start with 'chr': {fields[1]}")
-            assert_true(fields[2] in ["+", "-"], f"Strand should be + or -: {fields[2]}")
-            assert_true(int(fields[7]) == 2, f"Expected 2 exons, got {fields[7]}")
+            assert_true(len(fields) == 11,
+                        f"Expected 11 fields, got {len(fields)}: {line.strip()}")
+            # geneName, name, chrom, strand, txStart, txEnd, cdsStart,
+            # cdsEnd, exonCount, exonStarts, exonEnds
+            assert_true(fields[2].startswith("chr"), f"Chrom should start with 'chr': {fields[2]}")
+            assert_true(fields[3] in ["+", "-"], f"Strand should be + or -: {fields[3]}")
+            assert_true(int(fields[8]) == 2, f"Expected 2 exons, got {fields[8]}")
             # exonStarts and exonEnds should end with comma
-            assert_true(fields[8].endswith(","), "exonStarts should end with comma")
-            assert_true(fields[9].endswith(","), "exonEnds should end with comma")
+            assert_true(fields[9].endswith(","), "exonStarts should end with comma")
+            assert_true(fields[10].endswith(","), "exonEnds should end with comma")
 
         print("  PASSED: GTF → refFlat conversion (5 genes, 10 transcripts, correct format)")
 
@@ -506,6 +659,7 @@ def main():
         "test_picard_qc": test_picard_qc,
         "test_pool_expression": test_pool_expression,
         "test_combat_normalize_hcp": test_combat_normalize_hcp,
+        "test_connectivity_outliers": test_connectivity_outliers,
         "test_reflat_generation": test_reflat_generation,
         "test_full_pipeline": test_full_pipeline,
     }

@@ -64,10 +64,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" alt-tss-polya \
     --ref-anno "$REF_ANNO" \
     --output "${UNNORM_DIR}/alt_TSS.bed"
 
-python3 "${PANTRY_SCRIPTS}/normalize_phenotypes.py" \
-    --input "${UNNORM_DIR}/alt_TSS.bed" \
-    --samples "$SAMPLES_FILE" \
-    --output "${OUTPUT_DIR}/alt_TSS.bed"
+# Canonical BED = unnorm (2026-09 schema: normalization moved to stage 5)
+cp "${UNNORM_DIR}/alt_TSS.bed" "${OUTPUT_DIR}/alt_TSS.bed"
 
 # ---- alt_polyA: uses downstream position (grp_1.downstream + grp_2.downstream) ----
 python3 "${PANTRY_SCRIPTS}/assemble_bed.py" alt-tss-polya \
@@ -77,10 +75,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" alt-tss-polya \
     --ref-anno "$REF_ANNO" \
     --output "${UNNORM_DIR}/alt_polyA.bed"
 
-python3 "${PANTRY_SCRIPTS}/normalize_phenotypes.py" \
-    --input "${UNNORM_DIR}/alt_polyA.bed" \
-    --samples "$SAMPLES_FILE" \
-    --output "${OUTPUT_DIR}/alt_polyA.bed"
+# Canonical BED = unnorm (2026-09 schema: normalization moved to stage 5)
+cp "${UNNORM_DIR}/alt_polyA.bed" "${OUTPUT_DIR}/alt_polyA.bed"
 
 conda deactivate 2>/dev/null || true
 
