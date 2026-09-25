@@ -77,18 +77,36 @@ def run(cmd, desc, log_path=None):
                  f"See log: {log_path or '(none)'}")
 
 
-def bgzip_tabix(bed_path, out_gz):
-    """bgzip + tabix a BED file. Tries pysam, falls back to htslib binaries."""
+def bgzip_tabix(bed_path, out_gz, log_path=None):
+    """Sort (chrom, start) + bgzip + tabix a BED file.
+
+    tabix requires position-sorted input; the harmonized BEDs are in
+    feature order, not position order (27_run_tensorqtl.sh sorts for the
+    same reason). Sorting is done here so both the pysam and the htslib
+    binary paths are correct. Tries pysam, falls back to htslib binaries.
+    """
+    bed = pd.read_csv(bed_path, sep='\t')
+    chrom_col, start_col = bed.columns[0], bed.columns[1]
+    bed[start_col] = bed[start_col].astype(int)
+    bed = bed.sort_values([chrom_col, start_col], kind='stable')
+    sorted_bed = out_gz.replace('.bed.gz', '') + '.sorted.tmp.bed'
+    bed.to_csv(sorted_bed, sep='\t', index=False)
     try:
-        import pysam
-        pysam.tabix_compress(bed_path, out_gz, force=True)
-        pysam.tabix_index(out_gz, preset='bed', force=True)
-        return
-    except ImportError:
-        pass
-    # htslib binaries fallback (bgzip -c writes to stdout -> shell redirect)
-    run(f"bgzip -f -c {bed_path} > {out_gz}", f"bgzip {os.path.basename(bed_path)}")
-    run(['tabix', '-f', '-p', 'bed', out_gz], f"tabix {os.path.basename(out_gz)}")
+        try:
+            import pysam
+            pysam.tabix_compress(sorted_bed, out_gz, force=True)
+            pysam.tabix_index(out_gz, preset='bed', force=True)
+            return
+        except ImportError:
+            pass
+        # htslib binaries fallback (bgzip -c writes to stdout -> shell redirect)
+        run(f"bgzip -f -c {sorted_bed} > {out_gz}",
+            f"bgzip {os.path.basename(bed_path)}", log_path)
+        run(['tabix', '-f', '-p', 'bed', out_gz],
+            f"tabix {os.path.basename(out_gz)}", log_path)
+    finally:
+        if os.path.exists(sorted_bed):
+            os.remove(sorted_bed)
 
 
 def harmonize_hcp(hcp_path, meta, out_path):
@@ -238,9 +256,13 @@ def main():
             bed = pd.read_csv(expr_harm, sep='\t')
             chr1 = bed[bed['#chr'] == 'chr1']
             print(f"    chr1 phenotypes: {chr1.shape[0]} of {bed.shape[0]}")
+            if chr1.shape[0] == 0:
+                sys.exit(f"ERROR: no chr1 rows in {expr_harm} — check chromosome "
+                         f"naming (values seen: "
+                         f"{sorted(bed['#chr'].astype(str).unique())[:5]}...)")
             chr1_bed = os.path.join(staging, f'{anc}_expression.bed')
             chr1.to_csv(chr1_bed, sep='\t', index=False)
-            bgzip_tabix(chr1_bed, chr1_gz)
+            bgzip_tabix(chr1_bed, chr1_gz, log_path)
             os.remove(chr1_bed)
 
         # ---- k grid ----

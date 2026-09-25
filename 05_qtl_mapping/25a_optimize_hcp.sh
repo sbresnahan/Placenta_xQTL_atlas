@@ -22,7 +22,8 @@
 #   bash 25a_optimize_hcp.sh
 #
 # Optional env vars:
-#   ANCESTRIES   — space-separated ancestry labels (default: all in map)
+#   ANCESTRIES   — space-separated ancestry labels (default: all in map;
+#                  ANCESTRY singular accepted as a fallback alias)
 #   K_GRID       — candidate HCP counts (default: "0 5 10 15 20 25 30")
 #   QTL_DIR      — canonical QTL inputs dir (default: ${OUTPUT_BASE}/qtl_inputs)
 #   HCP_DIR      — script-19 output dir (default: ${OUTPUT_BASE}/hcp)
@@ -99,9 +100,17 @@ SING_R="singularity exec --bind /rsrch5 --bind /rsrch9 /risapps/singularity/repo
 export QVALUE_RSCRIPT="$SING_R"
 
 # ---- Determine ancestries ----
-if [ -n "$ANCESTRIES" ]; then
+# Canonical env var is ANCESTRIES (space-separated). ANCESTRY (singular) is
+# accepted as a fallback alias — passing ANCESTRY alone previously fell
+# through to the all-in-map default and tried to run unprocessed ancestries.
+if [ -z "${ANCESTRIES:-}" ] && [ -n "${ANCESTRY:-}" ]; then
+    echo "  NOTE: ANCESTRY (singular) set; treating as ANCESTRIES='$ANCESTRY'"
+    ANCESTRIES="$ANCESTRY"
+fi
+if [ -n "${ANCESTRIES:-}" ]; then
     ANCESTRY_LIST="$ANCESTRIES"
 else
+    echo "  NOTE: ANCESTRIES not set — defaulting to ALL ancestries in the map"
     ANCESTRY_LIST=$(python3 -c "
 import pandas as pd
 df = pd.read_csv('${ANCESTRY_MAP}', sep='\t')
