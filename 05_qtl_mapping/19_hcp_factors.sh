@@ -230,7 +230,8 @@ for COHORT in $COHORT_LIST; do
         --picard-cmd picard \
         --salmon-dir "$SALMON_DIR" \
         --gtf "$NORMALIZED_GTF" \
-        --gene-annot "$GENE_ANNOT"
+        --gene-annot "$GENE_ANNOT" \
+        --fasta "$FASTA"
 done
 
 conda deactivate 2>/dev/null || true
