@@ -334,9 +334,12 @@ rmarkdown::render(
     fail fast with a clear error in that case. Direct invocation
     (`bash script.sh`, interactive) self-locates and needs no SCRIPTS_DIR.
     Cross-directory references are resolved relative to the script:
-    `config_get.py` is sought in `SCRIPTS_DIR` then `../03_phenotyping`;
-    `picard_qc.py` (regenerate_refflat.sh) in `SCRIPTS_DIR` then
-    `../05_qtl_mapping`.
+    `config_get.py` is sought in `SCRIPTS_DIR`, then `../03_phenotyping`
+    (shell wrappers resolve it once as `CONFIG_GET`; the python callers
+    `picard_qc.py`, `pool_expression_within_ancestry.py`,
+    `pool_modalities_within_ancestry.py`, and `23_prepare_intersection.py`
+    apply the same chain, with a cwd/PATH fallback last); `picard_qc.py`
+    (regenerate_refflat.sh) in `SCRIPTS_DIR` then `../05_qtl_mapping`.
 
 ## Porting to another system
 

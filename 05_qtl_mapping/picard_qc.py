@@ -508,7 +508,10 @@ def load_config_vars(config_path, cohort):
     scripts_dir = os.path.dirname(os.path.abspath(__file__))
     config_get = os.path.join(scripts_dir, "config_get.py")
     if not os.path.exists(config_get):
-        config_get = "config_get.py"
+        # repo layout: config_get.py lives in ../03_phenotyping
+        config_get = os.path.join(scripts_dir, "..", "03_phenotyping", "config_get.py")
+    if not os.path.exists(config_get):
+        config_get = "config_get.py"  # last resort: cwd/PATH (legacy flat deploy)
 
     result = subprocess.run(
         ["python3", config_get, config_path, "--cohort", cohort],

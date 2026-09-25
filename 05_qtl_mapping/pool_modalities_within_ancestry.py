@@ -112,14 +112,19 @@ def resolve_config_get(scripts_dir=None):
     Order of precedence:
       1. Explicit scripts_dir argument
       2. Directory of THIS file (so the pooler works from a subdirectory)
-      3. PATH fallback ("config_get.py")
+      3. Repo layout: ../03_phenotyping relative to THIS file
+      4. PATH fallback ("config_get.py")
     """
     if scripts_dir is None:
         scripts_dir = os.path.dirname(os.path.abspath(__file__))
     candidate = os.path.join(scripts_dir, "config_get.py")
     if os.path.exists(candidate):
         return candidate
-    return "config_get.py"  # fall back to PATH
+    # repo layout: config_get.py lives in ../03_phenotyping
+    candidate = os.path.join(scripts_dir, "..", "03_phenotyping", "config_get.py")
+    if os.path.exists(candidate):
+        return candidate
+    return "config_get.py"  # last resort: cwd/PATH
 
 
 def load_config(config_path, scripts_dir=None):

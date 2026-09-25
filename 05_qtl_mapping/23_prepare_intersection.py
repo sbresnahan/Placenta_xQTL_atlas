@@ -32,8 +32,12 @@ import numpy as np
 
 def load_config(config_path, scripts_dir):
     """Load config.yml via config_get.py."""
+    config_get = os.path.join(scripts_dir, "config_get.py")
+    if not os.path.exists(config_get):
+        # repo layout: config_get.py lives in ../03_phenotyping
+        config_get = os.path.join(scripts_dir, "..", "03_phenotyping", "config_get.py")
     result = subprocess.run(
-        ["python3", os.path.join(scripts_dir, "config_get.py"), config_path],
+        ["python3", config_get, config_path],
         capture_output=True, text=True
     )
     if result.returncode != 0:
