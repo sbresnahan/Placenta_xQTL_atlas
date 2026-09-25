@@ -43,7 +43,8 @@
 #   ANCESTRIES      — space-separated ancestry labels to process (default: all)
 #   OUTPUT_DIR      — output directory (default: ${OUTPUT_BASE}/combat_modalities)
 #   HARMONIZE_DIR   — root dir of harmonize_within_ancestry.py outputs
-#                     (default: ${OUTPUT_BASE}/harmonize)
+#                     (default: ${OUTPUT_BASE}; 17 writes
+#                      ${OUTPUT_BASE}/<ancestry>/<modality>/unnorm/<modality>.bed)
 # =============================================================================
 
 #BSUB -q medium
@@ -108,7 +109,8 @@ if [ -z "$OUTPUT_DIR" ]; then
     OUTPUT_DIR="${OUTPUT_BASE}/combat_modalities"
 fi
 if [ -z "$HARMONIZE_DIR" ]; then
-    HARMONIZE_DIR="${OUTPUT_BASE}/harmonize"
+    # 17_harmonize_within_ancestry.sh writes ${OUTPUT_BASE}/<ANC>/<modality>/...
+    HARMONIZE_DIR="${OUTPUT_BASE}"
 fi
 mkdir -p "$OUTPUT_DIR"
 
