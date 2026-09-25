@@ -21,6 +21,11 @@ Per ancestry, per k in --k-grid (default: 0 5 10 15 20 25 30):
      post-outlier sample set in {qtl_dir}/{ANC}_metadata.tsv.
   3. Build covariates: 25_build_covariates.py --hcp-file <per-k> --hcp-k k
      --out-suffix _k{k} against a staging dir (symlinked genotypes/metadata).
+     --exclude-covariates (e.g. ct_Maternal) is forwarded so every per-k
+     model uses the same pruned fixed covariate set; no covariate cap is
+     applied (a cap would truncate high-k models and collapse the grid).
+     HCPs lost to correlation pruning are counted (n_hcp_used/n_hcp_dropped
+     in {ANC}_optimal_hcp.tsv; annotated on the PNG).
   4. Subset the harmonized expression BED to chr1 -> bgzip + tabix.
   5. Map: 27_run_tensorqtl.py --modality expression with per-k covariates
      (cis-window 1 Mb, MAF >= 0.01, 5 genotype PCs via the covariate table).
@@ -135,6 +140,12 @@ def plot_optimization(res_df, anc, k_star, fdr, out_path):
                     (row['k'], row['n_egenes']),
                     textcoords='offset points', xytext=(0, 7),
                     ha='center', fontsize=8)
+        # Flag grid points where pruning dropped HCPs (effective k < nominal)
+        if 'n_hcp_dropped' in res_df.columns and row.get('n_hcp_dropped', 0) > 0:
+            ax.annotate(f"({int(row['n_hcp_used'])} kept)",
+                        (row['k'], row['n_egenes']),
+                        textcoords='offset points', xytext=(0, -13),
+                        ha='center', fontsize=7, color='#FF9400')
     ax.set_xlabel('Number of HCP factors (k)')
     ax.set_ylabel(f'chr1 eGenes (q <= {fdr})')
     ax.set_title(f'{anc}: HCP count optimization (chr1 expression)')
@@ -176,6 +187,11 @@ def main():
     parser.add_argument("--lambda2", type=float, default=1.0)
     parser.add_argument("--lambda3", type=float, default=1.0)
     parser.add_argument("--qc-cor-threshold", type=float, default=0.9)
+    parser.add_argument("--exclude-covariates", nargs='+', default=None,
+                        metavar='NAME',
+                        help="Covariates excluded before correlation pruning in "
+                             "every per-k model (e.g. ct_Maternal). Forwarded to "
+                             "25_build_covariates.py --exclude-covariates.")
     parser.add_argument("--cis-window", type=int, default=1000000)
     parser.add_argument("--maf-threshold", type=float, default=0.01)
     parser.add_argument("--skip-existing", action="store_true",
@@ -266,15 +282,31 @@ def main():
             # 3. Covariates for this k
             cov_file = os.path.join(staging, f'{anc}_covariates_k{k}.tsv')
             if not (args.skip_existing and os.path.exists(cov_file)):
-                run([sys.executable,
-                     os.path.join(args.scripts_dir, '25_build_covariates.py'),
-                     '--qtl-dir', staging,
-                     '--pcair-dir', args.pcair_dir,
-                     '--ancestries', anc,
-                     '--hcp-file', per_k_hcp,
-                     '--hcp-k', str(k),
-                     '--out-suffix', f'_k{k}'],
-                    f"covariate assembly (k={k})", log_path)
+                cov_cmd = [sys.executable,
+                           os.path.join(args.scripts_dir, '25_build_covariates.py'),
+                           '--qtl-dir', staging,
+                           '--pcair-dir', args.pcair_dir,
+                           '--ancestries', anc,
+                           '--hcp-file', per_k_hcp,
+                           '--hcp-k', str(k),
+                           '--out-suffix', f'_k{k}']
+                if args.exclude_covariates:
+                    cov_cmd += ['--exclude-covariates'] + list(args.exclude_covariates)
+                run(cov_cmd, f"covariate assembly (k={k})", log_path)
+
+            # 3b. Effective HCP count: HCPs dropped by exclusion/zero-variance/
+            # correlation pruning (HCPs always lose to fixed covariates, so the
+            # fixed set is k-independent; only HCP survival varies with k).
+            n_hcp_dropped = 0
+            pruning_file = os.path.join(staging, f'{anc}_covariate_pruning_k{k}.tsv')
+            if k > 0 and os.path.exists(pruning_file):
+                pruned = pd.read_csv(pruning_file, sep='\t')
+                n_hcp_dropped = int(pruned['covariate'].astype(str)
+                                    .str.startswith('HCP_').sum())
+            n_hcp_used = k - n_hcp_dropped
+            if n_hcp_dropped:
+                print(f"    k={k}: {n_hcp_dropped} HCP(s) dropped by pruning "
+                      f"-> {n_hcp_used} enter the model")
 
             # 4-5. chr1 cis mapping
             if not (args.skip_existing and os.path.exists(parquet)):
@@ -293,7 +325,9 @@ def main():
             n_eg, n_tested = count_egenes(parquet, args.fdr)
             print(f"    k={k}: {n_eg} eGenes (of {n_tested} chr1 genes tested)")
             results.append({'ancestry': anc, 'k': k, 'n_egenes': n_eg,
-                            'n_tested': n_tested})
+                            'n_tested': n_tested,
+                            'n_hcp_used': n_hcp_used,
+                            'n_hcp_dropped': n_hcp_dropped})
 
         # ---- Select k* (max eGenes; ties -> smaller k) ----
         res_df = pd.DataFrame(results).sort_values('k').reset_index(drop=True)
@@ -320,8 +354,8 @@ def main():
                 print(f"  Backed up provisional HCP file: {backup}")
         shutil.copy2(kstar_file, canonical)
         print(f"  Installed k*={k_star} HCP solution: {canonical}")
-        print(f"  Next: run 25_build_covariates.py (canonical) for {anc}, "
-              f"then re-apply the manual maternal-fraction covariate removal.")
+        print(f"  Next: run 25_build_covariates.py (canonical) for {anc} "
+              f"with the same --exclude-covariates setting; no manual edits.")
 
 
 if __name__ == '__main__':

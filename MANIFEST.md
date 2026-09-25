@@ -233,7 +233,7 @@ cis-xQTL summary statistics. Current baseline = the GTEx-conventions design
 | 22 | `22_genotype_pca.sh` | Cohort-only genotype PCA (GTEx convention): LD-prune (`--indep-pairwise 200 50 0.2`) → `plink2 --pca 20 exact` → `genotype_pca_format.py` → `{ANC}_genotype_pcs.tsv` + scree (`PCA_scree.R`) |
 | 23 | `23_prepare_intersection.py` | Genotype×phenotype intersection on the RNA→DNA map; pgen filtered to intersection samples with **MAC ≥ 5** (`--mac 5`; `--mac 0` disables); sample columns renamed rnaseq_id → array_id |
 | 24 | `24_outlier_exclusion.py` | Select first 5 genotype PCs; 6-SD outlier exclusion on PC1–5; removes outliers from pgen/BED/HCP/deconvolution/metadata. **Edits intersection files in place — always rerun 23 before 24** |
-| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–k + sex + GA + cell types (dominant type as compositional reference); near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs); cap ≤ 25. Supports `--hcp-file`/`--hcp-k`/`--out-suffix` for the 25a optimization module. **Note: the maternal cell-fraction covariate was manually removed after script 25 (25 → 24 covariates); rerunning 25 restores it — re-apply the edit or script it** |
+| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–k + sex + GA + cell types (dominant type as compositional reference); `--exclude-covariates ct_Maternal` applied BEFORE pruning (coded replacement for the round-3 hand-edit); near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs — correlated HCPs are dropped, so effective k can fall below nominal k); **no covariate cap** — the 25a-optimal set is used in full. Supports `--hcp-file`/`--hcp-k`/`--out-suffix` for the 25a optimization module |
 | 25a | `25a_optimize_hcp.sh` + `optimize_hcp_chr1.py` | Pre-mapping HCP-count optimization (devBrain §4.2), run after 23/24, before canonical 25: per ancestry, re-estimate HCP at each k ∈ {0,5,10,15,20,25,30}, build per-k covariates, map **chr1 expression only** with tensorQTL (1 Mb window, MAF ≥ 0.01), count eGenes at Storey q ≤ 0.05; k\* = argmax (ties → smaller k). Installs the k\* solution as `{ANC}_hcp_factors_harmonized.tsv` (provisional file backed up to `*.pre25a_backup.tsv`); writes `{ANC}_optimal_hcp.tsv` + `.png` |
 | 26 | `26_harmonize_modalities.py` | Harmonize the 7 non-expression modality BEDs to the final array_id sample set (handles stage-17 namespaced IDs for splicing/IR) |
 | 30 | `30_combine_modalities.py` | Build the combined cross-modality BED (phenotype IDs namespaced `{modality}__{id}`; cross-modality gene groups; modality sidecar TSV) |
@@ -301,9 +301,12 @@ rmarkdown::render(
    deleted before a rerun.
 3. **`24_outlier_exclusion.py` edits the intersection files in place** — always
    rerun 23 before 24.
-4. **The covariate files were hand-edited after script 25** (maternal cell-fraction
-   covariate removed; 25 → 24 covariates per ancestry). Rerunning 25 restores the
-   25-covariate version — re-apply the edit or script it.
+4. **Covariate exclusions are coded, not hand-edited** — `ct_Maternal` is
+   excluded via `25_build_covariates.py --exclude-covariates` (and the
+   `EXCLUDE_COVARIATES` env var in 25a) BEFORE correlation pruning, and there
+   is no covariate cap. The round-3 covariate files were hand-edited after
+   script 25 (maternal cell-fraction removed; 25 → 24 covariates); that
+   manual step is retired — do not re-apply it.
 5. **Tier-1 LSF name dependencies** — submit `001`/`002`/`003` back-to-back; LSF
    resolves `done(jobname)` only if a job with that name exists at submission time.
 6. **seadragon LSF does not auto-create log directories** — create
@@ -314,8 +317,7 @@ rmarkdown::render(
    the PANTRY scripts directory on deployment (Salmon `quant.sf` reader).
 9. **`optimize_hcp_chr1.py` (25a) overwrites `{ANC}_hcp_factors_harmonized.tsv`**
    with the k\* solution (the provisional k=15 file is backed up to
-   `*.pre25a_backup.tsv`). Always rerun 25 after 25a — and re-apply the
-   maternal-fraction removal (landmine 4).
+   `*.pre25a_backup.tsv`). Always rerun 25 after 25a.
 10. **Stage-3 `output/<modality>.bed.gz` files are now UNNORMALIZED** (2026-09
     schema: normalization moved to stage 5). Legacy consumers expecting
     per-cohort normalized BEDs (e.g. `combine_modalities.sh`) must be pointed

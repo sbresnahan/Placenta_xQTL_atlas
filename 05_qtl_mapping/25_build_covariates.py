@@ -2,11 +2,14 @@
 """
 25_build_covariates.py — Assemble and optimize tensorQTL covariate table
 
-REVISED (GTEx-conventions round): ppBMI removed per study decision; new
-hard cap of --max-covariates (default 25) applied after correlation pruning.
+REVISED (prune-then-optimize round): ct_Maternal is excluded via
+--exclude-covariates BEFORE correlation pruning (replaces the round-3 manual
+hand-edit); the hard cap is removed (--max-covariates default None) so the
+25a HCP grid is not truncated — under the old cap of 25, every nominal
+k ≥ 12 collapsed to the same HCP_1..11 model (14 fixed covariates + cap).
 
 Combines:
-  - HCP factors (HCP_1 … HCP_15) from harmonized HCP file
+  - HCP factors (HCP_1 … HCP_k) from harmonized HCP file
   - Genotype PCs selected by 24_outlier_exclusion.py ({ANC}_selected_pcs.txt;
     now the first 5 PCs, GTEx convention)
   - Sex (M→0, F→1) from metadata
@@ -15,16 +18,22 @@ Combines:
     mean-centered, DOMINANT type dropped as compositional reference)
 
 Optimization (in order):
+  0. Exclusion: drop covariates named by --exclude-covariates (e.g.
+     ct_Maternal) BEFORE pruning, so an excluded covariate cannot drag a
+     correlated keeper out with it. Fails fast on unknown names.
   1. Pre-filter: drop near-zero-variance covariates (sd < --min-sd).
      Catches degenerate HCP factors from singular HCP runs.
   2. Correlation pruning: iteratively drop the lower-priority member of the
      max-|r| pair while any |r| > --cor-threshold. Keep priority:
      sex/GA > genotype PCs > cell types > HCP factors; within a block,
-     lower index kept.
-  3. Cap: while more than --max-covariates remain, drop the lowest-priority
-     covariate (highest tier, then highest within-block index — i.e.
-     HCP_15 first). sex/GA and genotype PCs are effectively never
-     cap-dropped at the default cap of 25.
+     lower index kept. Because HCPs always lose to fixed covariates, the
+     surviving fixed set is k-independent across the 25a grid; correlated
+     HCPs are dropped, so effective k can fall below nominal k (recorded
+     in the pruning TSV).
+  3. Cap (optional): only if --max-covariates is set, drop the
+     lowest-priority covariates (highest tier, then highest within-block
+     index) until the cap is met. Default: no cap — the 25a-optimal set
+     is used in full.
 
 Diagnostics per ancestry:
   - {ANC}_covariate_correlation.png — before/after correlation heatmaps
@@ -39,15 +48,15 @@ Usage:
       --qtl-dir <qtl_inputs dir> \
       --pcair-dir <genotype_pcs dir> \
       --ancestries EAS EUR \
+      --exclude-covariates ct_Maternal \
       --cor-threshold 0.9 \
-      --min-sd 1e-8 \
-      --max-covariates 25
+      --min-sd 1e-8
 
 25a optimization module usage (per-k covariate tables):
   python3 25_build_covariates.py \
       --qtl-dir <staging dir> --pcair-dir <genotype_pcs dir> \
       --ancestries EAS --hcp-file <per-k HCP tsv> --hcp-k 10 \
-      --out-suffix _k10
+      --exclude-covariates ct_Maternal --out-suffix _k10
   (--hcp-k 0 omits HCP covariates; the HCP file still defines the sample set.)
 """
 
@@ -147,10 +156,17 @@ def main():
                         help="Prune covariate pairs with |r| above this (default: 0.9)")
     parser.add_argument("--min-sd", type=float, default=1e-8,
                         help="Drop covariates with sd below this (default: 1e-8)")
-    parser.add_argument("--max-covariates", type=int, default=25,
-                        help="Hard cap on final covariate count, applied after "
-                             "correlation pruning (default: 25). Lowest-priority "
+    parser.add_argument("--max-covariates", type=int, default=None,
+                        help="Optional hard cap on final covariate count, applied "
+                             "after correlation pruning. Default: no cap — the "
+                             "25a-optimal set is used in full. Lowest-priority "
                              "covariates (highest-index HCPs first) are dropped.")
+    parser.add_argument("--exclude-covariates", nargs='+', default=None,
+                        metavar='NAME',
+                        help="Covariate names to exclude BEFORE correlation "
+                             "pruning (e.g. ct_Maternal). A bare name also "
+                             "matches its ct_-prefixed cell-type form. Fails "
+                             "fast if a requested name matches nothing.")
     parser.add_argument("--hcp-file", default=None,
                         help="HCP factors file (default: {qtl-dir}/{ANC}_hcp_factors_harmonized.tsv). "
                              "The 25a optimization module uses this to pass per-k HCP solutions.")
@@ -361,6 +377,32 @@ def main():
         print(f"\n  Assembled {n_assembled} covariates: "
               + ', '.join(f"{k}={v}" for k, v in block_counts.items()))
 
+        # ---- Optimization 0: exclusion BEFORE pruning ----
+        # Excluded covariates (e.g. ct_Maternal) are removed here so they
+        # cannot drag a correlated keeper out during correlation pruning.
+        # A bare name also matches its ct_-prefixed cell-type form.
+        if args.exclude_covariates:
+            assembled_names = set(covariates.index)
+            to_exclude = []
+            for name in args.exclude_covariates:
+                if name in assembled_names:
+                    to_exclude.append(name)
+                elif f'ct_{name}' in assembled_names:
+                    to_exclude.append(f'ct_{name}')
+                else:
+                    sys.exit(f"  ERROR: --exclude-covariates '{name}' matches no "
+                             f"assembled covariate for {anc}. Available: "
+                             f"{sorted(assembled_names)}")
+            for name in to_exclude:
+                dropped_records.append({
+                    'covariate': name,
+                    'reason': 'excluded',
+                    'correlated_with': '',
+                    'r_value': '',
+                })
+                print(f"  Exclusion: dropping {name} (--exclude-covariates)")
+            covariates = covariates.drop(index=to_exclude)
+
         # ---- Optimization 1: near-zero-variance pre-filter ----
         sds = covariates.std(axis=1)
         zero_var = sds[sds < args.min_sd].index.tolist()
@@ -385,12 +427,11 @@ def main():
             print(f"  Pruning: dropping {rec['covariate']} "
                   f"(|r|={rec['r_value']} with {rec['correlated_with']})")
 
-        # ---- Optimization 3: hard cap at --max-covariates ----
-        # Drop lowest-priority covariates first: highest tier, then highest
-        # within-block index (HCP_15 before HCP_14, ...). At the default cap
-        # of 25 this only ever reaches HCPs/cell types — sex/GA and genotype
-        # PCs are lower tiers and are effectively protected.
-        while covariates.shape[0] > args.max_covariates:
+        # ---- Optimization 3: optional hard cap at --max-covariates ----
+        # Disabled by default (None): the 25a-optimal set is used in full.
+        # When set, drop lowest-priority covariates first: highest tier, then
+        # highest within-block index (HCP_k before HCP_k-1, ...).
+        while args.max_covariates is not None and covariates.shape[0] > args.max_covariates:
             drop = max(covariates.index,
                        key=lambda c: priority.get(c, (99, 999)))
             dropped_records.append({

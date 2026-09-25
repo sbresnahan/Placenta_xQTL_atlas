@@ -30,6 +30,8 @@
 #   WORK_DIR     — staging dir (default: ${QTL_DIR}/hcp_optimization)
 #   FDR          — Storey q threshold for eGene counts (default: 0.05)
 #   SKIP_EXISTING — set to 1 to reuse existing per-k results (resumable)
+#   EXCLUDE_COVARIATES — covariates excluded before correlation pruning in
+#                  every per-k model (default: ct_Maternal; "" disables)
 # =============================================================================
 
 #BSUB -q long
@@ -62,6 +64,10 @@ ANCESTRY_MAP="${ANCESTRY_MAP:?ERROR: ANCESTRY_MAP env var required}"
 K_GRID="${K_GRID:-0 5 10 15 20 25 30}"
 FDR="${FDR:-0.05}"
 SKIP_EXISTING="${SKIP_EXISTING:-0}"
+# Covariates excluded before correlation pruning in every per-k model
+# (coded replacement for the round-3 manual ct_Maternal hand-edit).
+# Set to "" to disable.
+EXCLUDE_COVARIATES="${EXCLUDE_COVARIATES-ct_Maternal}"
 
 # ---- Global init ----
 source /etc/profile.d/modules.sh
@@ -115,10 +121,14 @@ echo "  WORK_DIR:     $WORK_DIR"
 echo "  Ancestries:   $ANCESTRY_LIST"
 echo "  k grid:       $K_GRID"
 echo "  FDR:          $FDR"
+echo "  Exclude:      ${EXCLUDE_COVARIATES:-<none>}"
 
 EXTRA_ARGS=""
 if [ "$SKIP_EXISTING" = "1" ]; then
     EXTRA_ARGS="--skip-existing"
+fi
+if [ -n "$EXCLUDE_COVARIATES" ]; then
+    EXTRA_ARGS="$EXTRA_ARGS --exclude-covariates $EXCLUDE_COVARIATES"
 fi
 
 python3 "${SCRIPTS_DIR}/optimize_hcp_chr1.py" \
@@ -138,5 +148,6 @@ echo ""
 echo "[$(date)] HCP optimization complete"
 echo "  Per-ancestry results: ${WORK_DIR}/*_optimal_hcp.tsv / .png"
 echo "  Canonical HCP files updated: ${QTL_DIR}/*_hcp_factors_harmonized.tsv"
-echo "  Next: run 25_build_covariates.py (canonical), then re-apply the"
-echo "        manual maternal-fraction covariate removal before 26/28."
+echo "  Excluded covariates (pre-pruning): ${EXCLUDE_COVARIATES:-<none>}"
+echo "  Next: run 25_build_covariates.py (canonical) with the same"
+echo "        --exclude-covariates setting; no manual edits needed."

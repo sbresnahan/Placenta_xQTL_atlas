@@ -83,8 +83,10 @@ best_null <- min(yield$min_q[yield$fdr05 == 0])
 This report summarizes the multi-ancestry placental xQTL analysis:
 cohort-only genotype PCA on LD-pruned variants within each ancestry stratum,
 a conventional covariate set (first 5 genotype PCs + HCP factors + sex,
-gestational age, and cell-type fractions, correlation-pruned and capped at
-≤ 25), a MAF ≥ 0.01 filter with a ≥ 5 minor-allele-count floor at the
+gestational age, and cell-type fractions; maternal cell fraction excluded
+before correlation pruning at |r| > 0.9; HCP count optimized per ancestry
+via module 25a; no covariate cap), a MAF ≥ 0.01 filter with a ≥ 5
+minor-allele-count floor at the
 genotype intersection, Storey q-values (computed with the R `qvalue`
 package), and log2(x + 1)-transformed isoform expression. Mapping covers
 `r n_cells` ancestry × modality × layer cells (EAS n ≈ `r n_samp["EAS"]`,
@@ -148,13 +150,15 @@ and all near-miss tables below flag carrier counts.
 - **Genotype PCA**: cohort-only PCA per ancestry on LD-pruned variants
   (plink2 `--indep-pairwise 200 50 0.2`, then `--pca 20 exact`) — the GTEx
   convention.
-- **Covariates**: per ancestry, the pool of first-5 genotype PCs + HCP
-  factors 1–15 + sex + gestational age + cell-type fractions
-  (Syncytiotrophoblast as reference) was correlation-pruned (iterative
-  max-|r| > 0.9 removal, protecting sex/GA > PCs > cell types > HCPs) and
-  capped at ≤ 25 by dropping highest-index HCPs. The maternal cell-fraction
-  covariate was excluded by analysis decision, leaving **24 covariates per
-  ancestry** (details and QC below).
+- **Covariates**: per ancestry, first-5 genotype PCs + HCP factors 1–k\*
+  (k\* selected by module 25a, chr1 eGene maximization) + sex + gestational
+  age + cell-type fractions (Syncytiotrophoblast as reference). The maternal
+  cell-fraction covariate (`ct_Maternal`) is excluded BEFORE pruning by
+  analysis decision (coded `--exclude-covariates`, replacing the round-3
+  hand-edit); the remaining pool is correlation-pruned (iterative max-|r| >
+  0.9 removal, protecting sex/GA > PCs > cell types > HCPs — correlated
+  HCPs are dropped, so effective k can fall below nominal k\*) with **no
+  covariate cap** (details and QC below).
 - **Mapping** (tensorQTL, cis window ±1 Mb): (i) **per-modality grouped** —
   all phenotypes of a gene within a modality tested as one group
   (permutation-calibrated gene-level p-value; the row label is the
@@ -191,7 +195,7 @@ cov_summary <- tibble(
   n_HCP        = sapply(cov_sets, function(d) sum(grepl("^HCP", d$covariate_id))),
   other        = "sex, GA, 6 cell-type fractions")
 knitr::kable(cov_summary,
-             caption = "Final covariate sets (as mapped). Both ancestries: 24 covariates (maternal cell-fraction covariate excluded by analysis decision).")
+             caption = "Final covariate sets (as mapped). Maternal cell-fraction covariate excluded before pruning by analysis decision; HCP count per ancestry from module 25a; no covariate cap.")
 write_tsv(cov_summary, file.path(params$table_dir, "covariate_summary.tsv"))
 
 prune <- bind_rows(lapply(c("EAS", "EUR"), function(a)
@@ -891,8 +895,8 @@ Beyond that, the landscape offers two **hypothesis-generating** observations:
 - Results: tensorQTL cis mapping (grouped / ungrouped / combined / stepwise),
   MAF ≥ 0.01 + MAC ≥ 5 at the genotype intersection, ±1 Mb window, **Storey
   q-values** on pval_beta via the R `qvalue` package (singularity-R bridge).
-  Covariates: 24 per ancestry as described (first-5 PCs + HCPs + sex/GA/cell
-  types, correlation-pruned, capped, maternal fraction excluded). Genotype
+  Covariates: as described (first-5 PCs + HCP_1–k\* + sex/GA/cell types;
+  maternal fraction excluded before correlation pruning; no cap). Genotype
   PCs: cohort-only plink2 PCA on LD-pruned variants.
 - Pipeline scripts: this repository (`05_qtl_mapping/`, scripts 19–30 +
   `compute_qvalues.R`; genotype pooling in `01_genotype_imputation/`).
