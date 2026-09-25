@@ -33,7 +33,10 @@ eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 
 # ---- Config loading (Tier 1: CONFIG and SCRIPTS_DIR via LSF -env) ----
 CONFIG="${CONFIG:?Set CONFIG via bsub -env}"
-SCRIPTS_DIR="${SCRIPTS_DIR:?Set SCRIPTS_DIR via bsub -env}"
+# Default SCRIPTS_DIR to this script's own directory (repo-clone layout).
+# Explicit SCRIPTS_DIR overrides — REQUIRED for `bsub < script` submission
+# (LSF executes a spool copy; self-location would resolve to the spool dir).
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 # Load all config values as shell vars
 eval "$(python3 "${SCRIPTS_DIR}/config_get.py" "${CONFIG}")"

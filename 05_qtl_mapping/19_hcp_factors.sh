@@ -43,7 +43,20 @@ set -eo pipefail
 
 # ---- Config / env ----
 CONFIG="${CONFIG:?ERROR: CONFIG env var required (path to config.yml)}"
-SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
+# Default SCRIPTS_DIR to this script's own directory, so the pipeline runs
+# directly from the git clone. An explicit SCRIPTS_DIR env var overrides —
+# and is REQUIRED when submitting via `bsub < script` (LSF executes a spool
+# copy of the script; self-location would resolve to the spool directory).
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# config_get.py lives in ../03_phenotyping in the repo layout; a flat copy in
+# SCRIPTS_DIR (legacy deployment) takes precedence.
+CONFIG_GET="${SCRIPTS_DIR}/config_get.py"
+[ -f "$CONFIG_GET" ] || CONFIG_GET="${SCRIPTS_DIR}/../03_phenotyping/config_get.py"
+if [ ! -f "$CONFIG_GET" ]; then
+    echo "ERROR: config_get.py not found in $SCRIPTS_DIR or $SCRIPTS_DIR/../03_phenotyping" >&2
+    echo "  Submitting via 'bsub <'? Export SCRIPTS_DIR=<repo>/05_qtl_mapping first." >&2
+    exit 1
+fi
 ANCESTRY_MAP="${ANCESTRY_MAP:?ERROR: ANCESTRY_MAP env var required (path to pooled_sample_ancestry_RNAseq.tsv)}"
 K="${K:-15}"
 OUTPUT_DIR="${OUTPUT_DIR:-}"
@@ -53,7 +66,7 @@ source /etc/profile.d/modules.sh
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 
 # Load config values
-eval "$(python3 "${SCRIPTS_DIR}/config_get.py" "${CONFIG}")"
+eval "$(python3 "$CONFIG_GET" "${CONFIG}")"
 
 OUTPUT_BASE="${OUTPUT_BASE}"
 REFERENCE_DIR="${REFERENCE_DIR}"
@@ -176,6 +189,21 @@ eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 conda activate picard-2.27.4
 conda activate --stack samtools-1.16.1
 source /rsrch5/home/epi/bhattacharya_lab/software/MAJIQ/bin/activate
+
+# ---- Verify picard is reachable ---------------------------------------------
+# picard_qc.py invokes the literal `picard` executable; if the env stack above
+# didn't put it on PATH, every QC call fails per sample (garbage metrics).
+# Fail fast with diagnostics instead.
+if ! command -v picard >/dev/null 2>&1; then
+    echo "ERROR: 'picard' not on PATH after env stack (module load picard +"
+    echo "  conda activate picard-2.27.4 + samtools + MAJIQ venv). State:"
+    echo "  CONDA_PREFIX=${CONDA_PREFIX:-unset}"
+    echo "  picard binary:  $(command -v picard || echo none)"
+    echo "  java binary:    $(command -v java || echo none)"
+    echo "  env bin/ contents: $(ls "${CONDA_PREFIX:-/nonexistent}"/bin 2>/dev/null | grep -i -m3 picard || echo 'no picard* in $CONDA_PREFIX/bin')"
+    echo "Fix the activation (env name/path) — do not shim around it."
+    exit 1
+fi
 
 QC_DIR="${OUTPUT_DIR}/qc_metrics"
 mkdir -p "$QC_DIR"

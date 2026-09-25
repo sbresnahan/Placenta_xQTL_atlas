@@ -52,7 +52,10 @@ set -eo pipefail
 
 # ---- Required env vars ----
 CONFIG="${CONFIG:?Usage: set CONFIG, SCRIPTS_DIR, ANCESTRY_MAP, ANCESTRY env vars}"
-SCRIPTS_DIR="${SCRIPTS_DIR:?}"
+# Default SCRIPTS_DIR to this script's own directory (repo-clone layout).
+# Explicit SCRIPTS_DIR overrides — REQUIRED for `bsub < script` submission
+# (LSF executes a spool copy; self-location would resolve to the spool dir).
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 ANCESTRY_MAP="${ANCESTRY_MAP:?}"
 ANCESTRY="${ANCESTRY:?}"
 MODALITY="${MODALITY:-both}"

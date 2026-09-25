@@ -66,7 +66,9 @@
 set -eo pipefail
 
 CONFIG="${CONFIG:-/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/config.yml}"
-SCRIPTS_DIR="${SCRIPTS_DIR:-/rsrch5/home/epi/stbresnahan/bhattacharya_lab/software/Pantry/phenotyping/scripts}"
+# Default SCRIPTS_DIR to this script's own directory (repo-clone layout);
+# passed through to 27_run_tensorqtl.sh via bsub -env.
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 OUTPUT_BASE="${OUTPUT_BASE:-/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY}"
 LOG_DIR="/rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs"
 

@@ -58,7 +58,20 @@ set -eo pipefail
 
 # ---- Config / env ----
 CONFIG="${CONFIG:?ERROR: CONFIG env var required (path to config.yml)}"
-SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
+# Default SCRIPTS_DIR to this script's own directory, so the pipeline runs
+# directly from the git clone. An explicit SCRIPTS_DIR env var overrides —
+# and is REQUIRED when submitting via `bsub < script` (LSF executes a spool
+# copy of the script; self-location would resolve to the spool directory).
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# config_get.py lives in ../03_phenotyping in the repo layout; a flat copy in
+# SCRIPTS_DIR (legacy deployment) takes precedence.
+CONFIG_GET="${SCRIPTS_DIR}/config_get.py"
+[ -f "$CONFIG_GET" ] || CONFIG_GET="${SCRIPTS_DIR}/../03_phenotyping/config_get.py"
+if [ ! -f "$CONFIG_GET" ]; then
+    echo "ERROR: config_get.py not found in $SCRIPTS_DIR or $SCRIPTS_DIR/../03_phenotyping" >&2
+    echo "  Submitting via 'bsub <'? Export SCRIPTS_DIR=<repo>/05_qtl_mapping first." >&2
+    exit 1
+fi
 ANCESTRY_MAP="${ANCESTRY_MAP:?ERROR: ANCESTRY_MAP env var required}"
 OUTPUT_DIR="${OUTPUT_DIR:-}"
 HARMONIZE_DIR="${HARMONIZE_DIR:-}"
@@ -72,7 +85,7 @@ source /etc/profile.d/modules.sh
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 
 # Load config values
-eval "$(python3 "${SCRIPTS_DIR}/config_get.py" "${CONFIG}")"
+eval "$(python3 "$CONFIG_GET" "${CONFIG}")"
 
 OUTPUT_BASE="${OUTPUT_BASE}"
 

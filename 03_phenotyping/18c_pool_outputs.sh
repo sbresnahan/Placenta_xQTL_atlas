@@ -44,8 +44,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${CONFIG}" ] || [ -z "${SCRIPTS_DIR}" ]; then
-    echo "ERROR: --config and --scripts-dir are required" >&2
+# Default --scripts-dir to this script's own directory (repo-clone layout)
+if [ -z "${SCRIPTS_DIR}" ]; then
+    SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+if [ -z "${CONFIG}" ]; then
+    echo "ERROR: --config is required" >&2
     exit 1
 fi
 

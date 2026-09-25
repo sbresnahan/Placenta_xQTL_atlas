@@ -3,8 +3,12 @@
 This manifest is the stage-by-stage reproducibility record for the multi-ancestry
 placental xQTL project. Each stage lists its purpose, scripts, key inputs, key
 outputs, software, and run-order dependencies. Stage directories are numbered in
-execution order; on the seadragon cluster, stages 3 and 5 share one scripts
-directory (`SCRIPTS_DIR`) and one `config.yml`.
+execution order; on the seadragon cluster, stages 3 and 5 run directly from a
+git clone of this repository and share one `config.yml`. Every entry-point
+wrapper defaults `SCRIPTS_DIR` to its own directory (`${BASH_SOURCE[0]}`), so
+no path wiring is needed for direct invocation; an explicit `SCRIPTS_DIR` env
+var still overrides (and remains required for `bsub < script` submission —
+see landmine 12).
 
 > **Documentation convention.** Descriptions here were written against the
 > 2026-09-19 script set (the current, GTEx-conventions versions) — script headers
@@ -316,6 +320,23 @@ rmarkdown::render(
     schema: normalization moved to stage 5). Legacy consumers expecting
     per-cohort normalized BEDs (e.g. `combine_modalities.sh`) must be pointed
     at stage-5 outputs instead.
+11. **`picard` must resolve after 19/19a's env stack** — `picard_qc.py` calls
+    the literal `picard` executable; if the `picard-2.27.4` activation doesn't
+    put it on PATH (wrong env name/path, or a PATH-clobbering venv
+    activation), every QC call WARNs `[Errno 2] No such file or directory:
+    'picard'` and writes garbage metrics. Both wrappers fail fast with
+    diagnostics instead — fix the activation, don't shim around it. Stage 1
+    skips existing `{COHORT}_qc_metrics.tsv` — delete tainted QC outputs
+    before resubmitting.
+12. **`bsub < script` still requires an explicit `SCRIPTS_DIR` export** — LSF
+    executes a spool *copy* of the submitted script, so `${BASH_SOURCE[0]}`
+    self-location resolves to the spool directory, not the repo. The wrappers
+    fail fast with a clear error in that case. Direct invocation
+    (`bash script.sh`, interactive) self-locates and needs no SCRIPTS_DIR.
+    Cross-directory references are resolved relative to the script:
+    `config_get.py` is sought in `SCRIPTS_DIR` then `../03_phenotyping`;
+    `picard_qc.py` (regenerate_refflat.sh) in `SCRIPTS_DIR` then
+    `../05_qtl_mapping`.
 
 ## Porting to another system
 

@@ -55,9 +55,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${CONFIG}" ] || [ -z "${SCRIPTS_DIR}" ] || [ -z "${COHORT}" ]; then
-    echo "ERROR: --config, --scripts-dir, and <cohort> are required" >&2
-    echo "Usage: 18b_deconvolve_cohort.sh --config <cfg> --scripts-dir <dir> <cohort>" >&2
+# Default --scripts-dir to this script's own directory (repo-clone layout)
+if [ -z "${SCRIPTS_DIR}" ]; then
+    SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+if [ -z "${CONFIG}" ] || [ -z "${COHORT}" ]; then
+    echo "ERROR: --config and <cohort> are required" >&2
+    echo "Usage: 18b_deconvolve_cohort.sh --config <cfg> [--scripts-dir <dir>] <cohort>" >&2
     exit 1
 fi
 

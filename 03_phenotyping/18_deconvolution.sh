@@ -65,7 +65,8 @@ set -eo pipefail
 
 # --- Defaults ---
 CONFIG="${CONFIG:-/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/config.yml}"
-SCRIPTS_DIR="${SCRIPTS_DIR:-/rsrch5/home/epi/bhattacharya_lab/software/Pantry/phenotyping/scripts}"
+# Default SCRIPTS_DIR to this script's own directory (repo-clone layout).
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 N_PSEUDO="${N_PSEUDO:-5}"
 MATERNAL_THRESHOLD="${MATERNAL_THRESHOLD:-0.10}"
 ANCESTRY_MAP="${ANCESTRY_MAP:-}"
