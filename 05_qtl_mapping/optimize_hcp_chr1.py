@@ -143,7 +143,12 @@ def count_egenes(parquet_path, fdr):
     if 'qval' not in df.columns:
         sys.exit(f"ERROR: no qval column in {parquet_path} "
                  f"(columns: {list(df.columns)})")
-    hits = df.loc[df['qval'] <= fdr, 'phenotype_id']
+    # 27_run_tensorqtl.py writes map_cis output with phenotype/group IDs in
+    # the parquet INDEX, not a column (reset_index is applied only to the
+    # top-table TSV). Accept either layout.
+    pheno = (df['phenotype_id'] if 'phenotype_id' in df.columns
+             else df.index.to_series())
+    hits = pheno[df['qval'] <= fdr]
     return int(hits.nunique()), int(df.shape[0])
 
 

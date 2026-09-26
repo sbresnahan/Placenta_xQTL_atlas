@@ -104,6 +104,13 @@ pq2.to_parquet(pq2_path, index=False)
 check("shared-gene pair saves exactly 1 eGene",
       m.count_egenes(pq2_path, 0.05)[0] == n_eg + 1)
 check("n_tested = total rows", n_tested == n)
+# regression: 27_run_tensorqtl.py writes map_cis output with phenotype IDs
+# in the parquet INDEX, not a column — count_egenes must accept both
+pq_idx = pq.set_index('phenotype_id')
+pq_idx_path = os.path.join(tmp, 'cisqtl_idx.parquet')
+pq_idx.to_parquet(pq_idx_path)  # index preserved, no phenotype_id column
+check("phenotype_id as parquet index (real 27 layout)",
+      m.count_egenes(pq_idx_path, 0.05) == (n_eg, n_tested))
 check("stricter FDR reduces count", m.count_egenes(pq_path, 0.01)[0] <= n_eg)
 
 # ---------- 4. k* selection logic (argmax, ties -> smaller k) ----------
