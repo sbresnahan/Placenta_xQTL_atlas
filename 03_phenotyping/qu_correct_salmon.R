@@ -156,6 +156,29 @@ if (length(missing_files) > 0) {
 }
 names(files) <- samples
 
+# Pre-flight: catchSalmon needs each sample's aux_info/ (meta_info.json +
+# bootstrap resamples). A missing aux_info surfaces deep inside catchSalmon
+# as a cryptic jsonlite "lexical error: invalid char in json text" (fromJSON
+# parses the nonexistent path as literal JSON text) — fail fast with a clear
+# sample list instead.
+meta_files <- file.path(dirs, "aux_info", "meta_info.json")
+missing_meta <- meta_files[!file.exists(meta_files)]
+has_boot <- vapply(dirs, function(d) {
+  bd <- file.path(d, "aux_info", "bootstrap")
+  (dir.exists(bd) && length(list.files(bd)) > 0) ||
+    file.exists(file.path(d, "aux_info", "eq_classes.txt"))
+}, logical(1))
+if (length(missing_meta) > 0 || any(!has_boot)) {
+  bad <- unique(c(dirname(dirname(missing_meta)), dirs[!has_boot]))
+  stop("catchSalmon pre-flight failed — ", length(bad), " sample(s) lack ",
+       "aux_info/meta_info.json and/or bootstrap resamples (aux_info/ is ",
+       "required for RTA overdispersion estimation):\n  ",
+       paste(utils::head(bad, 20), collapse = "\n  "),
+       if (length(bad) > 20) sprintf("\n  ... and %d more", length(bad) - 20) else "",
+       "\nIf aux_info/ was cleaned to save space, the affected samples must ",
+       "be re-quantified with Salmon --numBootstraps before QU correction.")
+}
+
 cat("================================================================\n")
 cat("qu_correct_salmon.R\n")
 cat("  samples    :", length(samples), "\n")

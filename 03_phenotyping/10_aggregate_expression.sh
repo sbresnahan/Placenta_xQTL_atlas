@@ -63,8 +63,21 @@ OUTPUT_BASE="${OUTPUT_BASE}"
 # Use the NORMALIZED GTF (has gene_name, gene_biotype, gene features required
 # by assemble_bed.py), not the raw SQANTI3 GTF.
 REF_ANNO="${NORMALIZED_GTF}"
-PANTRY_SCRIPTS="${PANTRY_SCRIPTS}"
-SEADRAGON_SCRIPTS="${SEADRAGON_SCRIPTS}"
+# Helper scripts (assemble_bed.py, qu_correct_salmon.R) ship next to this
+# script in the repo. The config's pantry_scripts / seadragon_scripts keys
+# predate the git-clone deployment and may still point at the old
+# flat-scripts dir (now the clone root) — self-locate; config is fallback.
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${_SELF_DIR}/assemble_bed.py" ]; then
+    PANTRY_SCRIPTS="${_SELF_DIR}"
+else
+    PANTRY_SCRIPTS="${PANTRY_SCRIPTS}"
+fi
+if [ -f "${_SELF_DIR}/qu_correct_salmon.R" ]; then
+    SEADRAGON_SCRIPTS="${_SELF_DIR}"
+else
+    SEADRAGON_SCRIPTS="${SEADRAGON_SCRIPTS}"
+fi
 COHORT_DIR="${OUTPUT_BASE}/${COHORT}"
 INTERM_DIR="${COHORT_DIR}/intermediate"
 OUTPUT_DIR="${COHORT_DIR}/output"
@@ -95,12 +108,15 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
     --output-expression "${UNNORM_DIR}/expression.bed"
 
 # ---- QU correction for isoforms (edgeR::catchSalmon) ----
-# Skip if the adjusted quant.sf for the first sample already exist (resumable).
-FIRST_SAMPLE=$(head -1 "$SAMPLES_FILE")
-if [ -n "$FIRST_SAMPLE" ] && [ -f "${EXPR_QU_DIR}/${FIRST_SAMPLE}/quant.sf" ]; then
-    echo "[$(date)] QU correction SKIPPED — adjusted quant.sf already exist in ${EXPR_QU_DIR}"
+# Skip only when EVERY sample has an adjusted quant.sf (a first-sample-only
+# check can miss a partially cleaned expression_qu; catchSalmon has no
+# per-sample resume and would rerun all samples anyway).
+N_SAMPLES=$(grep -c . "$SAMPLES_FILE")
+N_QU_DONE=$(find "$EXPR_QU_DIR" -mindepth 2 -maxdepth 2 -name quant.sf 2>/dev/null | wc -l)
+if [ "$N_SAMPLES" -gt 0 ] && [ "$N_QU_DONE" -eq "$N_SAMPLES" ]; then
+    echo "[$(date)] QU correction SKIPPED — adjusted quant.sf for all $N_SAMPLES samples exist in ${EXPR_QU_DIR}"
 else
-    echo "[$(date)] QU correction (edgeR::catchSalmon) for isoforms"
+    echo "[$(date)] QU correction (edgeR::catchSalmon) for isoforms ($N_QU_DONE/$N_SAMPLES adjusted quant.sf present)"
     # Run R outside the conda/MAJIQ env stack (singularity provides R + packages).
     conda deactivate 2>/dev/null || true
     $SING_R "${SEADRAGON_SCRIPTS}/qu_correct_salmon.R" \
@@ -137,13 +153,13 @@ conda deactivate 2>/dev/null || true
 # ---- bgzip + tabix ----
 conda activate samtools-1.16.1
 
-bgzip "${OUTPUT_DIR}/expression.bed"
+bgzip -f "${OUTPUT_DIR}/expression.bed"
 tabix -p bed "${OUTPUT_DIR}/expression.bed.gz"
 
-bgzip "${OUTPUT_DIR}/isoforms.bed"
+bgzip -f "${OUTPUT_DIR}/isoforms.bed"
 tabix -p bed "${OUTPUT_DIR}/isoforms.bed.gz"
 
-bgzip "${OUTPUT_DIR}/isoform_expression.bed"
+bgzip -f "${OUTPUT_DIR}/isoform_expression.bed"
 tabix -p bed "${OUTPUT_DIR}/isoform_expression.bed.gz"
 
 # ---- Phenotype groups for isoform modalities (gene grouping for tensorQTL) ----
