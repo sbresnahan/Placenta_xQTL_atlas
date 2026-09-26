@@ -8,8 +8,8 @@ Gene-level expression is handled separately by the HCP pipeline
 (pool_expression_within_ancestry.py + combat_normalize_hcp.R); this script
 covers the remaining modalities:
 
-    isoforms, alt_TSS, alt_polyA, splicing, intron_retention,
-    RNA_editing, stability
+    isoforms, isoform_expression, alt_TSS, alt_polyA, splicing,
+    intron_retention, RNA_editing, stability
 
 Two input conventions are supported:
 
@@ -18,7 +18,7 @@ Two input conventions are supported:
      Sample columns use ORIGINAL sample IDs. Features are pooled by
      phenotype_id INTERSECTION across cohorts (all cohorts share the HPLRv2
      reference, so IDs are directly comparable). Used for:
-       isoforms, alt_TSS, alt_polyA, RNA_editing, stability
+       isoforms, isoform_expression, alt_TSS, alt_polyA, RNA_editing, stability
 
   2. Pre-pooled BEDs (splicing, intron_retention):
      The harmonize_within_ancestry.py step already produced a single pooled
@@ -35,7 +35,8 @@ Cohort labels (needed downstream for ComBat batch) are resolved by:
   - original IDs    -> join to the ancestry map on sample_id
 
 Usage:
-  # Per-cohort pooling (alt_TSS, alt_polyA, RNA_editing, stability, isoforms)
+  # Per-cohort pooling (alt_TSS, alt_polyA, RNA_editing, stability, isoforms,
+  #                    isoform_expression)
   python3 pool_modalities_within_ancestry.py \
       --ancestry-map pooled_sample_ancestry_RNAseq.tsv \
       --config config.yml \
@@ -77,7 +78,8 @@ BED_META_COLS = ["#chr", "start", "end", "phenotype_id"]
 # Modalities whose unnorm BEDs are produced per-cohort and pooled here by
 # phenotype_id intersection (original sample IDs).
 INTERSECTION_MODALITIES = {
-    "isoforms", "alt_TSS", "alt_polyA", "RNA_editing", "stability",
+    "isoforms", "isoform_expression", "alt_TSS", "alt_polyA", "RNA_editing",
+    "stability",
 }
 
 # Modalities already pooled by harmonize_within_ancestry.py (namespaced IDs).
@@ -197,7 +199,8 @@ def pool_intersection_stratum(ancestry, ancestry_samples, cohort_dirs,
                               modality, output_dir):
     """Pool per-cohort BEDs for one ancestry stratum by phenotype_id intersection.
 
-    Used for isoforms, alt_TSS, alt_polyA, RNA_editing, stability.
+    Used for isoforms, isoform_expression, alt_TSS, alt_polyA, RNA_editing,
+    stability.
     """
     samples_by_cohort = defaultdict(list)
     for _, row in ancestry_samples.iterrows():
