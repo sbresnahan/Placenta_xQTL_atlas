@@ -188,20 +188,27 @@ def assemble_alt_TSS_polyA(sample_ids: list, group1_dir: Path, group2_dir: Path,
     df = df[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
     df.to_csv(bed, sep='\t', index=False, float_format='%g')
 
-def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno: Path, bed_iso: Path, bed_gene: Path, min_count: int = 10, min_frac: float = 0.05, max_frac: float = 0.95, log2_expr: bool = False):
+def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno: Path, bed_iso: Path, bed_gene: Path, min_count: int = 10, min_frac: float = 0.05, max_frac: float = 0.95, log2_expr: bool = False, bed_iso_expr: Path = None):
     """Assemble Salmon TPM or NumReads outputs into isoform- and gene-level BED files
 
     Isoform values are normalized to relative abundance in each gene. Isoforms
     with fewer than `min_count` reads on average are excluded
     (`est_counts` read counts are always used for this filtering).
 
-    `bed_iso` and `bed_gene` are each optional (may be None): only the non-None
-    BED is written. This lets the caller assemble the gene-level BED from one
-    Salmon directory (e.g. original counts) and the isoform BED from another
-    (e.g. QU-corrected counts) in two separate calls. At least one must be set.
+    `bed_iso`, `bed_gene`, and `bed_iso_expr` are each optional (may be None):
+    only the non-None BEDs are written. This lets the caller assemble the
+    gene-level BED from one Salmon directory (e.g. original counts) and the
+    isoform BEDs from another (e.g. QU-corrected counts) in two separate calls.
+    At least one must be set.
+
+    `bed_iso_expr` is the isoform *expression* (abundance) BED: the same
+    per-transcript values as `bed_iso` but BEFORE the within-gene ratio
+    division, filtered only by the `min_count` floor (the devBrain-style
+    TPM > 0.1 in > 25% of samples filter is applied downstream, at the
+    ComBat stage). `bed_iso` remains the isoform *usage* (ratio) BED.
     """
-    if bed_iso is None and bed_gene is None:
-        raise ValueError("assemble_expression: at least one of bed_iso / bed_gene must be provided")
+    if bed_iso is None and bed_gene is None and bed_iso_expr is None:
+        raise ValueError("assemble_expression: at least one of bed_iso / bed_gene / bed_iso_expr must be provided")
 
     df_iso = load_salmon(sample_ids, salmon_dir, units)
 
@@ -222,6 +229,11 @@ def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno
     if log2_expr:
         df_gene = np.log2(df_gene + 1)
 
+    # Capture isoform expression (abundance) BEFORE the within-gene ratio
+    # division; same min_count floor as the ratio BED, no min/max-frac filter.
+    if bed_iso_expr is not None:
+        df_iso_expr = df_iso[df_iso.index.isin(iso_enough_counts)]
+
     # Calculate proportion of each transcript in each gene_id:
     df_iso = df_iso.groupby('gene_id', group_keys=False).apply(lambda x: x / x.sum(axis=0))
     # Remove isoforms with mean read count < `min_count`:
@@ -237,6 +249,12 @@ def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno
         df_iso_out['phenotype_id'] = df_iso_out['gene_id'] + '__' + df_iso_out['transcript_id']
         df_iso_out = df_iso_out[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
         df_iso_out.to_csv(bed_iso, sep='\t', index=False, float_format='%g')
+
+    if bed_iso_expr is not None:
+        df_expr_out = anno.merge(df_iso_expr.reset_index(), on='gene_id', how='inner')
+        df_expr_out['phenotype_id'] = df_expr_out['gene_id'] + '__' + df_expr_out['transcript_id']
+        df_expr_out = df_expr_out[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
+        df_expr_out.to_csv(bed_iso_expr, sep='\t', index=False, float_format='%g')
 
     if bed_gene is not None:
         df_gene_out = anno.merge(df_gene.reset_index(), on='gene_id', how='inner')
@@ -369,8 +387,9 @@ def main():
     p_expr.add_argument('--samples', type=Path, required=True, help='Path to sample IDs file (one sample ID per line)')
     p_expr.add_argument('--input-dir', type=Path, required=True, help='Directory containing Salmon output directories named by sample')
     p_expr.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
-    p_expr.add_argument('--output-isoforms', type=Path, default=None, help='Isoform ratio BED (optional; at least one of --output-isoforms/--output-expression is required)')
-    p_expr.add_argument('--output-expression', type=Path, default=None, help='Gene-level expression BED (optional; at least one of --output-isoforms/--output-expression is required)')
+    p_expr.add_argument('--output-isoforms', type=Path, default=None, help='Isoform ratio (usage) BED (optional; at least one of --output-isoforms/--output-expression/--output-isoform-expr is required)')
+    p_expr.add_argument('--output-expression', type=Path, default=None, help='Gene-level expression BED (optional; at least one of --output-isoforms/--output-expression/--output-isoform-expr is required)')
+    p_expr.add_argument('--output-isoform-expr', dest='output_isoform_expr', type=Path, default=None, help='Isoform expression (abundance, pre-ratio) BED (optional)')
     p_expr.add_argument('--min-count', type=int, default=10, help='Minimum mean count for isoform to be included in isoform-level BED')
     p_expr.add_argument('--min-frac', type=float, default=0.05, help='Minimum mean relative abundance for isoform to be included in isoform-level BED')
     p_expr.add_argument('--max-frac', type=float, default=0.95, help='Maximum mean relative abundance for isoform to be included in isoform-level BED')
@@ -421,13 +440,14 @@ def main():
                                min_frac=args.min_frac, max_frac=args.max_frac)
     elif args.cmd == 'expression':
         samples = _load_samples(args.samples)
-        if args.output_isoforms is None and args.output_expression is None:
-            parser.error("expression: at least one of --output-isoforms / --output-expression is required")
+        if args.output_isoforms is None and args.output_expression is None and args.output_isoform_expr is None:
+            parser.error("expression: at least one of --output-isoforms / --output-expression / --output-isoform-expr is required")
         assemble_expression(samples, args.input_dir, args.units,
                             args.ref_anno, args.output_isoforms, args.output_expression,
                             min_count=args.min_count,
                             min_frac=args.min_frac, max_frac=args.max_frac,
-                            log2_expr=args.log2_expr)
+                            log2_expr=args.log2_expr,
+                            bed_iso_expr=args.output_isoform_expr)
     elif args.cmd == 'intron-retention':
         assemble_intron_retention(args.input, args.ref_anno, args.output)
     elif args.cmd == 'latent':

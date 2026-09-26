@@ -84,7 +84,7 @@ copy_req() { # copy_req <src> <dst_dir> <core|other> <label>
 }
 
 # ---- 1. Result top tables (27/29 outputs) -------------------------------
-# Grouped (8 modalities), ungrouped (7), combined, and independent top TSVs
+# Grouped (9 modalities), ungrouped (8), combined, and independent top TSVs
 # per ancestry — glob covers every layer 29 writes.
 n_top=0
 for f in "$RESULTS_DIR"/*_top.tsv; do
@@ -101,11 +101,11 @@ for ANC in $ANCESTRIES; do
              "$STAGING/data/results" core "${ANC}_expression_cisqtl_top.tsv"
 done
 
-# Expected-completeness audit (non-core): grouped 8 + ungrouped 7 +
-# combined 1 + independent 9 = 25 top tables per ancestry.
+# Expected-completeness audit (non-core): grouped 9 + ungrouped 8 +
+# combined 1 + independent 10 = 28 top tables per ancestry.
 # modality file stems as written by 27/28/29 (display-case: alt_TSS, alt_polyA, RNA_editing)
-MODS_GROUPED="expression isoforms splicing intron_retention alt_TSS alt_polyA RNA_editing stability"
-MODS_UNGROUPED="isoforms splicing intron_retention alt_TSS alt_polyA RNA_editing stability"
+MODS_GROUPED="expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability"
+MODS_UNGROUPED="isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability"
 for ANC in $ANCESTRIES; do
     for M in $MODS_GROUPED; do
         copy_req "$RESULTS_DIR/${ANC}_${M}_cisqtl_top.tsv" \

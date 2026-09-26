@@ -24,19 +24,21 @@ suppressPackageStartupMessages({
   library(patchwork)
 })
 
-MODALITY_LEVELS <- c("expression", "isoforms", "splicing", "intron_retention",
-                     "alt_TSS", "alt_polyA", "RNA_editing", "stability")
+MODALITY_LEVELS <- c("expression", "isoforms", "isoform_expression", "splicing",
+                     "intron_retention", "alt_TSS", "alt_polyA", "RNA_editing",
+                     "stability")
 
 # Colorblind-friendly modality palette
 MODALITY_COLORS <- c(
-  expression       = "#000000",
-  isoforms         = "#0279EE",
-  splicing         = "#FF9400",
-  intron_retention = "#75A025",
-  alt_TSS          = "#FD9BED",
-  alt_polyA        = "#E9ED4C",
-  RNA_editing      = "#7B3294",
-  stability        = "#8C8C8C"
+  expression         = "#000000",
+  isoforms           = "#0279EE",
+  isoform_expression = "#882255",
+  splicing           = "#FF9400",
+  intron_retention   = "#75A025",
+  alt_TSS            = "#FD9BED",
+  alt_polyA          = "#E9ED4C",
+  RNA_editing        = "#7B3294",
+  stability          = "#8C8C8C"
 )
 
 theme_report <- function(base_size = 11) {

@@ -27,9 +27,12 @@
 #   <cohort_dir>/intermediate/expression_qu/<sample>/quant.sf   (QU-corrected)
 #   <cohort_dir>/output/unnorm/expression.bed
 #   <cohort_dir>/output/unnorm/isoforms.bed
+#   <cohort_dir>/output/unnorm/isoform_expression.bed
 #   <cohort_dir>/output/expression.bed.gz (+ .tbi)
 #   <cohort_dir>/output/isoforms.bed.gz (+ .tbi)
 #   <cohort_dir>/output/isoforms.phenotype_groups.txt
+#   <cohort_dir>/output/isoform_expression.bed.gz (+ .tbi)
+#   <cohort_dir>/output/isoform_expression.phenotype_groups.txt
 # =============================================================================
 
 #BSUB -q medium
@@ -110,12 +113,15 @@ else
     source /rsrch5/home/epi/bhattacharya_lab/software/MAJIQ/bin/activate
 fi
 
-# ---- Assemble ISOFORM-level BED from QU-corrected dir ----
+# ---- Assemble ISOFORM-level BEDs from QU-corrected dir ----
+# isoforms.bed = within-gene usage ratios; isoform_expression.bed = the same
+# QU-corrected transcript TPMs BEFORE the ratio division (abundance modality).
 python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
     --samples "$SAMPLES_FILE" \
     --input-dir "$EXPR_QU_DIR" \
     --ref-anno "$REF_ANNO" \
-    --output-isoforms "${UNNORM_DIR}/isoforms.bed"
+    --output-isoforms "${UNNORM_DIR}/isoforms.bed" \
+    --output-isoform-expr "${UNNORM_DIR}/isoform_expression.bed"
 
 # ---- Canonical BEDs = unnorm (2026-09 schema) ----
 # Per-cohort QN+INT is discontinued: normalization now happens once, after
@@ -124,6 +130,7 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
 # (16_index_outputs.sh, combine_modalities.sh) are unchanged.
 cp "${UNNORM_DIR}/expression.bed" "${OUTPUT_DIR}/expression.bed"
 cp "${UNNORM_DIR}/isoforms.bed" "${OUTPUT_DIR}/isoforms.bed"
+cp "${UNNORM_DIR}/isoform_expression.bed" "${OUTPUT_DIR}/isoform_expression.bed"
 
 conda deactivate 2>/dev/null || true
 
@@ -136,15 +143,26 @@ tabix -p bed "${OUTPUT_DIR}/expression.bed.gz"
 bgzip "${OUTPUT_DIR}/isoforms.bed"
 tabix -p bed "${OUTPUT_DIR}/isoforms.bed.gz"
 
-# ---- Phenotype groups for isoforms (gene grouping for tensorQTL) ----
+bgzip "${OUTPUT_DIR}/isoform_expression.bed"
+tabix -p bed "${OUTPUT_DIR}/isoform_expression.bed.gz"
+
+# ---- Phenotype groups for isoform modalities (gene grouping for tensorQTL) ----
 zcat < "${OUTPUT_DIR}/isoforms.bed.gz" \
     | tail -n +2 \
     | cut -f4 \
     | awk '{ g=$1; sub(/__.*$/, "", g); print $1 "\t" g }' \
     > "${OUTPUT_DIR}/isoforms.phenotype_groups.txt"
 
+zcat < "${OUTPUT_DIR}/isoform_expression.bed.gz" \
+    | tail -n +2 \
+    | cut -f4 \
+    | awk '{ g=$1; sub(/__.*$/, "", g); print $1 "\t" g }' \
+    > "${OUTPUT_DIR}/isoform_expression.phenotype_groups.txt"
+
 conda deactivate 2>/dev/null || true
 
-echo "[$(date)] Done: expression + isoforms"
+echo "[$(date)] Done: expression + isoforms + isoform_expression"
 ls -lh "${OUTPUT_DIR}/expression.bed.gz" "${OUTPUT_DIR}/isoforms.bed.gz" \
-       "${OUTPUT_DIR}/isoforms.phenotype_groups.txt"
+       "${OUTPUT_DIR}/isoforms.phenotype_groups.txt" \
+       "${OUTPUT_DIR}/isoform_expression.bed.gz" \
+       "${OUTPUT_DIR}/isoform_expression.phenotype_groups.txt"

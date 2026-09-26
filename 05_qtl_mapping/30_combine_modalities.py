@@ -40,7 +40,8 @@ import sys
 import pandas as pd
 
 DEFAULT_MODALITIES = ["expression", "alt_polyA", "alt_TSS", "intron_retention",
-                      "isoforms", "RNA_editing", "splicing", "stability"]
+                      "isoforms", "isoform_expression", "RNA_editing", "splicing",
+                      "stability"]
 
 
 def load_bed(path, modality):

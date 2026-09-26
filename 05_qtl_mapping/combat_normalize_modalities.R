@@ -40,7 +40,8 @@
 # sidecar produced by pool_modalities_within_ancestry.py:
 #       --cohort-labels EUR_splicing_cohort_labels.tsv
 #
-# For isoforms, pass the expression-outlier list from script 19:
+# For isoforms and isoform_expression, pass the expression-outlier list from
+# script 19:
 #       --exclude-samples EUR_expression_outliers.tsv
 #
 # Dependencies:
@@ -56,12 +57,16 @@ suppressPackageStartupMessages({
 
 # ---- Valid modalities (single source of truth) ----
 # expression is handled by combat_normalize_hcp.R (script 19).
-MODALITIES <- c("isoforms", "alt_TSS", "alt_polyA", "splicing",
-                "intron_retention", "RNA_editing", "stability")
+# isoforms = within-gene usage ratios; isoform_expression = transcript-level
+# TPM abundance (the pre-ratio matrix from assemble_bed.py).
+MODALITIES <- c("isoforms", "isoform_expression", "alt_TSS", "alt_polyA",
+                "splicing", "intron_retention", "RNA_editing", "stability")
 
 # Modalities filtered on TPM detection (devBrain §3.3); all others use the
-# >=40% detection filter (devBrain §3.4).
-TPM_MODALITIES <- c("isoforms")
+# >=40% detection filter (devBrain §3.4). For isoforms (usage ratios) the
+# tpm-min threshold acts as a usage > 0.1 filter; for isoform_expression the
+# matrix holds actual TPMs, so the filter is dimensionally the devBrain filter.
+TPM_MODALITIES <- c("isoforms", "isoform_expression")
 
 # ---- CLI ----
 option_list <- list(

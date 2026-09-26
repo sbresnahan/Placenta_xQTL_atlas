@@ -44,6 +44,7 @@ conda activate samtools-1.16.1
 EXPECTED_BEDS=(
     "expression.bed.gz"
     "isoforms.bed.gz"
+    "isoform_expression.bed.gz"
     "alt_TSS.bed.gz"
     "alt_polyA.bed.gz"
     "splicing.bed.gz"
@@ -54,6 +55,7 @@ EXPECTED_BEDS=(
 
 EXPECTED_GROUPS=(
     "isoforms.phenotype_groups.txt"
+    "isoform_expression.phenotype_groups.txt"
     "alt_TSS.phenotype_groups.txt"
     "alt_polyA.phenotype_groups.txt"
     "splicing.phenotype_groups.txt"

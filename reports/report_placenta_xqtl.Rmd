@@ -109,7 +109,10 @@ before correlation pruning at |r| > 0.9; HCP count optimized per ancestry
 via module 25a; no covariate cap), a MAF ≥ 0.01 filter with a ≥ 5
 minor-allele-count floor at the
 genotype intersection, Storey q-values (computed with the R `qvalue`
-package), and log2(x + 1)-transformed isoform expression. Mapping covers
+package), and per-phenotype rank-based inverse-normal transformation of all
+modalities (isoform usage mapped as within-gene relative-abundance ratios;
+isoform expression as transcript-level TPM abundance).
+Mapping covers
 `r n_cells` ancestry × modality × layer cells (EAS n ≈ `r n_samp["EAS"]`,
 EUR n ≈ `r n_samp["EUR"]`).
 
@@ -157,13 +160,25 @@ residual null is a **power limitation, not a pipeline failure**:
 
 ## Pipeline recap
 
-- **Phenotypes**: 8 RNA modalities (gene expression, isoform expression,
-  splice junction usage, intron retention, alternative TSS, alternative
-  polyA, RNA editing, RNA stability), ComBat + quantile-normalized +
-  inverse-normal transformed per ancestry, harmonized to genotyped samples
-  (array_id), with NIGMS technical replicates averaged per individual.
-  Isoforms are isoform *expression* values, log2(x + 1) transformed before
-  ComBat.
+- **Phenotypes**: 9 RNA modalities (gene expression, isoform usage, isoform
+  expression, splice junction usage, intron retention, alternative TSS,
+  alternative polyA, RNA editing, RNA stability), harmonized to genotyped
+  samples (array_id), with NIGMS technical replicates averaged per
+  individual. The two isoform modalities are both built from QU-corrected
+  Salmon transcript counts (mean count ≥ 10): **isoform usage** is
+  within-gene relative-abundance ratios (transcript TPM / gene-total TPM;
+  PANTRY convention, mean ratio in [0.05, 0.95]) and **isoform expression**
+  is the pre-ratio transcript TPM abundance (devBrain §3.3 convention).
+  Per ancestry stratum:
+  feature filtering (isoform usage: usage > 0.1 in > 25% of samples;
+  isoform expression: TPM > 0.1 in > 25% of samples, devBrain
+  §3.3; ratio modalities: detected in ≥ 40%, devBrain §3.4),
+  batch-median NA imputation, quantile normalization across samples +
+  rank-based inverse-normal transformation per phenotype, then ComBat
+  (batch = cohort) **last** — the devBrain "ComBat on the normalized data"
+  convention. No log2 pre-transform is applied: rank-based INT is invariant
+  to any monotone transform, so log2/VST would be exact no-ops on the
+  mapped scale.
 - **Genotypes**: ancestry-stratified plink2 pgen; variants filtered to
   **MAF ≥ 0.01 with MAC ≥ 5** (≥ 5 minor alleles) at the genotype
   intersection — the count floor excludes low-carrier tests, which can
@@ -506,12 +521,14 @@ multiple phenotypes. `r if (nrow(egenes_grouped) <= 1) "With at most one gene-le
 ```{r fig-qq, fig.width=9, fig.height=5.5}
 qq <- bind_rows(
   combined %>% select(ancestry, modality, pval_beta),
-  grouped %>% filter(modality %in% c("expression", "splicing", "isoforms", "stability")) %>%
-    select(ancestry, modality, pval_beta)
+  grouped %>% select(ancestry, modality, pval_beta)
 ) %>% group_by(ancestry, modality) %>%
   group_modify(~ qq_data(.x$pval_beta)) %>% ungroup()
+# thin the null bulk for plotting; keep the full tail (observed > 3)
+qq_plot <- qq %>% group_by(ancestry, modality) %>%
+  filter(observed >= 3 | dplyr::row_number() %% 25 == 0) %>% ungroup()
 
-p5 <- ggplot(qq, aes(expected, observed, color = modality)) +
+p5 <- ggplot(qq_plot, aes(expected, observed, color = modality)) +
   geom_point(size = 0.5, alpha = 0.5) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey40") +
   facet_wrap(~ancestry) +
@@ -630,8 +647,8 @@ hit_tab <- hits %>%
   select(ancestry, layer, modality_display, gene_id, gene_symbol, phenotype_id,
          target, variant_id, af, ma_count, slope, pval_nominal, pval_beta,
          qval, variant_to_target_kb)
-knitr::kable(hit_tab, digits = 3,
-             caption = "All FDR ≤ 5% associations across layers (grouped/combined rows are gene-level; ungrouped rows are phenotype-level).")
+knitr::kable(hit_tab %>% slice_head(n = 100), digits = 3,
+             caption = sprintf("FDR ≤ 5%% associations across layers (top 100 of %d shown; full table in tables/fdr_hits.tsv). Grouped/combined rows are gene-level; ungrouped rows are phenotype-level.", nrow(hit_tab)))
 write_tsv(hit_tab, file.path(params$table_dir, "fdr_hits.tsv"))
 ```
 
@@ -691,8 +708,8 @@ near <- bind_rows(
   arrange(qval) %>%
   select(ancestry, layer, modality, gene_id, gene_symbol, variant_id, af,
          ma_count, carrier_flag, slope, pval_beta, qval)
-knitr::kable(near, digits = 3,
-             caption = "All associations at q ≤ 0.25 across every layer. Rows flagged LOW CARRIER COUNT have < 5 minor-allele carriers in the mapping sample set and should be discounted (see audit).")
+knitr::kable(near %>% slice_head(n = 100), digits = 3,
+             caption = sprintf("Associations at q ≤ 0.25 across every layer (top 100 of %d shown; full table in tables/near_miss.tsv). Rows flagged LOW CARRIER COUNT have < 5 minor-allele carriers in the mapping sample set and should be discounted (see audit).", nrow(near)))
 write_tsv(near, file.path(params$table_dir, "near_miss.tsv"))
 
 near_nonhits <- near %>% filter(qval > 0.05) %>% slice_head(n = 3)
@@ -730,12 +747,22 @@ The MAC ≥ 5 floor is applied at the genotype intersection in module 23
 
 ```{r stepwise-table}
 if (n_secondary > 0) {
-  sec <- independent %>% filter(rank >= 2) %>%
-    mutate(gene_symbol = symd(strip_version(str_split_fixed(phenotype_id, "__", 2)[, 1]))) %>%
-    select(ancestry, modality, phenotype_id, gene_symbol, variant_id, rank,
-           slope, pval_nominal, qval)
-  knitr::kable(sec, digits = 3,
-               caption = "Conditionally independent secondary signals (rank ≥ 2).")
+  # group_id exists for grouped/combined runs, absent for expression;
+  # fall back to parsing the phenotype id
+  gid <- if ("group_id" %in% names(independent)) {
+    strip_version(if_else(is.na(independent$group_id),
+                          str_split_fixed(independent$phenotype_id, "__", 2)[, 1],
+                          independent$group_id))
+  } else {
+    strip_version(str_split_fixed(independent$phenotype_id, "__", 2)[, 1])
+  }
+  sec <- independent %>%
+    mutate(gene_id = gid, gene_symbol = symd(gene_id)) %>%
+    filter(rank >= 2) %>%
+    select(ancestry, modality, gene_id, gene_symbol, phenotype_id, variant_id,
+           rank, slope, pval_nominal, pval_beta)
+  knitr::kable(sec %>% slice_head(n = 100), digits = 3,
+               caption = sprintf("Conditionally independent secondary signals (rank ≥ 2; top 100 of %d shown; full table in tables/independent_secondary.tsv).", nrow(sec)))
   write_tsv(sec, file.path(params$table_dir, "independent_secondary.tsv"))
 }
 ```

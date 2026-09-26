@@ -29,11 +29,11 @@
 # Examples (GTEx-conventions round, MAF 0.01 + MAC>=5 carrier floor baked
 # into the qtl pgen by 23/24):
 #   MAF_THRESHOLD=0.01 GROUPED=0 bash 28_submit_modalities.sh
-#       # 14 ungrouped per-modality jobs (transcript-level driver layer)
+#       # 16 ungrouped per-modality jobs (transcript-level driver layer)
 #   MAF_THRESHOLD=0.01 INDEPENDENT=1 \
-#       MODALITIES="expression alt_polyA alt_TSS intron_retention isoforms RNA_editing splicing stability" \
+#       MODALITIES="expression alt_polyA alt_TSS intron_retention isoforms isoform_expression RNA_editing splicing stability" \
 #       bash 28_submit_modalities.sh
-#       # 16 grouped+stepwise jobs (PANTRY separate-modality layer)
+#       # 18 grouped+stepwise jobs (PANTRY separate-modality layer)
 #   MAF_THRESHOLD=0.01 INDEPENDENT=1 MODALITIES="combined" \
 #       QUEUE=long WALLTIME=48:00 bash 28_submit_modalities.sh
 #       # 2 combined cross-modality jobs (PANTRY cross-modality layer)
@@ -73,7 +73,7 @@ OUTPUT_BASE="${OUTPUT_BASE:-/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/
 LOG_DIR="/rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs"
 
 ANCESTRIES="${ANCESTRIES:-EAS EUR}"
-MODALITIES="${MODALITIES:-alt_polyA alt_TSS intron_retention isoforms RNA_editing splicing stability}"
+MODALITIES="${MODALITIES:-alt_polyA alt_TSS intron_retention isoforms isoform_expression RNA_editing splicing stability}"
 QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-12:00}"
 CIS_WINDOW="${CIS_WINDOW:-1000000}"

@@ -138,7 +138,7 @@ def main():
     parser.add_argument("--ancestries", default="EAS EUR",
                         help="Space-separated ancestry labels")
     parser.add_argument("--modalities",
-                        default="alt_polyA alt_TSS intron_retention isoforms RNA_editing splicing stability",
+                        default="alt_polyA alt_TSS intron_retention isoforms isoform_expression RNA_editing splicing stability",
                         help="Space-separated modality labels")
     args = parser.parse_args()
 

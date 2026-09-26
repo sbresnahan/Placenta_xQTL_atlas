@@ -78,7 +78,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-}"
 HARMONIZE_DIR="${HARMONIZE_DIR:-}"
 
 # Default modality list (all non-expression modalities)
-DEFAULT_MODALITIES="isoforms alt_TSS alt_polyA splicing intron_retention RNA_editing stability"
+DEFAULT_MODALITIES="isoforms isoform_expression alt_TSS alt_polyA splicing intron_retention RNA_editing stability"
 MODALITIES="${MODALITIES:-$DEFAULT_MODALITIES}"
 
 # ---- Global init ----
@@ -221,16 +221,17 @@ for ANCESTRY in $ANCESTRY_LIST; do
             fi
         fi
 
-        # Expression-outlier exclusion for isoforms (devBrain §3.3): apply the
-        # connectivity-outlier list written by 19_hcp_factors.sh to isoforms
-        # only (not splicing / proportion modalities).
-        if [ "$MODALITY" = "isoforms" ]; then
+        # Expression-outlier exclusion for isoform modalities (devBrain §3.3):
+        # apply the connectivity-outlier list written by 19_hcp_factors.sh to
+        # isoforms and isoform_expression only (not splicing / proportion
+        # modalities).
+        if [ "$MODALITY" = "isoforms" ] || [ "$MODALITY" = "isoform_expression" ]; then
             OUTLIER_FILE="${OUTPUT_BASE}/hcp/hcp_factors/${ANCESTRY}_expression_outliers.tsv"
             if [ -f "$OUTLIER_FILE" ]; then
                 EXTRA_ARGS="${EXTRA_ARGS} --exclude-samples ${OUTLIER_FILE}"
             else
                 echo "      WARN: expression outlier list not found: $OUTLIER_FILE"
-                echo "             isoforms will keep all samples"
+                echo "             $MODALITY will keep all samples"
             fi
         fi
 
