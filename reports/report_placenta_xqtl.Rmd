@@ -27,16 +27,12 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
 source(params$module_path)
 dir.create(params$fig_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(params$table_dir, showWarnings = FALSE, recursive = TRUE)
+# gene_map.tsv is regenerated in full from the normalized GTF by
+# make_report_archive.sh each round — every tested gene has a symbol entry.
 gene_map <- read_tsv(params$gene_map_path, col_types = "cccc", progress = FALSE)
-# symbols verified via Ensembl REST at render date (not in the report gene map)
-extra_symbols <- tibble(
-  gene_id = c("ENSG00000266412", "ENSG00000009413", "ENSG00000140391",
-              "ENSG00000187147", "ENSG00000090971"),
-  symbol  = c("NCOA4", "REV3L", "TSPAN3", "RNF220", "NAT14"))
-gene_map <- gene_map %>%
-  filter(!gene_id %in% extra_symbols$gene_id) %>%
-  bind_rows(extra_symbols)
 sym <- function(ids) gene_map$symbol[match(ids, gene_map$gene_id)]
+# display symbol: fall back to the gene ID when the GTF has no gene_name
+symd <- function(ids) ifelse(is.na(sym(ids)) | sym(ids) == "", ids, sym(ids))
 ```
 
 ```{r load-data}
@@ -64,20 +60,45 @@ n_range <- bind_rows(grouped, ungrouped, combined) %>%
 # Executive summary
 
 ```{r exec-numbers}
+fdr <- 0.05
 n_cells <- nrow(bind_rows(grouped, ungrouped, combined) %>%
                   distinct(layer, ancestry, modality))
 yield <- bind_rows(grouped, ungrouped, combined) %>%
   group_by(layer, ancestry, modality) %>%
-  summarise(n = n(), fdr05 = sum(qval <= 0.05), fdr10 = sum(qval <= 0.10),
+  summarise(n = n(), fdr05 = sum(qval <= fdr), fdr10 = sum(qval <= 0.10),
             min_q = min(qval), .groups = "drop")
 n_fdr05 <- sum(yield$fdr05)
-hits <- ungrouped %>% filter(qval <= 0.05)   # FDR ≤ 5% associations (phenotype level)
-hit_eur <- hits %>% filter(ancestry == "EUR")   # NCOA4 RNA editing
-hit_eas <- hits %>% filter(ancestry == "EAS")   # TSPAN3 isoforms
-hit_gene <- "ENSG00000266412"    # NCOA4
-tspan3_gene <- "ENSG00000140391" # TSPAN3
-hit_dist_kb <- round((46006565 - 45322442) / 1000)
-best_null <- min(yield$min_q[yield$fdr05 == 0])
+
+# FDR-significant hits per layer; the primary eGene catalog is the combined
+# cross-modality layer, with per-modality grouped eGenes as the breakdown
+# (ungrouped phenotype-level hits are descriptive only).
+hits <- bind_rows(grouped, ungrouped, combined) %>% filter(qval <= fdr)
+egenes_combined <- combined %>% filter(qval <= fdr)
+egenes_grouped  <- grouped %>% filter(qval <= fdr)
+n_eg <- egenes_combined %>% count(ancestry, name = "n") %>% tibble::deframe()
+n_eg <- n_eg[c("EAS", "EUR")]; n_eg[is.na(n_eg)] <- 0L
+n_eg_mod <- egenes_grouped %>% count(ancestry, modality, name = "n")
+
+# top association overall + per ancestry (for the headline)
+top_hit <- bind_rows(grouped, combined, ungrouped) %>%
+  slice_min(qval, n = 1, with_ties = FALSE)
+top_by_anc <- bind_rows(grouped, combined, ungrouped) %>%
+  group_by(ancestry) %>% slice_min(qval, n = 1, with_ties = FALSE) %>% ungroup()
+best_null <- if (any(yield$fdr05 == 0)) min(yield$min_q[yield$fdr05 == 0]) else NA_real_
+
+# carrier-count audit (MAC >= 5 floor baked into the genotype intersection
+# at module 23 this round — verify it propagated to the mapping outputs)
+mac_audit <- bind_rows(grouped, ungrouped, combined) %>%
+  group_by(ancestry) %>%
+  summarise(min_carriers = min(ma_count), n_lt5 = sum(ma_count < 5),
+            .groups = "drop")
+
+# short inline helpers for data-driven prose
+fmt_genes <- function(ids) paste0("_", symd(ids), "_", collapse = ", ")
+describe_hit <- function(h) {
+  sprintf("%s (%s, %s layer, q = %s)", symd(h$gene_id), h$modality, h$layer,
+          signif(h$qval, 2))
+}
 ```
 
 This report summarizes the multi-ancestry placental xQTL analysis:
@@ -92,43 +113,45 @@ package), and log2(x + 1)-transformed isoform expression. Mapping covers
 `r n_cells` ancestry × modality × layer cells (EAS n ≈ `r n_samp["EAS"]`,
 EUR n ≈ `r n_samp["EUR"]`).
 
-**Headline result: two associations reach FDR ≤ 5%.** An EAS isoform xQTL at
-_TSPAN3_ (q = `r signif(hit_eas$qval, 2)`; gene-level in the isoforms layer)
-and a EUR RNA-editing xQTL at an editing site in _NCOA4_ (ungrouped layer;
-q = `r signif(hit_eur$qval, 2)`; details below). Every other ancestry ×
-modality × layer cell is null at FDR 5% — the best remaining q-value
-anywhere is `r signif(best_null, 2)`. Storey calibration estimated at most
-a **trace signal fraction** (π1 = 0–4% across cells, concentrated in the
-layers carrying the hits), so the Storey q-values are numerically very
-close to Benjamini–Hochberg on this data (max |q − BH| = 0.006 on the
-combined layer; Diagnostics).
+```{r exec-pi1}
+pi1_cells <- bind_rows(grouped, ungrouped, combined) %>%
+  group_by(layer, ancestry, modality) %>%
+  summarise(pi1 = storey_pi1(pval_beta), .groups = "drop")
+pi1_range <- range(pi1_cells$pi1, na.rm = TRUE)
+hit_r2 <- if (nrow(hits) > 0) range(approx_r2(hits$slope, hits$af)) else NULL
+```
 
-Three lines of evidence indicate the residual null is a **power limitation,
-not a pipeline failure**:
+**Headline result: `r n_fdr05` association`r if (n_fdr05 != 1) "s"` reach`r if (n_fdr05 == 1) "es"` FDR ≤ 5%**
+across the `r n_cells` ancestry × modality × layer cells. The primary eGene
+catalog (combined cross-modality layer) contains **`r n_eg["EAS"]` EAS and
+`r n_eg["EUR"]` EUR eGenes** at FDR ≤ 5%; per-modality grouped eGenes are
+the breakdown, and ungrouped phenotype-level hits are reported descriptively
+(Results). Strongest association per ancestry:
+`r paste(sprintf("%s: %s", top_by_anc$ancestry, apply(top_by_anc, 1, function(r) sprintf("%s (%s, %s layer, q = %s)", symd(r[["gene_id"]]), r[["modality"]], r[["layer"]], signif(as.numeric(r[["qval"]]), 2)))), collapse = "; ")`.
+`r if (!is.na(best_null)) sprintf("Outside the FDR-significant set, the best remaining q-value anywhere is %s.", signif(best_null, 2))`
+Storey calibration estimates a signal fraction (π1) of
+`r round(100 * pi1_range[1])`–`r round(100 * pi1_range[2])`% across cells;
+at these fractions Storey q-values are numerically close to
+Benjamini–Hochberg (Diagnostics).
+
+For the cells without FDR discoveries, three lines of evidence indicate the
+residual null is a **power limitation, not a pipeline failure**:
 
 1. **Calibration is healthy** — permutation-calibrated p-values track the
    null through the bulk in every layer (QQ plots, Diagnostics), and a
-   near-zero π1 is the expected outcome when true effects are mostly below
-   the detection floor.
+   low π1 is the expected outcome when true effects are mostly below the
+   detection floor.
 2. **Detectable effect sizes remain large at our n** — minimum detectable
    effect (80% power) is r² ≈ 0.10 at n ≈ `r n_samp["EAS"]` (EAS) and
    r² ≈ 0.19 at n ≈ `r n_samp["EUR"]` (EUR), versus ≈ 0.06 at
    PANTRY/Geuvadis n = 445. Typical cis-xQTLs explain 5–15% of phenotype
-   variance — mostly below our floor. The two hits we do detect have
-   estimated r² ≈ `r round(approx_r2(hit_eas$slope, hit_eas$af), 2)`
-   (_TSPAN3_) and `r round(approx_r2(hit_eur$slope, hit_eur$af), 2)`
-   (_NCOA4_) — exactly the class of outsize effect the floor permits.
+   variance — mostly below our floor.
+   `r if (!is.null(hit_r2)) sprintf("The FDR-significant hits carry estimated r² of %.2f–%.2f — exactly the class of outsize effect the floor permits.", hit_r2[1], hit_r2[2])`
 3. **Sub-threshold tails are not shared between ancestries** — cross-ancestry
    rank concordance of gene-level signal is ≈ 0, as expected if near-misses
    are noise rather than shared weak signal.
 
-**A carrier-count caveat applies to the EUR near-miss tail.** The MAC ≥ 5
-floor was applied at the genotype intersection *before* outlier exclusion;
-after removing PCA outliers (2 EAS, 5 EUR samples) and modality-specific
-sample attrition, a fraction of tested EUR variant–phenotype pairs retain
-3–4 minor-allele carriers (audit table below). The EAS layers are clean
-(minimum 6 carriers anywhere). No FDR-significant result is carrier-limited,
-and all near-miss tables below flag carrier counts.
+`r if (all(mac_audit$n_lt5 == 0)) sprintf("**Carrier-count audit: clean.** The MAC ≥ 5 floor (applied at the genotype intersection in module 23) propagated to every mapping output — minimum minor-allele carrier count across all tested pairs is %d (EAS) and %d (EUR).", mac_audit$min_carriers[mac_audit$ancestry == "EAS"], mac_audit$min_carriers[mac_audit$ancestry == "EUR"]) else sprintf("**Carrier-count caveat.** A fraction of tested pairs retain < 5 minor-allele carriers in the mapping sample sets (EAS: %d tests; EUR: %d tests; audit table below) — the MAC ≥ 5 floor was applied before outlier exclusion. Flagged tests should be discounted; no FDR-significant result should be carrier-limited.", mac_audit$n_lt5[mac_audit$ancestry == "EAS"], mac_audit$n_lt5[mac_audit$ancestry == "EUR"])`
 
 # Data and methods
 
@@ -193,7 +216,7 @@ cov_summary <- tibble(
   genotype_PCs = sapply(cov_sets, function(d)
     paste(d$covariate_id[grepl("^PC", d$covariate_id)], collapse = ", ")),
   n_HCP        = sapply(cov_sets, function(d) sum(grepl("^HCP", d$covariate_id))),
-  other        = "sex, GA, 6 cell-type fractions")
+  n_celltypes  = sapply(cov_sets, function(d) sum(grepl("^ct_", d$covariate_id))))
 knitr::kable(cov_summary,
              caption = "Final covariate sets (as mapped). Maternal cell-fraction covariate excluded before pruning by analysis decision; HCP count per ancestry from module 25a; no covariate cap.")
 write_tsv(cov_summary, file.path(params$table_dir, "covariate_summary.tsv"))
@@ -202,8 +225,19 @@ prune <- bind_rows(lapply(c("EAS", "EUR"), function(a)
   read_tsv(file.path(qc_in, paste0(a, "_covariate_pruning.tsv")),
            col_types = "cccc", progress = FALSE) %>% mutate(ancestry = a)))
 knitr::kable(prune %>% select(ancestry, everything()),
-             caption = "Covariate pruning log: reference cell type, correlation pruning (|r| > 0.9), and the ≤25 cap (highest-index HCPs dropped).")
+             caption = "Covariate pruning log: analysis-decision exclusions, reference cell type, and correlation pruning (|r| > 0.9; HCPs lowest priority — no covariate cap).")
 write_tsv(prune, file.path(params$table_dir, "covariate_pruning.tsv"))
+
+prune_by_reason <- prune %>% count(ancestry, reason) %>%
+  mutate(reason = factor(reason, levels = c("excluded", "reference_cell_type",
+                                            "zero_variance", "correlated",
+                                            "cap_25"))) %>%
+  arrange(ancestry, reason)
+prune_fmt <- function(a) paste(sprintf("%s %s", prune_by_reason$n[prune_by_reason$ancestry == a],
+                                       prune_by_reason$reason[prune_by_reason$ancestry == a]),
+                               collapse = ", ")
+pcs_retained <- sapply(cov_sets, function(d)
+  all(paste0("PC", 1:5) %in% d$covariate_id))
 
 outl <- bind_rows(lapply(c("EAS", "EUR"), function(a)
   read_tsv(file.path(qc_in, paste0(a, "_outliers.tsv")),
@@ -216,11 +250,13 @@ knitr::kable(outl %>% select(ancestry, sample_id, pc, sd_distance) %>%
 
 Outlier exclusion on the cohort-only PCs (6-SD rule on PC1–PC5) removed
 `r n_outl$samples_removed[n_outl$ancestry == "EAS"]` EAS and
-`r n_outl$samples_removed[n_outl$ancestry == "EUR"]` EUR samples. No
-covariate pairs exceeded the |r| > 0.9 pruning threshold in either ancestry
-— pruning dropped only the reference cell type (Syncytiotrophoblast) and the
-highest-index HCPs under the ≤ 25 cap, and both ancestries retained all of
-PC1–PC5.
+`r n_outl$samples_removed[n_outl$ancestry == "EUR"]` EUR samples. Pruning
+dropped `r sum(prune_by_reason$n[prune_by_reason$ancestry == "EAS"])`
+covariates in EAS (`r prune_fmt("EAS")`) and
+`r sum(prune_by_reason$n[prune_by_reason$ancestry == "EUR"])` in EUR
+(`r prune_fmt("EUR")`); both ancestries retained all of PC1–PC5:
+`r pcs_retained`. Correlated-HCP drops (if any) reduce effective k below the
+nominal 25a optimum — see the HCP-optimization section.
 
 ```{r scree-eas, fig.width=7, fig.height=4, out.width="49%", eval=file.exists(file.path(qc_pc, "EAS_genotype_pcs_scree.png"))}
 knitr::include_graphics(file.path(qc_pc, "EAS_genotype_pcs_scree.png"))
@@ -242,6 +278,43 @@ knitr::include_graphics(file.path(qc_in, "EUR_covariate_correlation.png"))
 
 Covariate correlation matrices before/after pruning: no |r| > 0.9 pairs
 remain in the final sets.
+
+## HCP count optimization (module 25a)
+
+```{r hcp-optimization, fig.width=8, fig.height=4.5}
+hcp_opt <- bind_rows(lapply(c("EAS", "EUR"), function(a) {
+  f <- file.path(params$qc_dir, "hcp_optimization", paste0(a, "_optimal_hcp.tsv"))
+  if (!file.exists(f)) return(NULL)
+  read_tsv(f, col_types = cols(.default = col_double(), chosen = col_logical()),
+           progress = FALSE) %>% mutate(ancestry = a)
+}))
+if (nrow(hcp_opt) > 0) {
+  k_star <- hcp_opt %>% filter(chosen) %>% select(ancestry, k, n_egenes)
+  p_hcp <- ggplot(hcp_opt, aes(k, n_egenes)) +
+    geom_line(color = "#0279EE") +
+    geom_point(aes(size = chosen), color = "#0279EE") +
+    geom_point(data = hcp_opt %>% filter(chosen), color = "#D62728", size = 3) +
+    geom_text(data = hcp_opt %>% filter(n_hcp_dropped > 0),
+              aes(label = sprintf("eff. k=%d", n_hcp_used)),
+              vjust = -0.9, size = 3, color = "grey30") +
+    facet_wrap(~ancestry) +
+    scale_size_manual(values = c(1.5, 3), guide = "none") +
+    labs(x = "HCP factors (k)", y = "chr1 eGenes (Storey q ≤ 0.05)",
+         caption = "Red: chosen k* (max eGenes, ties to smaller k). 'eff. k' annotates models where correlation pruning dropped HCPs.") +
+    theme_report()
+  print(p_hcp)
+  ggsave(file.path(params$fig_dir, "fig_hcp_optimization.png"), p_hcp,
+         width = 8, height = 4.5, dpi = 150)
+  knitr::kable(hcp_opt %>% select(ancestry, k, n_egenes, n_tested,
+                                  n_hcp_used, n_hcp_dropped, chosen),
+               caption = "25a grid: chr1 eGene yield per candidate HCP count (expression layer). n_hcp_used/dropped record correlation-pruning losses; chosen = k*.")
+  write_tsv(hcp_opt, file.path(params$table_dir, "hcp_optimization.tsv"))
+} else {
+  cat("25a optimization output not found in the archive — section skipped.\n")
+}
+```
+
+`r if (exists("hcp_opt") && nrow(hcp_opt) > 0) sprintf("Module 25a re-estimates HCPs at each candidate k on the pruned fixed covariate set (no cap), maps the chr1 expression layer per k, and selects k* by eGene yield: EAS k* = %d (%d eGenes), EUR k* = %d (%d eGenes). The k* solution is installed as the canonical harmonized HCP file for module 25.", k_star$k[k_star$ancestry == "EAS"], k_star$n_egenes[k_star$ancestry == "EAS"], k_star$k[k_star$ancestry == "EUR"], k_star$n_egenes[k_star$ancestry == "EUR"])`
 
 ## Test counts
 
@@ -294,11 +367,11 @@ ggsave(file.path(params$fig_dir, "fig1_phenotypes_genes_per_modality.png"), p1,
 
 ## xGenes per modality — q-value tiers (PANTRY Fig 2a adapted)
 
-At FDR ≤ 5% the grouped layers contain **one gene**: _TSPAN3_ in EAS
-isoforms (q = `r signif(hit_eas$qval, 2)`). The EUR _NCOA4_ association is
-phenotype-level (ungrouped RNA-editing layer) and does not appear at gene
-level. The figure shows the full q-value landscape: genes binned by best
-q-value per ancestry × modality.
+At FDR ≤ 5% the grouped (gene-level, per-modality) layers contain
+**`r nrow(egenes_grouped)` ancestry × modality × gene hits**`r if (nrow(n_eg_mod) > 0) sprintf(" (%s)", paste(sprintf("%s %s: %d", n_eg_mod$ancestry, n_eg_mod$modality, n_eg_mod$n), collapse = ", "))`;
+the combined cross-modality layer adds `r sum(n_eg)` eGenes. The figure
+shows the full q-value landscape: genes binned by best q-value per
+ancestry × modality.
 
 ```{r fig-xgenes-tiers, fig.width=9, fig.height=5.5}
 tiers <- grouped %>%
@@ -329,11 +402,23 @@ ggsave(file.path(params$fig_dir, "fig2a_xgenes_qvalue_tiers.png"), p2,
 
 ## Phenotypes per gene group (PANTRY Fig 2b adapted)
 
-No conditionally independent secondary signals were called in any ancestry ×
-modality layer (only the _TSPAN3_ group entered the stepwise scan, yielding
-its primary lead variant alone). The design-level view below
-shows how many phenotypes each gene contributes to its group (the
-multiple-testing unit).
+```{r stepwise-stats}
+# conditionally independent signals per group (rank 1 = primary lead)
+indep_summary <- if (nrow(independent) > 0 && "rank" %in% names(independent)) {
+  independent %>%
+    group_by(ancestry, modality, group_id = phenotype_id) %>%
+    summarise(n_signals = max(rank), .groups = "drop")
+} else {
+  tibble(ancestry = character(), modality = character(),
+         group_id = character(), n_signals = integer())
+}
+n_groups_stepwise <- nrow(indep_summary)
+n_secondary <- sum(indep_summary$n_signals > 1)
+```
+
+`r if (n_groups_stepwise == 0) "No group entered the stepwise scan this round (no FDR ≤ 5% entrant in any ancestry × modality layer), so no conditionally independent signals were called." else sprintf("Stepwise regression (cis.map_independent) ran on %d FDR-qualifying groups; %d group(s) carry a conditionally independent secondary signal (rank ≥ 2).", n_groups_stepwise, n_secondary)`
+The design-level view below shows how many phenotypes each gene contributes
+to its group (the multiple-testing unit).
 
 ```{r fig-group-size, fig.width=9, fig.height=4.5}
 gs <- bind_rows(
@@ -360,7 +445,9 @@ shows a flat box at 1 by design: one phenotype per gene.)
 ## Driver-variant position relative to the gene body (PANTRY Fig 2d style)
 
 ```{r fig-variant-position, fig.width=9, fig.height=5}
-gene_bodies <- read_tsv(params$gene_bodies_path, col_types = "cddiic",
+# regenerated from the normalized GTF by make_report_archive.sh:
+# gene_id, chr, start, end, strand (±1)
+gene_bodies <- read_tsv(params$gene_bodies_path, col_types = "cciii",
                         progress = FALSE)
 top200 <- bind_rows(
   grouped %>% filter(modality != "expression") %>%
@@ -389,9 +476,7 @@ ggsave(file.path(params$fig_dir, "fig2d_variant_position_top200.png"), p4,
        width = 10, height = 5, dpi = 150)
 ```
 
-With only two FDR-significant associations, these densities describe
-essentially the sub-threshold tail; any positional enrichment should be read
-as descriptive.
+`r if (n_fdr05 <= 10) "With few FDR-significant associations, these densities describe essentially the sub-threshold tail; any positional enrichment should be read as descriptive." else "Densities are computed over the top 200 genes per layer (FDR-significant plus sub-threshold); read as a positional summary of the strongest signals."`
 
 ## Expression vs non-expression near-miss genes (PANTRY Supp Fig 2 adapted)
 
@@ -412,8 +497,7 @@ write_tsv(n_nonexpr_better, file.path(params$table_dir, "expr_vs_nonexpr.tsv"))
 
 A majority of genes have a non-expression modality as their best (lowest)
 q-value — expected, since non-expression modalities test each gene against
-multiple phenotypes — but with a single gene-level FDR hit this remains a
-descriptive pattern, not evidence of non-expression-specific regulation.
+multiple phenotypes. `r if (nrow(egenes_grouped) <= 1) "With at most one gene-level FDR hit this remains a descriptive pattern, not evidence of non-expression-specific regulation." else "The FDR-significant eGene breakdown by modality (Results) shows whether this tail pattern converts into discoveries."`
 
 # Calibration and diagnostics
 
@@ -466,12 +550,11 @@ pi1_range <- range(pi1_tab$pi1, na.rm = TRUE)
 ```
 
 π1 estimates are `r round(100*pi1_range[1])`–`r round(100*pi1_range[2])`%
-across all cells — at most a trace signal fraction, concentrated in the
-layers carrying the FDR hits. Storey q-values remain close to BH on this
+across all cells`r if (pi1_range[2] <= 0.05) " — at most a trace signal fraction, concentrated in the highest-signal layers" else sprintf(", with the largest fractions in %s", paste(pi1_tab %>% slice_max(pi1, n = 2) %>% mutate(lbl = paste(ancestry, modality, layer)) %>% pull(lbl), collapse = " and "))`. Storey q-values remain close to BH on this
 data (max |q − BH| across the combined layer =
 `r signif(max(bh_check$max_abs_q_minus_BH), 2)`). Storey remains the correct
 convention — it can only help as signal grows (π0 < 1) — but it provides
-little lift at these signal fractions.
+little lift at low signal fractions.
 
 ## Power analysis
 
@@ -519,8 +602,10 @@ variance are detectable at genome-wide thresholds; the larger EAS stratum
 (n ≈ `r n_samp["EAS"]`) brings the floor to ≈ 10% — versus ≈ 6% at PANTRY's
 n = 445. For reference, PANTRY (n = 445) reported 6,798 eGenes and a 66%
 discovery gain from non-expression modalities; GTEx tissues at n ≈ 150
-typically report hundreds to ~2,000 eGenes. Our yield (two FDR hits, one of
-them gene-level) sits at the pessimistic end of that range.
+typically report hundreds to ~2,000 eGenes. Our yield this round
+(`r n_fdr05` FDR ≤ 5% associations; `r sum(n_eg)` combined-layer eGenes)
+sits `r if (sum(n_eg) < 100) "at the pessimistic end of" else "within"` that
+range.
 
 # Results
 
@@ -528,7 +613,10 @@ them gene-level) sits at the pessimistic end of that range.
 
 ```{r hit-table}
 hit_tab <- hits %>%
-  mutate(gene_symbol = sym(gene_id),
+  mutate(gene_symbol = symd(gene_id),
+         modality_display = if_else(layer == "combined",
+                                    paste0("combined (driver: ", driver_modality, ")"),
+                                    as.character(modality)),
          target = str_split_fixed(original_id, "__", 2)[, 2],
          # distance to the target itself: parse the coordinate when the
          # phenotype id encodes one (e.g. RNA-editing sites); otherwise use
@@ -538,82 +626,53 @@ hit_tab <- hits %>%
          variant_to_target_kb = round(abs(if_else(!is.na(target_pos),
                                                   variant_pos - target_pos,
                                                   start_distance)) / 1000)) %>%
-  select(ancestry, modality, gene_id, gene_symbol, phenotype_id, target,
-         variant_id, af, ma_count, slope, pval_nominal, pval_beta, qval,
-         variant_to_target_kb)
+  arrange(ancestry, layer, qval) %>%
+  select(ancestry, layer, modality_display, gene_id, gene_symbol, phenotype_id,
+         target, variant_id, af, ma_count, slope, pval_nominal, pval_beta,
+         qval, variant_to_target_kb)
 knitr::kable(hit_tab, digits = 3,
-             caption = "FDR ≤ 5% associations (ungrouped layer).")
+             caption = "All FDR ≤ 5% associations across layers (grouped/combined rows are gene-level; ungrouped rows are phenotype-level).")
 write_tsv(hit_tab, file.path(params$table_dir, "fdr_hits.tsv"))
-
-# each hit gene across the other layers / ancestry
-ncoa4_context <- bind_rows(
-  grouped %>% filter(gene_id == hit_gene) %>%
-    select(ancestry, modality, layer, variant_id, af, ma_count, pval_beta, qval),
-  combined %>% filter(gene_id == hit_gene) %>%
-    select(ancestry, modality = driver_modality, layer, variant_id, af, ma_count,
-           pval_beta, qval),
-  ungrouped %>% filter(gene_id == hit_gene, ancestry == "EAS") %>%
-    select(ancestry, modality, layer, variant_id, af, ma_count, pval_beta, qval))
-knitr::kable(ncoa4_context, digits = 3,
-             caption = "NCOA4 across layers and ancestries (grouped/combined rows are gene-level; ungrouped EAS row is that stratum's lead editing site for the gene).")
-
-tspan3_context <- bind_rows(
-  grouped %>% filter(gene_id == tspan3_gene) %>%
-    select(ancestry, modality, layer, variant_id, af, ma_count, pval_beta, qval),
-  combined %>% filter(gene_id == tspan3_gene) %>%
-    select(ancestry, modality = driver_modality, layer, variant_id, af, ma_count,
-           pval_beta, qval),
-  ungrouped %>% filter(gene_id == tspan3_gene, ancestry == "EUR",
-                       modality == "isoforms") %>%
-    select(ancestry, modality, layer, variant_id, af, ma_count, pval_beta, qval))
-knitr::kable(tspan3_context, digits = 3,
-             caption = "TSPAN3 across layers and ancestries (grouped/combined rows are gene-level; the ungrouped EUR row is that stratum's lead isoform for the gene).")
 ```
 
-### EAS isoform xQTL at _TSPAN3_
+`r if (nrow(hit_tab) == 0) "No association reaches FDR ≤ 5% this round — the near-miss landscape below is the prioritization view."`
 
-The stronger of the two associations is **gene-level**: _TSPAN3_ isoform
-ENST00000267970 in the EAS isoforms layer. The lead variant 15:77800023:G:A
-sits `r round(abs(hit_eas$start_distance)/1000)` kb from the isoform TSS
-(within the ±1 Mb cis window), is common in EAS (AF =
-`r round(hit_eas$af, 2)`, `r hit_eas$ma_count` minor-allele carriers — far
-above the count floor), and has a moderate effect (slope =
-`r round(hit_eas$slope, 2)` on the inverse-normalized isoform level; nominal
-p = `r signif(hit_eas$pval_nominal, 2)`; estimated r² ≈
-`r round(approx_r2(hit_eas$slope, hit_eas$af), 2)`). The association
-survives gene-level grouping within its modality (isoforms grouped q =
-`r signif(hit_eas$qval, 2)`), though not cross-modality grouping (combined
-q ≈ 0.15), and it is **EAS-specific** — the EUR isoforms layer is null for
-this gene (q ≈ 0.91), as is EAS gene expression (q ≈ 0.99). _TSPAN3_
-(tetraspanin 3) encodes a cell-surface tetraspanin-family organizer;
-tetraspanins are implicated in trophoblast fusion and invasion in other
-contexts, but placental evidence for this locus specifically is thin — we
-present it as a candidate requiring visual QC of isoform levels by genotype
-and replication.
+Per-gene context tables show each FDR-significant gene across all layers and
+both ancestries (grouped/combined rows are gene-level; ungrouped rows are
+phenotype-level leads). Read the pattern per gene: a hit confined to one
+layer and one ancestry is ancestry- and modality-specific; a hit that also
+passes in the combined layer survives the cross-modality grouping burden.
 
-### EUR RNA-editing xQTL at _NCOA4_
+```{r hit-context, results='asis'}
+hit_genes <- hits %>% distinct(ancestry, gene_id) %>% arrange(ancestry, gene_id)
+max_context <- 12
+ctx_genes <- hit_genes %>% slice_head(n = max_context)
+for (i in seq_len(nrow(ctx_genes))) {
+  g <- ctx_genes$gene_id[i]
+  a <- as.character(ctx_genes$ancestry[i])
+  ctx <- bind_rows(
+    grouped %>% filter(gene_id == g) %>%
+      select(ancestry, modality, layer, variant_id, af, ma_count, pval_beta, qval),
+    combined %>% filter(gene_id == g) %>%
+      select(ancestry, modality = driver_modality, layer, variant_id, af,
+             ma_count, pval_beta, qval),
+    ungrouped %>% filter(gene_id == g) %>%
+      select(ancestry, modality, layer, variant_id, af, ma_count, pval_beta, qval)
+  ) %>% arrange(ancestry, qval)
+  cat(sprintf("\n\n#### %s — %s\n\n", a, symd(g)))
+  print(knitr::kable(ctx, digits = 3,
+                     caption = sprintf("%s (%s) across layers and ancestries.",
+                                       symd(g), g)))
+}
+if (nrow(hit_genes) > max_context) {
+  cat(sprintf("\n\n*%d further hit genes omitted from per-gene context tables; see tables/fdr_hits.tsv.*\n",
+              nrow(hit_genes) - max_context))
+}
+```
 
-The second association is in the **ungrouped EUR RNA-editing
-layer**: editing site chr10:46,006,565, which lies inside the _NCOA4_ gene
-body (chr10:46,004,867–46,030,670). The lead variant 10:45322442:G:A sits
-`r hit_dist_kb` kb from the site, has AF = `r round(hit_eur$af, 2)` with
-`r hit_eur$ma_count` minor-allele carriers (comfortably above the count
-floor), and a large effect (slope = `r round(hit_eur$slope, 2)` on the
-inverse-normalized editing level; nominal p =
-`r signif(hit_eur$pval_nominal, 2)`; estimated r² ≈
-`r round(approx_r2(hit_eur$slope, hit_eur$af), 2)`). _NCOA4_ encodes the
-cargo receptor for ferritinophagy (selective autophagy of ferritin) —
-central to cellular iron handling, a core placental function.
-
-Two tempering facts: (i) the same gene's **gene-level** tests do not pass —
-EUR RNA-editing grouped q = 0.17 and combined q = 0.97 — so this is a
-single-phenotype association that does not survive the gene-level grouping
-burden; (ii) it is **EUR-specific** — the EAS stratum tests nearby editing
-sites in the same gene with different, common lead variants and is null
-(q ≈ 0.95–1.0), and the EUR lead variant (AF = 0.05 in EUR) is not the EAS
-lead for any _NCOA4_ site. With 14 carriers it clears the artifact floor,
-but visual QC of editing levels by genotype and replication in a larger EUR
-placental cohort are the required next steps before any functional claim.
+All hits clear the MAC ≥ 5 carrier floor (audit below); visual QC of
+phenotype levels by genotype and replication in larger placental cohorts
+remain the required next steps before functional claims.
 
 ## Near-miss landscape
 
@@ -627,25 +686,30 @@ near <- bind_rows(
   ungrouped %>% select(ancestry, modality, layer, gene_id, phenotype_id,
                        variant_id, af, ma_count, slope, pval_beta, qval)
 ) %>% filter(qval <= 0.25) %>%
-  mutate(gene_symbol = sym(gene_id),
+  mutate(gene_symbol = symd(gene_id),
          carrier_flag = if_else(ma_count < 5, "LOW CARRIER COUNT", "")) %>%
   arrange(qval) %>%
   select(ancestry, layer, modality, gene_id, gene_symbol, variant_id, af,
          ma_count, carrier_flag, slope, pval_beta, qval)
 knitr::kable(near, digits = 3,
-             caption = "All associations at q ≤ 0.25 across every layer. Rows flagged LOW CARRIER COUNT have < 5 minor-allele carriers in the mapping sample set and should be discounted (see caveat).")
+             caption = "All associations at q ≤ 0.25 across every layer. Rows flagged LOW CARRIER COUNT have < 5 minor-allele carriers in the mapping sample set and should be discounted (see audit).")
 write_tsv(near, file.path(params$table_dir, "near_miss.tsv"))
+
+near_nonhits <- near %>% filter(qval > 0.05) %>% slice_head(n = 3)
+near_nonhits_txt <- paste(
+  sprintf("%s (%s %s, %s layer, q = %s, %d carriers)", near_nonhits$gene_symbol,
+          near_nonhits$ancestry, near_nonhits$modality, near_nonhits$layer,
+          signif(near_nonhits$qval, 2), near_nonhits$ma_count),
+  collapse = "; ")
+n_low_carrier <- sum(near$carrier_flag != "")
 ```
 
-Beyond the two FDR hits, the q ≤ 0.25 tail is short (10 rows including the
-hits themselves) and — in EAS — not carrier-limited (minimum 6 carriers in
-any EAS test). The strongest non-hit associations are an EAS splicing xQTL
-at _RNF220_ (grouped q = 0.14, 8 carriers), the EAS combined-layer
-expression signal at _NAT14_ (q = 0.15, 184 carriers), and the gene-level
-_NCOA4_ RNA-editing signal in EUR (grouped q = 0.17). The EUR tail retains
-3–4-carrier tests (flagged in the table); those should be discounted.
+The q ≤ 0.25 tail contains `r nrow(near)` rows (including the
+`r nrow(hit_tab)` FDR-significant associations).
+`r if (nrow(near_nonhits) > 0) paste0("The strongest non-hit associations: ", near_nonhits_txt, ".")`
+`r if (n_low_carrier > 0) sprintf("%d row(s) retain < 5 minor-allele carriers (flagged); those should be discounted.", n_low_carrier) else "No row is carrier-limited (all ≥ 5 minor-allele carriers)."`
 
-## Carrier-count caveat: the MAC floor did not fully propagate
+## Carrier-count audit: MAC floor propagation
 
 ```{r carrier-check}
 mac_tab <- bind_rows(grouped, ungrouped, combined) %>%
@@ -657,24 +721,191 @@ knitr::kable(mac_tab,
 write_tsv(mac_tab, file.path(params$table_dir, "carrier_count_audit.tsv"))
 ```
 
-The MAC ≥ 5 floor was applied to the genotype intersection **before** PCA
-outlier exclusion; removing 2 EAS / 5 EUR outlier samples (plus small
-modality-specific sample differences) reduced carrier counts for the
-lowest-count variants. In EAS every tested pair retains ≥ 6 carriers; in EUR
-a fraction of tests retain 3–4 carriers in the mapping sample set (audit
-table). Consequences are contained — no FDR-significant result is
-carrier-limited, and the flagged tests would be removed by a post-hoc filter
-— but hit lists should be filtered to ma_count ≥ 5 (or report carrier
-counts alongside), and re-applying the count floor after outlier exclusion
-would remove them at the source.
+The MAC ≥ 5 floor is applied at the genotype intersection in module 23
+(before outlier exclusion). `r if (all(mac_tab$n_lt5 == 0)) sprintf("This round the floor propagated cleanly: every tested pair in every layer retains ≥ %d minor-allele carriers in EAS and ≥ %d in EUR — no post-hoc carrier filtering is needed.", min(mac_tab$min_carriers[mac_tab$ancestry == "EAS"]), min(mac_tab$min_carriers[mac_tab$ancestry == "EUR"])) else "A fraction of tests retain < 5 carriers in the mapping sample sets (audit table) because the floor predates outlier exclusion and modality-specific sample attrition. No FDR-significant result should be carrier-limited; hit lists should be post-filtered to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
 
-## Stepwise regression: no secondary independent signals
+## Stepwise regression: independent signals
 
-No conditionally independent **secondary** signals were called in any
-ancestry × modality layer. The single FDR-qualifying group (EAS isoforms,
-_TSPAN3_) entered the stepwise scan and yielded only its primary lead
-variant (no group with >1 independent signal); every other cell had no
-FDR ≤ 5% entrant, so its stepwise output is empty by design.
+`r if (n_groups_stepwise == 0) "No group reached FDR ≤ 5% in any ancestry × modality layer, so no cell produced a stepwise entrant and all independent-signal outputs are empty by design." else sprintf("Of the %d FDR-qualifying groups entering the stepwise scan, **%d carry a conditionally independent secondary signal** (rank ≥ 2); the remainder yielded their primary lead variant alone.", n_groups_stepwise, n_secondary)`
+
+```{r stepwise-table}
+if (n_secondary > 0) {
+  sec <- independent %>% filter(rank >= 2) %>%
+    mutate(gene_symbol = symd(strip_version(str_split_fixed(phenotype_id, "__", 2)[, 1]))) %>%
+    select(ancestry, modality, phenotype_id, gene_symbol, variant_id, rank,
+           slope, pval_nominal, qval)
+  knitr::kable(sec, digits = 3,
+               caption = "Conditionally independent secondary signals (rank ≥ 2).")
+  write_tsv(sec, file.path(params$table_dir, "independent_secondary.tsv"))
+}
+```
+
+# eGene characterization
+
+## eGene catalog (FDR ≤ 5%)
+
+```{r egene-catalog}
+catalog <- egenes_combined %>%
+  mutate(gene_symbol = symd(gene_id)) %>%
+  select(ancestry, gene_id, gene_symbol, driver_modality,
+         driver_phenotype = phenotype_id, variant_id, af, ma_count, slope,
+         pval_beta, qval, group_size) %>%
+  arrange(ancestry, qval)
+write_tsv(catalog, file.path(params$table_dir, "egene_catalog_combined.tsv"))
+
+catalog_mod <- egenes_grouped %>%
+  mutate(gene_symbol = symd(gene_id)) %>%
+  select(ancestry, modality, gene_id, gene_symbol,
+         driver_phenotype = phenotype_id, variant_id, af, ma_count, slope,
+         pval_beta, qval, group_size) %>%
+  arrange(ancestry, modality, qval)
+write_tsv(catalog_mod, file.path(params$table_dir, "egene_catalog_by_modality.tsv"))
+
+if (nrow(catalog) > 0) {
+  knitr::kable(catalog %>% group_by(ancestry) %>% slice_head(n = 20) %>% ungroup(),
+               digits = 3,
+               caption = "Combined-layer eGenes (top 20 per ancestry by q-value; full catalog in tables/egene_catalog_combined.tsv).")
+}
+```
+
+The primary catalog is the **combined cross-modality layer**
+(`r n_eg["EAS"]` EAS / `r n_eg["EUR"]` EUR eGenes; full table in
+`tables/egene_catalog_combined.tsv`); the per-modality grouped breakdown is
+in `tables/egene_catalog_by_modality.tsv`. The driver modality labels which
+modality carries the gene's strongest association.
+
+## eGene overlap across modalities and ancestries
+
+```{r egene-overlap, fig.width=9, fig.height=5}
+# modality overlap of grouped eGenes, per ancestry (UpSet)
+for (a in c("EAS", "EUR")) {
+  sets <- split(egenes_grouped$gene_id[egenes_grouped$ancestry == a],
+                egenes_grouped$modality[egenes_grouped$ancestry == a])
+  sets <- sets[lengths(sets) > 0]
+  if (length(sets) >= 2) {
+    m <- ComplexHeatmap::make_comb_mat(sets)
+    m <- m[ComplexHeatmap::comb_size(m) > 0]
+    up <- ComplexHeatmap::UpSet(m, set_order = names(sets),
+                                comb_order = order(-ComplexHeatmap::comb_size(m)))
+    print(up)
+    png(file.path(params$fig_dir, sprintf("fig_egene_upset_%s.png", tolower(a))),
+        width = 9, height = 5, units = "in", res = 150)
+    print(up)
+    dev.off()
+  } else {
+    cat(sprintf("%s: %d modality set(s) with eGenes — UpSet needs ≥ 2; skipped.\n",
+                a, length(sets)))
+  }
+}
+
+# ancestry overlap of combined-layer eGenes
+eg_eas <- unique(egenes_combined$gene_id[egenes_combined$ancestry == "EAS"])
+eg_eur <- unique(egenes_combined$gene_id[egenes_combined$ancestry == "EUR"])
+shared_eg <- intersect(eg_eas, eg_eur)
+tested_both <- intersect(combined$gene_id[combined$ancestry == "EAS"],
+                         combined$gene_id[combined$ancestry == "EUR"])
+overlap_tab <- tibble(
+  set = c("EAS only", "shared", "EUR only"),
+  n = c(length(setdiff(eg_eas, eg_eur)), length(shared_eg),
+        length(setdiff(eg_eur, eg_eas))))
+# is the shared fraction more than chance given the two hit rates?
+fisher_overlap <- if (length(tested_both) > 0 && (length(eg_eas) + length(eg_eur)) > 0) {
+  fisher.test(matrix(c(length(shared_eg),
+                       length(eg_eas) - length(shared_eg),
+                       length(eg_eur) - length(shared_eg),
+                       length(tested_both) - length(eg_eas) - length(eg_eur) + length(shared_eg)),
+                     nrow = 2))[c("p.value", "estimate")]
+} else NULL
+knitr::kable(overlap_tab,
+             caption = sprintf("Combined-layer eGene overlap between ancestries (genes tested in both: %s).",
+                               format(length(tested_both), big.mark = ",")))
+write_tsv(overlap_tab, file.path(params$table_dir, "egene_ancestry_overlap.tsv"))
+```
+
+`r if (!is.null(fisher_overlap)) sprintf("Of the %d EAS and %d EUR combined-layer eGenes, **%d are shared** (Fisher exact vs the tested-in-both universe: odds ratio %.2f, p = %s) — shared eGenes are %s than expected under independence.", length(eg_eas), length(eg_eur), length(shared_eg), fisher_overlap$estimate, signif(fisher_overlap$p.value, 2), if (fisher_overlap$estimate > 1) "more frequent" else "less frequent")`
+
+## Functional enrichment (g:Profiler)
+
+```{r enrichment, fig.width=9, fig.height=5.5}
+# Over-representation analysis on the combined-layer eGene sets, g:Profiler
+# gost with g:SCS correction; background = all genes tested in the
+# corresponding stratum (devBrain custom-background convention).
+enrich_results <- list()
+if (requireNamespace("gprofiler2", quietly = TRUE) && nrow(egenes_combined) > 0) {
+  bg_eas <- unique(combined$gene_id[combined$ancestry == "EAS"])
+  bg_eur <- unique(combined$gene_id[combined$ancestry == "EUR"])
+  enrich_sets <- list(
+    "EAS combined eGenes"  = list(genes = eg_eas, bg = bg_eas),
+    "EUR combined eGenes"  = list(genes = eg_eur, bg = bg_eur),
+    "shared eGenes"        = list(genes = shared_eg, bg = tested_both),
+    "EAS-specific eGenes"  = list(genes = setdiff(eg_eas, eg_eur), bg = bg_eas),
+    "EUR-specific eGenes"  = list(genes = setdiff(eg_eur, eg_eas), bg = bg_eur)
+  )
+  for (nm in names(enrich_sets)) {
+    es <- enrich_sets[[nm]]
+    if (length(es$genes) < 5) {
+      message(sprintf("  enrichment: '%s' has %d genes (< 5) — skipped", nm,
+                      length(es$genes)))
+      next
+    }
+    res <- tryCatch(
+      gprofiler2::gost(es$genes, organism = "hsapiens", ordered_query = FALSE,
+                       sources = c("GO:BP", "GO:MF", "GO:CC", "KEGG", "REAC"),
+                       custom_bg = es$bg, correction_method = "g_SCS",
+                       significant = TRUE),
+      error = function(e) { message("  gost failed for '", nm, "': ", e$message); NULL })
+    if (is.null(res) || is.null(res$result) || nrow(res$result) == 0) next
+    enrich_results[[nm]] <- res$result %>%
+      mutate(query_set = nm, n_query = length(es$genes)) %>%
+      select(query_set, source, term_id, term_name, p_value, term_size,
+             query_size, intersection_size, n_query, any_of("intersection"))
+    write_tsv(enrich_results[[nm]],
+              file.path(params$table_dir,
+                        paste0("enrichment_", make.names(nm), ".tsv")))
+  }
+} else if (!requireNamespace("gprofiler2", quietly = TRUE)) {
+  cat("gprofiler2 not installed — enrichment skipped (install.packages('gprofiler2')).\n")
+}
+
+if (length(enrich_results) > 0) {
+  enrich_all <- bind_rows(enrich_results)
+  write_tsv(enrich_all, file.path(params$table_dir, "enrichment_all.tsv"))
+  enrich_top <- enrich_all %>% group_by(query_set) %>%
+    slice_min(p_value, n = 8, with_ties = FALSE) %>% ungroup() %>%
+    mutate(term_label = str_wrap(term_name, 35),
+           term_label = forcats::fct_reorder(term_label, -log10(p_value)))
+  p_enrich <- ggplot(enrich_top,
+                     aes(-log10(p_value), term_label, color = source,
+                         size = intersection_size)) +
+    geom_point() +
+    facet_wrap(~query_set, scales = "free_y", ncol = 1) +
+    scale_color_brewer(palette = "Set2", name = NULL) +
+    scale_size_continuous(name = "genes", range = c(1.5, 5)) +
+    guides(size = guide_legend(title.position = "top"),
+           color = guide_legend(title.position = "top")) +
+    labs(x = "-log10(g:SCS-adjusted p)", y = NULL) +
+    theme_report(base_size = 9) +
+    theme(legend.position = "top")
+  print(p_enrich)
+  ggsave(file.path(params$fig_dir, "fig_enrichment_dotplot.png"), p_enrich,
+         width = 9, height = max(4, 2.6 * length(enrich_results)), dpi = 150)
+  knitr::kable(enrich_all %>% group_by(query_set) %>%
+                 slice_min(p_value, n = 5, with_ties = FALSE) %>%
+                 select(query_set, source, term_id, term_name, p_value,
+                        intersection_size),
+               digits = 3,
+               caption = "Top 5 enriched terms per eGene set (full tables in tables/enrichment_*.tsv).")
+} else {
+  cat("No enrichment results (all sets < 5 genes, no significant terms, or g:Profiler unreachable).\n")
+}
+```
+
+Enrichment is over-representation analysis on the FDR ≤ 5% combined-layer
+eGene sets (per ancestry, plus shared and ancestry-specific sets) against
+the **tested-gene universe of the same stratum** — not the whole genome —
+following the devBrain xQTL convention; g:SCS is g:Profiler's native
+multiple-testing correction. Sets with fewer than 5 genes are skipped (ORA
+is not meaningful). Full term tables are in `tables/enrichment_*.tsv`.
 
 # Cross-ancestry analysis
 
@@ -725,19 +956,16 @@ knitr::kable(conc_all, digits = 3,
 write_tsv(conc_all, file.path(params$table_dir, "cross_ancestry_concordance.tsv"))
 ```
 
-Rank concordance is ≈ 0 in every layer (top-100 overlap at or below chance).
-The two ancestries' sub-threshold tails do **not** point at the same genes —
-consistent with the near-misses being noise rather than shared weak signal,
-and arguing against combining the strata for discovery at these sample
-sizes.
+Rank concordance ranges from `r round(min(conc_all$rank_spearman, na.rm = TRUE), 3)` to
+`r round(max(conc_all$rank_spearman, na.rm = TRUE), 3)` across layers
+(top-100 overlap at or below chance).
+`r if (max(abs(conc_all$rank_spearman), na.rm = TRUE) < 0.1) "The two ancestries' sub-threshold tails do **not** point at the same genes — consistent with the near-misses being noise rather than shared weak signal, and arguing against combining the strata for discovery at these sample sizes." else "Layers with non-trivial rank concordance indicate shared sub-threshold signal; see the table."`
 
 # Transcript-level driver resolution
 
 The combined layer labels each gene-group by its **driver phenotype** (the
 phenotype with the best nominal association in the group), and the ungrouped
-layer provides per-phenotype lead variants. With only two FDR-significant
-associations, this machinery is applied mostly to the top-ranked near-misses
-for prioritization.
+layer provides per-phenotype lead variants. `r if (n_fdr05 <= 10) "With few FDR-significant associations, this machinery is applied mostly to the top-ranked near-misses for prioritization." else "Applied to the FDR-significant catalog, this resolves which modality and transcript carries each eGene signal."`
 
 ## Driver-modality composition of top-ranked genes
 
@@ -770,12 +998,13 @@ share_of <- function(anc, mod) {
 }
 ```
 
-Splicing drives the largest share of top-ranked genes in both ancestries
-(`r share_of("EAS", "splicing")`% of the EAS top 50;
-`r share_of("EUR", "splicing")`% of the EUR top 50) — the same qualitative
-ordering PANTRY reported at n = 445. With only two FDR-significant
-associations, this is a descriptive property of the sub-threshold tail, not
-a discovery pattern.
+```{r driver-top}
+top_driver <- shares %>% group_by(ancestry) %>% slice_max(frac, n = 1, with_ties = FALSE)
+```
+
+`r sprintf("%s drives the largest share of top-ranked genes in %s (%d%% of the top 50)", top_driver$driver_modality[top_driver$ancestry == "EAS"], "EAS", share_of("EAS", as.character(top_driver$driver_modality[top_driver$ancestry == "EAS"])))`;
+`r sprintf("%s does so in %s (%d%% of the top 50)", top_driver$driver_modality[top_driver$ancestry == "EUR"], "EUR", share_of("EUR", as.character(top_driver$driver_modality[top_driver$ancestry == "EUR"])))`.
+`r if (n_fdr05 <= 10) "With few FDR-significant associations, this is a descriptive property of the sub-threshold tail, not a discovery pattern." else "The same composition computed over FDR-significant eGenes only is in the eGene catalog table above."`
 
 ## Top-ranked genes with driver phenotypes
 
@@ -783,7 +1012,7 @@ a discovery pattern.
 top_combined <- combined %>%
   group_by(ancestry) %>% arrange(qval, pval_beta, .by_group = TRUE) %>%
   slice_head(n = 25) %>% ungroup() %>%
-  mutate(gene_symbol = sym(gene_id),
+  mutate(gene_symbol = symd(gene_id),
          carrier_flag = if_else(ma_count < 5, "LOW CARRIER COUNT", "")) %>%
   select(ancestry, gene_id, gene_symbol, driver_modality, driver_phenotype = phenotype_id,
          variant_id, af, ma_count, carrier_flag, slope, pval_nominal, pval_beta,
@@ -793,7 +1022,7 @@ write_tsv(top_combined, file.path(params$table_dir, "top_combined_hits.tsv"))
 top_grouped <- grouped %>%
   group_by(ancestry, modality) %>% arrange(qval, pval_beta, .by_group = TRUE) %>%
   slice_head(n = 10) %>% ungroup() %>%
-  mutate(gene_symbol = sym(gene_id),
+  mutate(gene_symbol = symd(gene_id),
          carrier_flag = if_else(ma_count < 5, "LOW CARRIER COUNT", "")) %>%
   select(ancestry, modality, gene_id, gene_symbol, driver_phenotype = phenotype_id,
          variant_id, af, ma_count, carrier_flag, slope, pval_beta, qval, group_size)
@@ -802,7 +1031,7 @@ write_tsv(top_grouped, file.path(params$table_dir, "top_grouped_hits.tsv"))
 top_ungrouped <- ungrouped %>%
   group_by(ancestry, modality) %>% arrange(qval, pval_beta, .by_group = TRUE) %>%
   slice_head(n = 10) %>% ungroup() %>%
-  mutate(gene_symbol = sym(gene_id),
+  mutate(gene_symbol = symd(gene_id),
          carrier_flag = if_else(ma_count < 5, "LOW CARRIER COUNT", "")) %>%
   select(ancestry, modality, gene_id, gene_symbol, phenotype_id,
          variant_id, af, ma_count, carrier_flag, slope, pval_beta, qval)
@@ -810,10 +1039,10 @@ write_tsv(top_ungrouped, file.path(params$table_dir, "top_ungrouped_hits.tsv"))
 
 knitr::kable(top_combined %>% filter(ancestry == "EAS") %>% head(15) %>%
                select(-ancestry), digits = 3,
-             caption = "EAS — top 15 combined-layer genes (hypothesis-generating; none FDR-significant).")
+             caption = "EAS — top 15 combined-layer genes (FDR-significant rows are cataloged above; sub-threshold rows are hypothesis-generating).")
 knitr::kable(top_combined %>% filter(ancestry == "EUR") %>% head(15) %>%
                select(-ancestry), digits = 3,
-             caption = "EUR — top 15 combined-layer genes (hypothesis-generating; none FDR-significant).")
+             caption = "EUR — top 15 combined-layer genes (FDR-significant rows are cataloged above; sub-threshold rows are hypothesis-generating).")
 ```
 
 ## Within-gene driver breakdown for the top combined genes
@@ -830,7 +1059,7 @@ breakdown <- top10 %>%
              by = c("ancestry", "gene_id")) %>%
   group_by(ancestry, gene_id) %>% arrange(pval_beta, .by_group = TRUE) %>%
   slice_head(n = 5) %>% ungroup() %>%
-  mutate(gene_symbol = sym(gene_id)) %>%
+  mutate(gene_symbol = symd(gene_id)) %>%
   select(ancestry, gene_id, gene_symbol, modality, phenotype_id, variant_id,
          af, slope, pval_beta, qval)
 write_tsv(breakdown, file.path(params$table_dir, "driver_breakdown_top10.tsv"))
@@ -841,28 +1070,44 @@ knitr::kable(breakdown %>% filter(ancestry == "EAS") %>%
 
 # Biological interpretation
 
-**The primary inferential statement is a near-null discovery landscape at
-genome-wide FDR, with two exceptions.** At n ≈ `r n_samp["EAS"]` (EAS) and
-n ≈ `r n_samp["EUR"]` (EUR), with MAF ≥ 0.01 (+ MAC ≥ 5) and genome-wide
-permutation calibration, two associations reach FDR ≤ 5%: the EAS isoform
-xQTL at _TSPAN3_ and the EUR RNA-editing xQTL at _NCOA4_ described above.
-The _TSPAN3_ signal is the stronger of the two — it survives gene-level
-grouping within the isoforms layer and rests on 202 carriers — while the
-_NCOA4_ signal is phenotype-level only. Both have estimated effects
-(r² ≈ 0.13 and 0.30 respectively) in the class our power floor permits, and
-both are ancestry-specific. We present both as candidates requiring visual
-QC and replication, not established discoveries.
+```{r interp-numbers}
+mod_leader <- if (nrow(n_eg_mod) > 0) {
+  n_eg_mod %>% group_by(ancestry) %>% mutate(total = sum(n)) %>%
+    slice_max(n, n = 1, with_ties = FALSE) %>% ungroup()
+} else NULL
+enrich_highlight <- if (exists("enrich_results") && length(enrich_results) > 0) {
+  bind_rows(enrich_results) %>% group_by(query_set) %>%
+    slice_min(p_value, n = 1, with_ties = FALSE) %>% ungroup() %>%
+    summarise(hl = paste(sprintf("%s — %s (%s, g:SCS p = %s)", query_set,
+                                 term_name, source, signif(p_value, 2)),
+                         collapse = "; ")) %>% pull(hl)
+} else NA_character_
+```
 
-Beyond that, the landscape offers two **hypothesis-generating** observations:
+**The discovery landscape this round: `r n_fdr05` FDR ≤ 5% associations —
+`r n_eg["EAS"]` EAS and `r n_eg["EUR"]` EUR eGenes in the primary
+combined-layer catalog** (n ≈ `r n_samp["EAS"]`/`r n_samp["EUR"]`, MAF ≥
+0.01 + MAC ≥ 5, genome-wide permutation calibration). Strongest per
+ancestry:
+`r paste(sprintf("%s: %s", top_by_anc$ancestry, apply(top_by_anc, 1, function(r) sprintf("%s (%s, %s layer, q = %s, r² ≈ %.2f)", symd(r[["gene_id"]]), r[["modality"]], r[["layer"]], signif(as.numeric(r[["qval"]]), 2), approx_r2(as.numeric(r[["slope"]]), as.numeric(r[["af"]]))))), collapse = "; ")`.
+`r if (!is.null(hit_r2)) sprintf("Hit effect sizes (r² %.2f–%.2f) sit in the class the power floor permits.", hit_r2[1], hit_r2[2])`
+All hits should be treated as candidates: visual QC of phenotype levels by
+genotype and replication in larger placental cohorts come before functional
+claims.
 
-1. **Splicing dominates the top tail in both ancestries**, echoing PANTRY's
-   central finding that splicing modalities carry the largest share of
-   non-expression regulatory signal. Isoform/junction regulation remains the
-   modality most likely to yield placental discoveries as sample size grows
-   — and the study's only gene-level FDR hit is indeed an isoform QTL.
-2. **Top-ranked genes** (tables above) are prioritization hints only; the
-   EUR top tail is contaminated by 3–4-carrier variants (flagged),
-   reinforcing that sub-threshold rankings at our n should not be over-read.
+Three **characterization** observations:
+
+1. **Modality composition.** `r if (!is.null(mod_leader)) paste(sprintf("%s leads the %s grouped-eGene breakdown (%d of %d)", mod_leader$modality, mod_leader$ancestry, mod_leader$n, mod_leader$total), collapse = "; ") else "No grouped-layer eGenes this round."`
+   PANTRY's central finding was that non-expression modalities carry the
+   largest share of regulatory signal; the driver-modality composition of
+   the catalog (above) tests whether that ordering holds in placenta.
+2. **Ancestry sharing.** `r if (!is.null(fisher_overlap)) sprintf("%d of %d EAS and %d EUR combined-layer eGenes are shared (Fisher OR %.2f, p = %s vs the tested-in-both universe).", length(shared_eg), length(eg_eas), length(eg_eur), fisher_overlap$estimate, signif(fisher_overlap$p.value, 2)) else "Ancestry overlap was not computed (empty eGene set)."`
+   Shared eGenes are the cross-ancestry replication signal; specific sets
+   are candidates for ancestry-biased regulation.
+3. **Functional enrichment.** `r if (!is.na(enrich_highlight)) paste0("Top g:Profiler term per set: ", enrich_highlight, ". Full tables in tables/enrichment_*.tsv.") else "No significant enrichment terms (or sets too small for ORA) — see the enrichment section."`
+
+Sub-threshold top-ranked genes (tables above) remain prioritization hints
+only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should be discounted outright" else ""`.
 
 # Limitations and next steps
 
@@ -871,24 +1116,22 @@ Beyond that, the landscape offers two **hypothesis-generating** observations:
    Doubling n would roughly halve the detectable r²; matching PANTRY's
    n = 445 would bring the floor to ≈ 0.06. Adding the remaining cohorts and
    the AFR/AMR/SAS strata is the highest-value next step.
-2. **Carrier-count propagation.** The MAC ≥ 5 floor predates outlier
-   exclusion, so 3–4-carrier tests persist in the EUR mapping outputs (audit
-   table above). No reported result depends on them; hit lists should
-   post-filter to ma_count ≥ 5, and re-applying the floor after outlier
-   exclusion would remove them at the source.
+2. **Carrier-count propagation.** `r if (all(mac_tab$n_lt5 == 0)) "Resolved this round: the MAC ≥ 5 floor propagated cleanly to every mapping output (audit table above)." else "The MAC ≥ 5 floor predates outlier exclusion, so low-carrier tests persist in some mapping outputs (audit table above). No reported result depends on them; hit lists should post-filter to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
 3. **Ancestry asymmetry.** EUR tests more phenotypes than EAS in every
-   modality (1.3–5.6×, modality-dependent; ancestry-specific filtering), so
-   cross-ancestry comparisons are restricted to genes tested in both.
+   modality (ancestry-specific filtering), so cross-ancestry comparisons are
+   restricted to genes tested in both.
 4. **No pooled cross-ancestry inference** was performed. If combined
    discovery is wanted later, Fisher/Stouffer or an inverse-variance slope
    meta-analysis are the clean options.
-5. **No secondary stepwise signals** — the only FDR-qualifying group (EAS
-   isoforms, _TSPAN3_) yielded its primary lead variant alone; no
-   conditionally independent secondary signal was called in any layer.
-6. **Replication path**: the _TSPAN3_ isoform xQTL and the _NCOA4_ editing
-   xQTL are the priorities for lookup in larger placental resources or a
-   future meta-analysis; visual QC of phenotype levels by genotype is the
-   immediate sanity check for both.
+5. **Stepwise secondary signals**: `r if (n_secondary == 0) "none called in any layer this round." else sprintf("%d groups carry a conditionally independent secondary signal (table above).", n_secondary)`
+6. **Fine-mapping and colocalization are out of scope this round.** The
+   natural follow-ups on the FDR-significant catalog are SuSiE fine-mapping
+   per eGene locus, GWAS colocalization (coloc/eCAVIAR) against placental
+   and pregnancy-outcome GWAS, and locus-zoom visual QC of each hit
+   (nominal-scan extraction + LD from the ancestry-matched genotype panel).
+7. **Replication path**: the FDR-significant hits are the priorities for
+   lookup in larger placental resources or a future meta-analysis; visual QC
+   of phenotype levels by genotype is the immediate sanity check for each.
 
 # Reproducibility
 
@@ -902,7 +1145,6 @@ Beyond that, the landscape offers two **hypothesis-generating** observations:
   `compute_qvalues.R`; genotype pooling in `01_genotype_imputation/`).
 - Report code: `report_placenta_xqtl.Rmd` + `xqtl_report_functions.R`;
   figures in `figures/`, tables in `tables/`.
-- Gene symbols: Ensembl REST lookup (current release at render date);
-  NCOA4 (ENSG00000266412), REV3L (ENSG00000009413), TSPAN3 (ENSG00000140391),
-  RNF220 (ENSG00000187147), and NAT14 (ENSG00000090971) verified against
-  Ensembl/GENCODE v45.
+- Gene symbols: `gene_map.tsv` regenerated in full from the normalized GTF
+  (config `normalized_gtf`) by `make_report_archive.sh` at archive time —
+  covers every tested gene, version-stripped IDs.
