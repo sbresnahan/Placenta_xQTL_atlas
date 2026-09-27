@@ -89,8 +89,8 @@ EXPR_QU_DIR="${INTERM_DIR}/expression_qu"
 mkdir -p "$UNNORM_DIR" "$OUTPUT_DIR"
 
 # Singularity R invocation (infra — hardcoded) for the QU step.
-SING_R="singularity exec --bind /rsrch5 --bind /rsrch9 /risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif Rscript"
-export R_LIBS_USER="/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+SING_R="singularity exec --cleanenv --bind /rsrch5 --bind /rsrch9 --env R_LIBS_USER=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1 /risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif Rscript"
+# R_LIBS_USER now passed via --env in SING_R (--cleanenv)
 
 echo "[$(date)] Aggregating expression + isoforms (cohort $COHORT)"
 
