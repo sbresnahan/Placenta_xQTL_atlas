@@ -327,6 +327,12 @@ for mod in EXPR_MODS:
         if cols is None:
             warn(f"assembled BED not found: {coh}/{mod}.bed.gz")
         bed_cols[(coh, mod)] = set(cols or [])
+# Union across cohorts: a sample appears in exactly one cohort's BED, and the
+# pooled metadata's cohort column uses study names (not config keys), so
+# per-cohort lookup via the sample's cohort is unreliable.
+bed_union = {m: set().union(*(cols for (c, mm), cols in bed_cols.items()
+                              if mm == m))
+             for m in EXPR_MODS}
 
 # ---- ancestry map ------------------------------------------------------------
 ancestry_of = {}
@@ -348,7 +354,7 @@ if rows:
                    None)
     for r in rows:
         rid = r.get("rnaseq_id")
-        if rid:
+        if rid and rid not in ("rnaseq_id", "sample_id"):
             array_of[rid] = r.get("array_id", "")
             if coh_col:
                 meta_cohort_of[rid] = r.get(coh_col, "")
@@ -360,6 +366,7 @@ meta_rnaseq = {}    # ANC -> set of rnaseq_id (post-intersection, post-outlier)
 meta_array = {}     # ANC -> {rnaseq_id: array_id}
 cov_cols = {}       # ANC -> set of array_id (final mapping set)
 combat_cols = {}    # (ANC, mod) -> set of array_id
+combat_imputed = [] # modalities whose combat stage was carried forward
 qtl_cols = {}       # (ANC, mod) -> set of array_id
 for anc in ancestries:
     mrows = read_table(os.path.join(qtl_dir, f"{anc}_metadata.tsv"))
@@ -381,7 +388,13 @@ for anc in ancestries:
                 combat_cols[(anc, mod)] = set(tsv_columns(p, skip) or [])
                 break
         else:
-            warn(f"combat BED not found: {anc}_{mod}")
+            # Combat BED missing (e.g. intermediates cleaned): carry forward
+            # the previous stage — assume every post-intersection/post-outlier
+            # sample was retained through ComBat (stated in the report).
+            warn(f"combat BED not found: {anc}_{mod} — carrying forward "
+                 f"metadata-stage membership")
+            combat_cols[(anc, mod)] = set(meta_array.get(anc, {}).values())
+            combat_imputed.append(f"{anc}_{mod}")
         for pat, skip in ((f"{anc}_{mod}_harmonized.bed", 4),
                           (f"{anc}_{mod}.bed.gz", 4)):
             p = os.path.join(qtl_dir, pat)
@@ -436,8 +449,7 @@ for sid in all_ids:
         "has_qu_quant_sf": int(qu.get(sid, False)),
     }
     for m in EXPR_MODS:
-        row[f"in_{m}_bed"] = int(sid in bed_cols.get((coh, m), set())
-                                 if coh else False)
+        row[f"in_{m}_bed"] = int(sid in bed_union[m])
     for a in ancestries:
         row[f"in_metadata_{a}"] = int(sid in meta_rnaseq.get(a, set()))
         row[f"in_covariates_{a}"] = int(
@@ -500,6 +512,10 @@ with open(summary_path, "w", newline="") as fh:
     w.writerows(summary)
 
 print(f"  attrition log: {len(matrix)} samples x {len(stage_cols)} stages")
+if combat_imputed:
+    print(f"  NOTE: combat stage carried forward from the post-outlier "
+          f"metadata stage for {len(combat_imputed)} ancestry x modality "
+          f"cell(s) (combat BEDs not on disk): {', '.join(combat_imputed)}")
 for row in summary:
     if row["stratum_type"] == "total":
         print(f"    {row['stage']:<38} {row['n_present']}/{row['n_total']}")
