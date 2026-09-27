@@ -20,6 +20,9 @@
 #   RESULTS_DIR  — default: ${OUTPUT_BASE}/qtl_results
 #   PC_DIR       — default: ${OUTPUT_BASE}/genotype_pcs
 #   ANCESTRIES   — space-separated labels (default: "EAS EUR")
+#   ANCESTRY_MAP — default: ${OUTPUT_BASE%/*}/pooled/pooled_sample_ancestry_RNAseq.tsv
+#   METADATA_TSV — default: ${OUTPUT_BASE%/*}/pooled/placenta_QTL_cohort_metadata.tsv
+#   COMBAT_DIR   — default: ${OUTPUT_BASE}/combat_modalities/combat_int
 #   OUT          — output tarball path (default: ./placenta_xqtl_report_inputs_<date>.tar.gz)
 #   KEEP_STAGING — 1 to keep the staging directory after archiving (default: 0)
 #
@@ -184,6 +187,327 @@ with open(bodies_out, "w") as out:
 
 print(f"  gene_map.tsv / gene_bodies.tsv: {len(seen)} genes from {gtf_path}")
 PYEOF
+fi
+
+# ---- 3.5 Sample-attrition log (raw FASTQ -> QTL mapping) -------------------
+# Per-sample matrix + stage-level summary covering every stage where samples
+# can drop: raw FASTQ staging, Salmon quant, QU correction, assembled BEDs,
+# ancestry assignment, genotype intersection + outlier exclusion
+# ({ANC}_metadata.tsv from scripts 23+24), ComBat (per modality), QTL inputs
+# (per modality), and the final covariate mapping set. All inputs are
+# non-core: gaps produce warnings and zero-filled stage columns, never a
+# failed archive.
+ATTRITION_DIR="$STAGING/data/qc/attrition"
+mkdir -p "$ATTRITION_DIR"
+COMBAT_DIR="${COMBAT_DIR:-${OUTPUT_BASE}/combat_modalities/combat_int}"
+ANCESTRY_MAP="${ANCESTRY_MAP:-${OUTPUT_BASE%/*}/pooled/pooled_sample_ancestry_RNAseq.tsv}"
+METADATA_TSV="${METADATA_TSV:-${OUTPUT_BASE%/*}/pooled/placenta_QTL_cohort_metadata.tsv}"
+
+echo "  ANCESTRY_MAP: $ANCESTRY_MAP"
+echo "  METADATA_TSV: $METADATA_TSV"
+echo "  COMBAT_DIR:   $COMBAT_DIR"
+
+if ! python3 - "$ATTRITION_DIR" "$CONFIG" "$OUTPUT_BASE" "$QTL_DIR" \
+         "$COMBAT_DIR" "$ANCESTRY_MAP" "$METADATA_TSV" "$ANCESTRIES" <<'PYEOF'
+import csv
+import gzip
+import os
+import re
+import sys
+attrition_dir, config_path, output_base, qtl_dir, combat_dir, \
+    ancestry_map, metadata_tsv, ancestries = sys.argv[1:9]
+ancestries = ancestries.split()
+MODS = ["expression", "isoforms", "isoform_expression", "splicing",
+        "intron_retention", "alt_TSS", "alt_polyA", "RNA_editing", "stability"]
+EXPR_MODS = ["expression", "isoforms", "isoform_expression"]
+
+
+def warn(msg):
+    print(f"  ATTRITION WARN: {msg}", file=sys.stderr)
+
+
+# ---- minimal config.yml parser (cohorts section only; config_get.py style) --
+def parse_cohorts(path):
+    cohorts, cur, in_cohorts = {}, None, False
+    for raw in open(path):
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        key = line.strip()
+        if indent == 0:
+            in_cohorts = key == "cohorts:"
+            continue
+        if not in_cohorts:
+            continue
+        if indent == 2 and key.endswith(":"):
+            cur = key[:-1]
+            cohorts[cur] = {}
+        elif indent >= 4 and cur and ":" in key:
+            k, v = key.split(":", 1)
+            cohorts[cur][k.strip()] = v.strip()
+    return cohorts
+
+
+def read_samples(path):
+    try:
+        with open(path) as fh:
+            return [l.strip() for l in fh if l.strip()]
+    except OSError:
+        return []
+
+
+def tsv_columns(path, skip):
+    """Header fields of a BED/TSV after the first `skip` columns."""
+    try:
+        op = gzip.open if path.endswith(".gz") else open
+        with op(path, "rt") as fh:
+            header = fh.readline().rstrip("\n").split("\t")
+        return [c for c in header[skip:] if c]
+    except OSError:
+        return None
+
+
+def read_table(path):
+    try:
+        with open(path) as fh:
+            return list(csv.DictReader(fh, delimiter="\t"))
+    except OSError:
+        return None
+
+
+cohorts = parse_cohorts(config_path)
+if not cohorts:
+    sys.exit("no cohorts parsed from config.yml")
+
+# ---- per-cohort raw/quant stage evidence ------------------------------------
+# fastq_map: tab-delimited, 2 fields (R1, sample_id) or 3 (R1, R2, sample_id);
+# paths relative to the cohort's fastq_dir; no header (script 02 convention).
+fastq = {}      # sample_id -> (r1_present, r2_present or None)
+salmon = {}     # sample_id -> quant.sf exists
+qu = {}         # sample_id -> QU-adjusted quant.sf exists
+cohort_of_samples = {}
+for coh, cfg in sorted(cohorts.items()):
+    fq_dir = cfg.get("fastq_dir", "")
+    fmap = cfg.get("fastq_map", "")
+    if fmap and os.path.isfile(fmap):
+        for line in open(fmap):
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            fields = line.split("\t")
+            sid = fields[-1].strip()
+            if sid in ("sample_id",) or fields[0].strip() in ("R1_path", "R1"):
+                continue  # header-ish line
+            r1 = os.path.isfile(os.path.join(fq_dir, fields[0].strip())) \
+                if fields[0].strip() else False
+            r2 = os.path.isfile(os.path.join(fq_dir, fields[1].strip())) \
+                if len(fields) >= 3 and fields[1].strip() else None
+            fastq[sid] = (r1, r2)
+    else:
+        warn(f"fastq_map not found for {coh}: {fmap}")
+    sfile = cfg.get("samples_file", "")
+    sids = read_samples(sfile)
+    if not sfile:
+        warn(f"samples_file missing for {coh}")
+    for sid in sids:
+        cohort_of_samples.setdefault(sid, coh)
+    expr_dir = os.path.join(output_base, coh, "intermediate", "expression")
+    qu_dir = os.path.join(output_base, coh, "intermediate", "expression_qu")
+    for sid in sids:
+        salmon[sid] = os.path.isfile(os.path.join(expr_dir, sid, "quant.sf"))
+        qu[sid] = os.path.isfile(os.path.join(qu_dir, sid, "quant.sf"))
+
+# ---- assembled per-cohort BED columns (rnaseq_id space) ----------------------
+bed_cols = {}
+for mod in EXPR_MODS:
+    for coh in cohorts:
+        cols = tsv_columns(
+            os.path.join(output_base, coh, "output", f"{mod}.bed.gz"), 4)
+        if cols is None:
+            warn(f"assembled BED not found: {coh}/{mod}.bed.gz")
+        bed_cols[(coh, mod)] = set(cols or [])
+
+# ---- ancestry map ------------------------------------------------------------
+ancestry_of = {}
+rows = read_table(ancestry_map) if os.path.isfile(ancestry_map) else None
+if rows:
+    sample_col = next((c for c in ("sample_id", "rnaseq_id")
+                       if c in rows[0]), list(rows[0].keys())[0])
+    anc_col = next((c for c in rows[0] if "ancestry" in c.lower()), None)
+    for r in rows:
+        ancestry_of[r[sample_col]] = (r.get(anc_col) or "NA") if anc_col else "NA"
+else:
+    warn(f"ancestry map not found: {ancestry_map}")
+
+# ---- pooled metadata (rnaseq_id -> array_id, cohort) -------------------------
+array_of, meta_cohort_of = {}, {}
+rows = read_table(metadata_tsv) if os.path.isfile(metadata_tsv) else None
+if rows:
+    coh_col = next((c for c in rows[0] if c.lower() in ("cohort", "cohort_id")),
+                   None)
+    for r in rows:
+        rid = r.get("rnaseq_id")
+        if rid:
+            array_of[rid] = r.get("array_id", "")
+            if coh_col:
+                meta_cohort_of[rid] = r.get(coh_col, "")
+else:
+    warn(f"pooled metadata not found: {metadata_tsv}")
+
+# ---- per-ancestry final sets -------------------------------------------------
+meta_rnaseq = {}    # ANC -> set of rnaseq_id (post-intersection, post-outlier)
+meta_array = {}     # ANC -> {rnaseq_id: array_id}
+cov_cols = {}       # ANC -> set of array_id (final mapping set)
+combat_cols = {}    # (ANC, mod) -> set of array_id
+qtl_cols = {}       # (ANC, mod) -> set of array_id
+for anc in ancestries:
+    mrows = read_table(os.path.join(qtl_dir, f"{anc}_metadata.tsv"))
+    if mrows and "rnaseq_id" in mrows[0]:
+        meta_rnaseq[anc] = {r["rnaseq_id"] for r in mrows}
+        meta_array[anc] = {r["rnaseq_id"]: r.get("array_id", "")
+                           for r in mrows if r.get("array_id")}
+    else:
+        warn(f"{anc}_metadata.tsv missing or lacks rnaseq_id (run 23+24)")
+    cc = tsv_columns(os.path.join(qtl_dir, f"{anc}_covariates.tsv"), 1)
+    if cc is None:
+        warn(f"{anc}_covariates.tsv not found")
+    cov_cols[anc] = set(cc or [])
+    for mod in MODS:
+        for pat, skip in ((f"{anc}_{mod}_combat_int.bed", 4),
+                          (f"{anc}_{mod}_combat_int.bed.gz", 4)):
+            p = os.path.join(combat_dir, pat)
+            if os.path.isfile(p):
+                combat_cols[(anc, mod)] = set(tsv_columns(p, skip) or [])
+                break
+        else:
+            warn(f"combat BED not found: {anc}_{mod}")
+        for pat, skip in ((f"{anc}_{mod}_harmonized.bed", 4),
+                          (f"{anc}_{mod}.bed.gz", 4)):
+            p = os.path.join(qtl_dir, pat)
+            if os.path.isfile(p):
+                qtl_cols[(anc, mod)] = set(tsv_columns(p, skip) or [])
+                break
+        else:
+            warn(f"QTL-input BED not found: {anc}_{mod}")
+
+# ---- per-sample matrix -------------------------------------------------------
+all_ids = []
+seen = set()
+
+
+def add_id(sid):
+    if sid and sid not in seen:
+        seen.add(sid)
+        all_ids.append(sid)
+
+
+for src in (fastq, salmon, qu, ancestry_of, array_of):
+    for sid in src:
+        add_id(sid)
+for (coh, _mod), cols in bed_cols.items():
+    for sid in cols:
+        add_id(sid)
+for anc in ancestries:
+    for sid in meta_rnaseq.get(anc, set()):
+        add_id(sid)
+
+stage_cols = (["fastq_r1_present", "fastq_r2_present", "has_quant_sf",
+               "has_qu_quant_sf"] + [f"in_{m}_bed" for m in EXPR_MODS]
+              + [f"in_metadata_{a}" for a in ancestries]
+              + [f"in_covariates_{a}" for a in ancestries]
+              + [f"in_combat_{a}_{m}" for a in ancestries for m in MODS]
+              + [f"in_qtl_{a}_{m}" for a in ancestries for m in MODS])
+
+matrix = []
+for sid in all_ids:
+    coh = meta_cohort_of.get(sid) or cohort_of_samples.get(sid, "")
+    arr = array_of.get(sid) or next(
+        (meta_array[a][sid] for a in ancestries
+         if sid in meta_array.get(a, {})), "")
+    anc = ancestry_of.get(sid) or next(
+        (a for a in ancestries if sid in meta_rnaseq.get(a, set())), "NA")
+    fq1, fq2 = fastq.get(sid, (None, None))
+    row = {
+        "rnaseq_id": sid, "cohort": coh, "array_id": arr, "ancestry": anc,
+        "fastq_r1_present": "" if fq1 is None else int(fq1),
+        "fastq_r2_present": "" if fq2 is None else int(fq2),
+        "has_quant_sf": int(salmon.get(sid, False)),
+        "has_qu_quant_sf": int(qu.get(sid, False)),
+    }
+    for m in EXPR_MODS:
+        row[f"in_{m}_bed"] = int(sid in bed_cols.get((coh, m), set())
+                                 if coh else False)
+    for a in ancestries:
+        row[f"in_metadata_{a}"] = int(sid in meta_rnaseq.get(a, set()))
+        row[f"in_covariates_{a}"] = int(
+            (arr or sid) in cov_cols.get(a, set()))
+    for a in ancestries:
+        for m in MODS:
+            key = arr or sid
+            row[f"in_combat_{a}_{m}"] = int(key in combat_cols.get((a, m), set()))
+            row[f"in_qtl_{a}_{m}"] = int(key in qtl_cols.get((a, m), set()))
+    matrix.append(row)
+
+samples_path = os.path.join(attrition_dir, "attrition_samples.tsv")
+with open(samples_path, "w", newline="") as fh:
+    w = csv.DictWriter(fh, fieldnames=["rnaseq_id", "cohort", "array_id",
+                                       "ancestry"] + stage_cols,
+                       delimiter="\t", lineterminator="\n")
+    w.writeheader()
+    w.writerows(matrix)
+
+# ---- stage-level summary (long format) ---------------------------------------
+def strata_for(col):
+    """(stratum_type, stratum) pairs meaningful for a stage column."""
+    out = [("total", "all")]
+    m = re.fullmatch(r"in_(?:metadata|covariates|combat|qtl)_(\w+?)(?:_(.+))?",
+                     col)
+    anc_match = next((a for a in ancestries if f"_{a}_" in col
+                      or col.endswith(f"_{a}")), None)
+    if anc_match:
+        out.append(("ancestry", anc_match))
+    else:
+        for c in sorted({r["cohort"] for r in matrix if r["cohort"]}):
+            out.append(("cohort", c))
+        for a in ancestries:
+            out.append(("ancestry", a))
+    return out
+
+
+summary = []
+for col in stage_cols:
+    vals = [(r[col], r["ancestry"], r["cohort"]) for r in matrix]
+    for stype, sname in strata_for(col):
+        if stype == "total":
+            sub = vals
+        elif stype == "cohort":
+            sub = [v for v in vals if v[2] == sname]
+        else:
+            sub = [v for v in vals if v[1] == sname]
+        present = sum(1 for v in sub if v[0] == 1)
+        total = sum(1 for v in sub if v[0] != "")
+        summary.append({"stage": col, "stratum_type": stype,
+                        "stratum": sname, "n_present": present,
+                        "n_total": total})
+
+summary_path = os.path.join(attrition_dir, "attrition_summary.tsv")
+with open(summary_path, "w", newline="") as fh:
+    w = csv.DictWriter(fh, fieldnames=["stage", "stratum_type", "stratum",
+                                       "n_present", "n_total"],
+                       delimiter="\t", lineterminator="\n")
+    w.writeheader()
+    w.writerows(summary)
+
+print(f"  attrition log: {len(matrix)} samples x {len(stage_cols)} stages")
+for row in summary:
+    if row["stratum_type"] == "total":
+        print(f"    {row['stage']:<38} {row['n_present']}/{row['n_total']}")
+PYEOF
+then
+    MISSING_OTHER+=("attrition log (python section failed — see warnings)")
+else
+    :
 fi
 
 # ---- 4. Manifest -----------------------------------------------------------
