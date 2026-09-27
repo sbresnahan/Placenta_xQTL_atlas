@@ -114,7 +114,10 @@ def main():
                              "no R dependency.")
     parser.add_argument("--covariates-file", default=None,
                         help="Covariates TSV (tensorQTL orientation). "
-                             "Default: {qtl-dir}/{ancestry}_covariates.tsv")
+                             "Default: {qtl-dir}/{ancestry}_covariates_{modality}.tsv "
+                             "(per-modality optimized set, module 25b); if absent, "
+                             "falls back to {qtl-dir}/{ancestry}_covariates.tsv "
+                             "with a warning")
     args = parser.parse_args()
 
     anc = args.ancestry
@@ -127,7 +130,22 @@ def main():
     phenotype_bed = os.path.join(qtl_dir, f"{anc}_{mod}.bed.gz")
     groups_path = os.path.join(qtl_dir, f"{anc}_{mod}.phenotype_groups.txt")
     plink_prefix = os.path.join(qtl_dir, f"{anc}_qtl")
-    covariates_path = args.covariates_file or os.path.join(qtl_dir, f"{anc}_covariates.tsv")
+    if args.covariates_file:
+        covariates_path = args.covariates_file
+    else:
+        # Per-modality optimized covariates (module 25b) are the default;
+        # fall back to the shared file with a loud warning so the log
+        # records exactly which covariate set was used.
+        per_mod_path = os.path.join(qtl_dir, f"{anc}_covariates_{mod}.tsv")
+        shared_path = os.path.join(qtl_dir, f"{anc}_covariates.tsv")
+        if os.path.exists(per_mod_path):
+            covariates_path = per_mod_path
+        else:
+            covariates_path = shared_path
+            print(f"  WARN: per-modality covariates not found: {per_mod_path}")
+            print(f"        falling back to shared covariates: {shared_path}")
+            print(f"        (run 25b + the canonical per-modality "
+                  f"25_build_covariates.py to generate the optimized set)")
 
     for f in [phenotype_bed, f"{plink_prefix}.pgen", covariates_path]:
         if not os.path.exists(f):

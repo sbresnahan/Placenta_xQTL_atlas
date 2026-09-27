@@ -28,8 +28,11 @@
 #                  independent xQTLs; outputs get '_cisqtl_independent'
 #                  suffix. Default: 0
 #   COVARIATES_FILE — covariates TSV (tensorQTL orientation). The literal
-#                  placeholder {ANC} is replaced by the ancestry label, so one
-#                  value covers both strata. Default: {QTL_DIR}/{ANC}_covariates.tsv
+#                  placeholders {ANC} and {MOD} are replaced by the ancestry
+#                  and modality labels, so one value covers all jobs.
+#                  Default: per-modality {QTL_DIR}/{ANC}_covariates_{MOD}.tsv
+#                  (module 25b); if absent, falls back to
+#                  {ANC}_covariates.tsv with a warning
 #   QVALUE_METHOD — 'storey' (default; GTEx convention, R qvalue package via
 #                  the compute_qvalues.R bridge) or 'bh' (Benjamini-Hochberg
 #                  escape hatch, no R dependency)
@@ -175,12 +178,13 @@ for ANC in $ANCESTRIES; do
         EXTRA_ARGS="$EXTRA_ARGS --independent"
         echo "           + stepwise regression (cis.map_independent) for conditionally independent xQTLs"
     fi
-    # Covariates: per-ancestry {ANC} placeholder substitution
+    # Covariates: {ANC}/{MOD} placeholder substitution
     if [ -n "$COVARIATES_FILE" ]; then
         COV_FILE="${COVARIATES_FILE//\{ANC\}/$ANC}"
+        COV_FILE="${COV_FILE//\{MOD\}/$MODALITY}"
         if [ ! -f "$COV_FILE" ]; then
             echo "  ERROR: covariates file not found: $COV_FILE"
-            echo "  (COVARIATES_FILE=$COVARIATES_FILE with {ANC} -> $ANC)"
+            echo "  (COVARIATES_FILE=$COVARIATES_FILE with {ANC} -> $ANC, {MOD} -> $MODALITY)"
             exit 1
         fi
         EXTRA_ARGS="$EXTRA_ARGS --covariates-file $COV_FILE"

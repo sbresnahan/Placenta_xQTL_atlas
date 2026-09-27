@@ -2,6 +2,10 @@
 """
 optimize_hcp_chr1.py — chr1-only HCP-count optimization (module 25a driver)
 
+Expression-only HCP optimization. For per-modality HCP optimization, use
+optimize_hcp_modalities.py (module 25b), which imports the shared helpers
+(run/bgzip_tabix/write_empty_hcp/count_egenes) from this module.
+
 Pre-mapping module that selects the number of HCP hidden covariates per
 ancestry by maximizing cis-eGene discovery on chromosome 1, following the
 devBrain xQTL atlas convention (Wen et al., Science 2024, 384:eadh0829,

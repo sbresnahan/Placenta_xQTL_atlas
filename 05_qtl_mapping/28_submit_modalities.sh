@@ -53,10 +53,12 @@
 #                   silently inherited. Note the qtl pgen already carries
 #                   a MAC>=5 carrier floor from 23/24, so MAF 0.01 no
 #                   longer admits 2-4-carrier variants.)
-#   COVARIATES_FILE — covariates TSV path; the literal placeholder {ANC} is
-#                   replaced per ancestry by the wrapper (e.g.
-#                   .../qtl_inputs/{ANC}_covariates_optimized.tsv).
-#                   Default: {ANC}_covariates.tsv in qtl_inputs.
+#   COVARIATES_FILE — covariates TSV path; the literal placeholders {ANC}
+#                   and {MOD} are replaced per ancestry/modality by the
+#                   wrapper (e.g. .../qtl_inputs/{ANC}_covariates_{MOD}.tsv).
+#                   Default: per-modality {ANC}_covariates_{MOD}.tsv in
+#                   qtl_inputs (module 25b); if absent, falls back to
+#                   {ANC}_covariates.tsv with a warning.
 #
 # NOTE: the -env string deliberately contains NO inner quotes — LSF
 # preserves them literally in the variable values, which mangles paths.

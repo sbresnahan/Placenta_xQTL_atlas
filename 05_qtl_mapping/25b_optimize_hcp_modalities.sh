@@ -1,51 +1,53 @@
 #!/bin/bash
 # =============================================================================
-# 25a_optimize_hcp.sh — LSF wrapper for chr1-only HCP-count optimization
+# 25b_optimize_hcp_modalities.sh — LSF wrapper for per-modality HCP optimization
 # =============================================================================
-# Expression-only HCP optimization. For per-modality HCP optimization (each
-# tensorQTL run uses covariates optimized for exactly the matrix it maps),
-# use 25b_optimize_hcp_modalities.sh.
+# Selects the number of HCP hidden covariates for EACH modality and the
+# combined cross-modality arm by maximizing cis-eGene discovery (Storey
+# q <= 0.05), with HCPs re-estimated at each candidate k from that
+# modality's own harmonized BED (hcp_from_matrix.R — HCP-only; the BEDs are
+# already QN+INT+ComBat'd). 25a_optimize_hcp.sh covers the expression-only
+# special case. Mapping scope per modality: chr1 subset when the BED has
+# >= CHR1_MIN chr1 phenotypes (default 300), else genome-wide.
 #
-# Pre-mapping module (devBrain xQTL convention — Wen et al., Science 2024,
-# 384:eadh0829, §4.2): selects the number of HCP hidden covariates per
-# ancestry by maximizing chr1 cis-eGene discovery (Storey q <= 0.05), with
-# HCP re-estimated at each candidate k. Runs AFTER 23/24 and BEFORE the
-# canonical 25_build_covariates.py run; installs the winning k* solution as
-# ${QTL_DIR}/{ANC}_hcp_factors_harmonized.tsv.
+# Intended parallel unit: ONE ancestry x modality per job (20 jobs for
+# EAS+EUR x 9 modalities + combined). See docs/runbook_modality_hcp.md for
+# the full submission loop.
 #
 # Usage:
-#   export CONFIG=/path/to/config.yml
-#   export SCRIPTS_DIR=/path/to/scripts
-#   export ANCESTRY_MAP=/path/to/pooled_sample_ancestry_RNAseq.tsv
-#   export ANCESTRIES="EAS EUR"        # optional; default: all in map
-#   bsub < 25a_optimize_hcp.sh
+#   bsub -J hcpopt_EAS_splicing -q medium -n 4 -M 32 -R "rusage[mem=32]" -W 24:00 \
+#        -o .../logs/hcpopt_EAS_splicing.%J.out -e .../logs/hcpopt_EAS_splicing.%J.err \
+#        -env "CONFIG=/path/config.yml,SCRIPTS_DIR=/path/scripts,ANCESTRIES=EAS,MODALITIES=splicing" \
+#        < 25b_optimize_hcp_modalities.sh
 #
-# Or interactively (inside: bsub -Is -q medium -n 4 -M 32 -R "rusage[mem=32]" -W 12:00 bash):
-#   CONFIG=config.yml SCRIPTS_DIR=/path/to/scripts \
-#   ANCESTRY_MAP=/path/to/pooled_sample_ancestry_RNAseq.tsv \
-#   bash 25a_optimize_hcp.sh
-#
-# Optional env vars:
-#   ANCESTRIES   — space-separated ancestry labels (default: all in map;
-#                  ANCESTRY singular accepted as a fallback alias)
+# Required env:
+#   CONFIG       — path to config.yml
+#   SCRIPTS_DIR  — directory containing optimize_hcp_modalities.py,
+#                  hcp_from_matrix.R, 25_build_covariates.py, 27_run_tensorqtl.py
+# Optional env:
+#   ANCESTRIES   — space-separated ancestry labels (default: EAS EUR)
+#   MODALITIES   — space-separated modality labels incl. "combined"
+#                  (default: all 9 modalities + combined)
 #   K_GRID       — candidate HCP counts (default: "0 5 10 15 20 25 30")
 #   QTL_DIR      — canonical QTL inputs dir (default: ${OUTPUT_BASE}/qtl_inputs)
-#   HCP_DIR      — script-19 output dir (default: ${OUTPUT_BASE}/hcp)
+#   QC_METRICS   — pooled Picard QC metrics (default: ${OUTPUT_BASE}/hcp/all_qc_metrics.tsv)
 #   PC_DIR       — genotype PCs dir (default: ${OUTPUT_BASE}/genotype_pcs)
-#   WORK_DIR     — staging dir (default: ${QTL_DIR}/hcp_optimization)
+#   WORK_DIR     — staging dir (default: ${QTL_DIR}/hcp_optimization_modalities)
 #   FDR          — Storey q threshold for eGene counts (default: 0.05)
+#   CHR1_MIN     — minimum chr1 phenotypes for chr1-based selection (default: 300)
+#   MAX_HCP_PHENOTYPES — phenotype cap for HCP estimation (default: 40000; 0 disables)
 #   SKIP_EXISTING — set to 1 to reuse existing per-k results (resumable)
 #   EXCLUDE_COVARIATES — covariates excluded before correlation pruning in
 #                  every per-k model (default: ct_Maternal; "" disables)
 # =============================================================================
 
-#BSUB -q long
+#BSUB -q medium
 #BSUB -n 4
 #BSUB -M 32
 #BSUB -R "rusage[mem=32]"
-#BSUB -W 48:00
-#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/hcp_opt.%J.out
-#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/hcp_opt.%J.err
+#BSUB -W 24:00
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/hcpopt_mod.%J.out
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/hcpopt_mod.%J.err
 
 set -eo pipefail
 
@@ -65,13 +67,22 @@ if [ ! -f "$CONFIG_GET" ]; then
     echo "  Submitting via 'bsub <'? Export SCRIPTS_DIR=<repo>/05_qtl_mapping first." >&2
     exit 1
 fi
-ANCESTRY_MAP="${ANCESTRY_MAP:?ERROR: ANCESTRY_MAP env var required}"
+ANCESTRIES="${ANCESTRIES:-EAS EUR}"
+MODALITIES="${MODALITIES:-expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability combined}"
 K_GRID="${K_GRID:-0 5 10 15 20 25 30}"
 FDR="${FDR:-0.05}"
+CHR1_MIN="${CHR1_MIN:-300}"
+MAX_HCP_PHENOTYPES="${MAX_HCP_PHENOTYPES:-40000}"
 SKIP_EXISTING="${SKIP_EXISTING:-0}"
 # Covariates excluded before correlation pruning in every per-k model.
 # Set to "" to disable.
 EXCLUDE_COVARIATES="${EXCLUDE_COVARIATES-ct_Maternal}"
+
+# Strip any literal quotes that LSF's -env may have preserved in the values
+CONFIG="${CONFIG%\"}";           CONFIG="${CONFIG#\"}"
+SCRIPTS_DIR="${SCRIPTS_DIR%\"}"; SCRIPTS_DIR="${SCRIPTS_DIR#\"}"
+ANCESTRIES="${ANCESTRIES%\"}";   ANCESTRIES="${ANCESTRIES#\"}"
+MODALITIES="${MODALITIES%\"}";   MODALITIES="${MODALITIES#\"}"
 
 # ---- Global init ----
 source /etc/profile.d/modules.sh
@@ -82,9 +93,9 @@ eval "$(python3 "$CONFIG_GET" "${CONFIG}")"
 OUTPUT_BASE="${OUTPUT_BASE}"
 
 QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
-HCP_DIR="${HCP_DIR:-${OUTPUT_BASE}/hcp}"
+QC_METRICS="${QC_METRICS:-${OUTPUT_BASE}/hcp/all_qc_metrics.tsv}"
 PC_DIR="${PC_DIR:-${OUTPUT_BASE}/genotype_pcs}"
-WORK_DIR="${WORK_DIR:-${QTL_DIR}/hcp_optimization}"
+WORK_DIR="${WORK_DIR:-${QTL_DIR}/hcp_optimization_modalities}"
 mkdir -p "$WORK_DIR"
 
 # ---- Environments ----
@@ -97,42 +108,24 @@ if ! command -v bgzip >/dev/null 2>&1; then
     conda activate --stack samtools-1.16.1
 fi
 
-# Singularity R (sva + Rhcpp) for HCP re-estimation and the Storey q bridge
+# Singularity R (Rhcpp) for HCP estimation and the Storey q bridge
 export R_LIBS_USER="/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
 SING_R="singularity exec --bind /rsrch5 --bind /rsrch9 /risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif Rscript"
 export QVALUE_RSCRIPT="$SING_R"
 
-# ---- Determine ancestries ----
-# Canonical env var is ANCESTRIES (space-separated). ANCESTRY (singular) is
-# accepted as a fallback alias — passing ANCESTRY alone previously fell
-# through to the all-in-map default and tried to run unprocessed ancestries.
-if [ -z "${ANCESTRIES:-}" ] && [ -n "${ANCESTRY:-}" ]; then
-    echo "  NOTE: ANCESTRY (singular) set; treating as ANCESTRIES='$ANCESTRY'"
-    ANCESTRIES="$ANCESTRY"
-fi
-if [ -n "${ANCESTRIES:-}" ]; then
-    ANCESTRY_LIST="$ANCESTRIES"
-else
-    echo "  NOTE: ANCESTRIES not set — defaulting to ALL ancestries in the map"
-    ANCESTRY_LIST=$(python3 -c "
-import pandas as pd
-df = pd.read_csv('${ANCESTRY_MAP}', sep='\t')
-for a in sorted(df['assigned_ancestry'].unique()):
-    print(a)
-")
-fi
-
-echo "[$(date)] HCP-count optimization (chr1 expression)"
+echo "[$(date)] Per-modality HCP-count optimization"
 echo "  CONFIG:       $CONFIG"
 echo "  SCRIPTS_DIR:  $SCRIPTS_DIR"
-echo "  ANCESTRY_MAP: $ANCESTRY_MAP"
 echo "  QTL_DIR:      $QTL_DIR"
-echo "  HCP_DIR:      $HCP_DIR"
+echo "  QC_METRICS:   $QC_METRICS"
 echo "  PC_DIR:       $PC_DIR"
 echo "  WORK_DIR:     $WORK_DIR"
-echo "  Ancestries:   $ANCESTRY_LIST"
+echo "  Ancestries:   $ANCESTRIES"
+echo "  Modalities:   $MODALITIES"
 echo "  k grid:       $K_GRID"
 echo "  FDR:          $FDR"
+echo "  chr1 minimum: $CHR1_MIN"
+echo "  HCP phenotype cap: $MAX_HCP_PHENOTYPES"
 echo "  Exclude:      ${EXCLUDE_COVARIATES:-<none>}"
 
 EXTRA_ARGS=""
@@ -143,23 +136,24 @@ if [ -n "$EXCLUDE_COVARIATES" ]; then
     EXTRA_ARGS="$EXTRA_ARGS --exclude-covariates $EXCLUDE_COVARIATES"
 fi
 
-python3 "${SCRIPTS_DIR}/optimize_hcp_chr1.py" \
+python3 "${SCRIPTS_DIR}/optimize_hcp_modalities.py" \
     --qtl-dir "$QTL_DIR" \
-    --hcp-dir "$HCP_DIR" \
+    --qc-metrics "$QC_METRICS" \
     --pcair-dir "$PC_DIR" \
-    --ancestry-map "$ANCESTRY_MAP" \
     --scripts-dir "$SCRIPTS_DIR" \
-    --ancestries "$ANCESTRY_LIST" \
+    --ancestries "$ANCESTRIES" \
+    --modalities "$MODALITIES" \
     --k-grid "$K_GRID" \
     --work-dir "$WORK_DIR" \
     --fdr "$FDR" \
+    --chr1-min-phenotypes "$CHR1_MIN" \
+    --max-hcp-phenotypes "$MAX_HCP_PHENOTYPES" \
     --r-cmd "$SING_R" \
     $EXTRA_ARGS
 
 echo ""
-echo "[$(date)] HCP optimization complete"
-echo "  Per-ancestry results: ${WORK_DIR}/*_optimal_hcp.tsv / .png"
-echo "  Canonical HCP files updated: ${QTL_DIR}/*_hcp_factors_harmonized.tsv"
-echo "  Excluded covariates (pre-pruning): ${EXCLUDE_COVARIATES:-<none>}"
-echo "  Next: run 25_build_covariates.py (canonical) with the same"
-echo "        --exclude-covariates setting; no manual edits needed."
+echo "[$(date)] Per-modality HCP optimization complete"
+echo "  Results: ${WORK_DIR}/*_optimal_hcp.tsv / .png"
+echo "  Installed: ${QTL_DIR}/*_hcp_factors_optimized.tsv"
+echo "  Next: canonical per-modality 25_build_covariates.py"
+echo "        (see docs/runbook_modality_hcp.md)"

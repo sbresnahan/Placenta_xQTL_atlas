@@ -140,6 +140,18 @@ for ANC in $ANCESTRIES; do
              "$STAGING/data/qc/hcp_optimization" other "${ANC}_optimal_hcp.tsv"
     copy_req "$QTL_DIR/hcp_optimization/${ANC}_optimal_hcp.png" \
              "$STAGING/data/qc/hcp_optimization" other "${ANC}_optimal_hcp.png"
+    # Per-modality HCP optimization (module 25b): one table + curve per
+    # ancestry x modality group (9 modalities + combined)
+    for f in "$QTL_DIR/hcp_optimization_modalities/${ANC}_"*"_optimal_hcp.tsv"; do
+        [ -f "$f" ] || continue
+        copy_req "$f" "$STAGING/data/qc/hcp_optimization_modalities" other \
+                 "hcp_optimization_modalities/$(basename "$f")"
+    done
+    for f in "$QTL_DIR/hcp_optimization_modalities/${ANC}_"*"_optimal_hcp.png"; do
+        [ -f "$f" ] || continue
+        copy_req "$f" "$STAGING/data/qc/hcp_optimization_modalities" other \
+                 "hcp_optimization_modalities/$(basename "$f")"
+    done
     copy_req "$PC_DIR/${ANC}_genotype_pcs_scree.png" \
              "$STAGING/data/qc/genotype_pcs" other "${ANC}_genotype_pcs_scree.png"
 done
