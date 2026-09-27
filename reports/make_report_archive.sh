@@ -457,7 +457,10 @@ for sid in all_ids:
     for a in ancestries:
         for m in MODS:
             key = arr or sid
-            row[f"in_combat_{a}_{m}"] = int(key in combat_cols.get((a, m), set()))
+            # combat_int BEDs are pre-harmonization (rnaseq_id columns);
+            # accept either ID space
+            ccols = combat_cols.get((a, m), set())
+            row[f"in_combat_{a}_{m}"] = int(sid in ccols or key in ccols)
             row[f"in_qtl_{a}_{m}"] = int(key in qtl_cols.get((a, m), set()))
     matrix.append(row)
 
