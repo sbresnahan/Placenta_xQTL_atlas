@@ -111,7 +111,9 @@ option_list <- list(
   make_option("--ref-anno", type = "character", default = NULL,
               help = "Reference GTF with transcript_id / gene_id attributes (used to build tx2gene)"),
   make_option("--out-dir", type = "character", default = NULL,
-              help = "Output directory: adjusted quant.sf written to <out-dir>/<sample>/quant.sf")
+              help = "Output directory: adjusted quant.sf written to <out-dir>/<sample>/quant.sf"),
+  make_option("--chunk-size", type = "integer", default = 10,
+              help = "Process samples in chunks of this size (0 = all at once). Reduces peak memory ~proportionally. [default %default]")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
 
@@ -126,6 +128,7 @@ samples_file   <- opt[["samples"]]
 salmon_dir     <- opt[["salmon-dir"]]
 ref_anno_file  <- opt[["ref-anno"]]
 out_dir        <- opt[["out-dir"]]
+chunk_size     <- opt[["chunk-size"]]
 
 # ---- Load required packages ------------------------------------------------
 for (pkg in c("edgeR", "tximport", "rtracklayer")) {
@@ -185,98 +188,113 @@ cat("  samples    :", length(samples), "\n")
 cat("  salmon-dir :", salmon_dir, "\n")
 cat("  ref-anno   :", ref_anno_file, "\n")
 cat("  out-dir    :", out_dir, "\n")
+cat("  chunk-size :", chunk_size, "\n")
 cat("================================================================\n")
 
-# ---- Build tx2gene from the reference GTF ----------------------------------
+# ---- Build tx2gene from the reference GTF (once, before chunk loop) --------
 cat("[1/5] Building tx2gene from GTF (rtracklayer::import)\n")
 tx2gene <- .build_tx2gene(ref_anno_file)
 cat("       tx2gene rows:", nrow(tx2gene), "\n")
 
-# ---- catchSalmon: estimate RTA overdispersion from bootstraps --------------
-cat("[2/5] edgeR::catchSalmon (estimating RTA overdispersion from bootstraps)\n")
-# catchSalmon takes a vector of per-sample Salmon directories and reads
-# aux_info/ bootstraps + quant.sf from each.
-s <- edgeR::catchSalmon(dirs)
-# s$counts           : transcript x sample matrix of (unscaled) counts
-# s$annotation       : data.frame incl. $Overdispersion (per-transcript sigma^2_t)
-overdisp <- s$annotation$Overdispersion
-# Clamp to >= 1 (the paper's estimator already applies max(1, ...) via the
-# empirical-Bayes moderation, but guard explicitly).
-overdisp <- pmax(overdisp, 1)
-cat("       overdispersion: min=", round(min(overdisp), 3),
-    " median=", round(median(overdisp), 3),
-    " max=", round(max(overdisp), 3), "\n", sep = "")
-
-# ---- tximport: import quant.sf (drop inf reps; catchSalmon already used them)
-cat("[3/5] tximport (type=salmon, txOut=TRUE, dropInfReps=TRUE)\n")
-txi <- tximport::tximport(files, type = "salmon", tx2gene = tx2gene,
-                          txOut = TRUE, dropInfReps = TRUE)
-# txi$counts      : transcript x sample
-# txi$abundance   : transcript x sample (TPM from Salmon)
-# txi$length      : transcript x sample (effective lengths)
-
-# Align row order of overdispersion to txi$counts rows.
-# catchSalmon and tximport should produce the same transcript order (both read
-# quant.sf in the same per-sample dir order), but verify.
-if (!all(rownames(txi$counts) == rownames(s$counts))) {
-  # Reorder overdispersion to match tximport's row order.
-  overdisp <- overdisp[match(rownames(txi$counts), rownames(s$counts))]
-  if (any(is.na(overdisp))) {
-    n_na <- sum(is.na(overdisp))
-    warning(n_na, " transcripts in tximport output not found in catchSalmon output; ",
-            "setting their overdispersion to 1 (no scaling).")
-    overdisp[is.na(overdisp)] <- 1
-  }
-}
-
-# ---- QU correction: divide counts by overdispersion -----------------------
-cat("[4/5] Applying QU correction (counts / overdispersion)\n")
-scaled_counts <- txi$counts / overdisp
-# Recompute abundance as CPM from scaled counts (matches the reference workflow).
-scaled_abundance <- edgeR::cpm(scaled_counts, log = FALSE)
-
-# ---- Write adjusted quant.sf per sample -----------------------------------
-cat("[5/5] Writing adjusted quant.sf to ", out_dir, "\n", sep = "")
-dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
-
 # Carry Length / EffectiveLength from the original quant.sf files (per-sample).
 # Build a transcript -> (Length, EffectiveLength) table from the first sample's
 # quant.sf (these are annotation-derived and identical across samples for the
-# same index).
+# same index). Read once before the chunk loop.
 first_qsf <- read.delim(files[1], stringsAsFactors = FALSE)
 length_tbl <- first_qsf[, c("Name", "Length", "EffectiveLength")]
 rownames(length_tbl) <- length_tbl$Name
+rm(first_qsf)
 
-for (i in seq_along(samples)) {
-  sm <- samples[i]
-  sm_out_dir <- file.path(out_dir, sm)
-  dir.create(sm_out_dir, showWarnings = FALSE, recursive = TRUE)
-  out_file <- file.path(sm_out_dir, "quant.sf")
-
-  # Per-sample adjusted NumReads and TPM:
-  numreads <- scaled_counts[, i]
-  # TPM = scaled_count / sum(scaled_count) * 1e6 (per sample)
-  tpm <- numreads / sum(numreads) * 1e6
-
-  # Assemble in Salmon quant.sf column order, aligned to tximport row order:
-  tx_ids <- rownames(scaled_counts)
-  len_df <- length_tbl[tx_ids, c("Length", "EffectiveLength")]
-
-  qsf <- data.frame(
-    Name            = tx_ids,
-    Length          = len_df$Length,
-    EffectiveLength = len_df$EffectiveLength,
-    TPM             = tpm,
-    NumReads        = numreads,
-    stringsAsFactors = FALSE
-  )
-  # Guard against any NaN/Inf from zero-library samples:
-  qsf$TPM[is.nan(qsf$TPM) | is.infinite(qsf$TPM)] <- 0
-  qsf$NumReads[is.nan(qsf$NumReads) | is.infinite(qsf$NumReads)] <- 0
-
-  write.table(qsf, file = out_file, sep = "\t", quote = FALSE,
-              row.names = FALSE, col.names = TRUE)
+# ---- Split samples into chunks ---------------------------------------------
+# catchSalmon + tximport hold all bootstrap replicates in memory; chunking
+# bounds peak RSS ~proportionally to chunk-size. The RTA overdispersion is a
+# transcript-level property (read-to-transcript ambiguity), so estimating it
+# from chunk-size samples x 20 bootstraps is statistically stable.
+if (chunk_size > 0 && length(samples) > chunk_size) {
+  chunk_idx_list <- split(seq_along(samples), ceiling(seq_along(samples) / chunk_size))
+} else {
+  chunk_idx_list <- list(seq_along(samples))
 }
-cat("       wrote ", length(samples), " adjusted quant.sf files\n", sep = "")
+n_chunks <- length(chunk_idx_list)
+cat("Processing ", length(samples), " samples in ", n_chunks, " chunk(s)\n", sep = "")
+
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+for (ci in seq_along(chunk_idx_list)) {
+  idx <- chunk_idx_list[[ci]]
+  chunk_samples <- samples[idx]
+  chunk_dirs    <- dirs[idx]
+  chunk_files   <- files[idx]
+
+  cat(sprintf("[chunk %d/%d] %d samples (%s ... %s)\n",
+              ci, n_chunks, length(chunk_samples),
+              chunk_samples[1], chunk_samples[length(chunk_samples)]))
+
+  # ---- catchSalmon: estimate RTA overdispersion from bootstraps -----------
+  cat("  [2/5] edgeR::catchSalmon\n")
+  s <- edgeR::catchSalmon(chunk_dirs)
+  overdisp <- s$annotation$Overdispersion
+  overdisp <- pmax(overdisp, 1)
+  cat("       overdispersion: min=", round(min(overdisp), 3),
+      " median=", round(median(overdisp), 3),
+      " max=", round(max(overdisp), 3), "\n", sep = "")
+
+  # ---- tximport: import quant.sf ------------------------------------------
+  cat("  [3/5] tximport\n")
+  txi <- tximport::tximport(chunk_files, type = "salmon", tx2gene = tx2gene,
+                            txOut = TRUE, dropInfReps = TRUE)
+
+  # Align row order of overdispersion to txi$counts rows.
+  if (!all(rownames(txi$counts) == rownames(s$counts))) {
+    overdisp <- overdisp[match(rownames(txi$counts), rownames(s$counts))]
+    if (any(is.na(overdisp))) {
+      n_na <- sum(is.na(overdisp))
+      warning(n_na, " transcripts in tximport output not found in catchSalmon output; ",
+              "setting their overdispersion to 1 (no scaling).")
+      overdisp[is.na(overdisp)] <- 1
+    }
+  }
+
+  # ---- QU correction: divide counts by overdispersion ---------------------
+  cat("  [4/5] QU correction\n")
+  scaled_counts <- txi$counts / overdisp
+
+  # ---- Write adjusted quant.sf per sample ---------------------------------
+  cat("  [5/5] Writing adjusted quant.sf\n")
+  for (i in seq_along(chunk_samples)) {
+    sm <- chunk_samples[i]
+    sm_out_dir <- file.path(out_dir, sm)
+    dir.create(sm_out_dir, showWarnings = FALSE, recursive = TRUE)
+    out_file <- file.path(sm_out_dir, "quant.sf")
+
+    numreads <- scaled_counts[, i]
+    tpm <- numreads / sum(numreads) * 1e6
+
+    tx_ids <- rownames(scaled_counts)
+    len_df <- length_tbl[tx_ids, c("Length", "EffectiveLength")]
+
+    qsf <- data.frame(
+      Name            = tx_ids,
+      Length          = len_df$Length,
+      EffectiveLength = len_df$EffectiveLength,
+      TPM             = tpm,
+      NumReads        = numreads,
+      stringsAsFactors = FALSE
+    )
+    qsf$TPM[is.nan(qsf$TPM) | is.infinite(qsf$TPM)] <- 0
+    qsf$NumReads[is.nan(qsf$NumReads) | is.infinite(qsf$NumReads)] <- 0
+
+    write.table(qsf, file = out_file, sep = "\t", quote = FALSE,
+                row.names = FALSE, col.names = TRUE)
+  }
+
+  cat(sprintf("  chunk %d/%d done (%d samples written)\n", ci, n_chunks, length(chunk_samples)))
+
+  # Free all large objects before the next chunk.
+  rm(s, txi, scaled_counts, overdisp)
+  gc()
+}
+
+cat("       wrote ", length(samples), " adjusted quant.sf files total\n", sep = "")
 cat("================================================================\n")
 cat("qu_correct_salmon.R DONE\n")

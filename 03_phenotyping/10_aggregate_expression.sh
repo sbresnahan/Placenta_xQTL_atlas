@@ -123,7 +123,8 @@ else
         --samples "$SAMPLES_FILE" \
         --salmon-dir "$EXPR_DIR" \
         --ref-anno "$REF_ANNO" \
-        --out-dir "$EXPR_QU_DIR"
+        --out-dir "$EXPR_QU_DIR" \
+        --chunk-size 10
     # Re-activate the Python env for assemble_bed.py.
     conda activate samtools-1.16.1
     source /rsrch5/home/epi/bhattacharya_lab/software/MAJIQ/bin/activate
