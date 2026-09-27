@@ -10,11 +10,11 @@
 - 📄 `gene_map.tsv` — gene_id → symbol/biotype/description map used for gene
   annotation in the report
 
-Headline result: two FDR ≤ 5% associations across 32 ancestry × modality ×
-layer cells — an EAS isoform xQTL at *TSPAN3* (q = 0.021 ungrouped, 0.022
-grouped) and a EUR RNA-editing xQTL at *NCOA4* (ungrouped q = 0.029) — with
-clean calibration and a power-limited null elsewhere. See
-[`../docs/round_history.md`](../docs/round_history.md) for design context.
+Headline result: 12,482 FDR ≤ 5% associations across the ancestry ×
+modality × layer cells; the combined cross-modality eGene catalog carries
+1,381 EAS and 1,602 EUR genes, with the *ERAP2*/*ERAP1* locus among the
+strongest in both ancestries. Splicing is the one empirically null modality
+(Storey π1 = 0, calibrated QQ).
 
 ## Re-rendering
 
@@ -37,13 +37,14 @@ rmarkdown::render(
 
 Requires R ≥ 4.3 with rmarkdown, knitr, and tidyverse packages.
 
-## Validated reproduction (2026-09-21)
+## Validated reproduction (2026-09-27)
 
-The report was re-rendered end-to-end (55/55 chunks) from the current EAS +
-EUR results using the shipped Rmd + module + gene map. The re-render
-reproduces both FDR hits exactly (EAS isoforms at *TSPAN3*, lead
-15:77800023:G:A, q = 0.021; EUR RNA editing at *NCOA4*, lead
-10:45322442:G:A, q = 0.029) and all embedded figures. One practical note:
+The report was re-rendered end-to-end (83/83 chunks) from the current EAS +
+EUR results (9 modalities, all layers) using the shipped Rmd + module +
+gene map. The re-render reproduces the headline catalog (12,482 FDR ≤ 5%
+associations; 1,381 EAS / 1,602 EUR combined-layer eGenes; *ERAP2*/*ERAP1*
+among the top loci in both ancestries) and all embedded figures. One
+practical note:
 
 1. **`gene_bodies.tsv` is an explicit parameter** (`gene_bodies_path`). The
    file needs columns `gene_id, start, end, strand` (read as

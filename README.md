@@ -74,7 +74,6 @@ associations, near-miss landscape, and cross-ancestry concordance.
 📁 [`docs/`](docs/)
 
 - 📄 `data_availability.md` — cohorts, accessions, ancestry × cohort sample counts, reference data
-- 📄 `round_history.md` — design evolution across mapping rounds 1–3 and why conventions changed
 - 📄 `software_environments.md` — tool, environment, and package versions
 - 📄 `gxe_power_analysis.html` — analytical power calculations for Aim-2 SNP × exposure
   (G×E) scans at the full planned cohort (N = 2,126; GDM binary and pre-pregnancy BMI
@@ -83,13 +82,12 @@ associations, near-miss landscape, and cross-ancestry concordance.
 
 ## Current status
 
-GTEx-conventions mapping is complete for the **EAS** (n ≈ 272) and **EUR**
-(n ≈ 136) ancestry strata: 32 ancestry × modality × layer cells, two FDR ≤ 5%
-associations (an EAS isoform xQTL at *TSPAN3* and a EUR RNA-editing xQTL at
-*NCOA4*), clean calibration, and a power-limited null elsewhere (minimum
-detectable r² ≈ 0.10 at EAS n, ≈ 0.19 at EUR n). AFR/AMR/SAS
-pooled genotypes exist and are the next mapping targets. See
-[`docs/round_history.md`](docs/round_history.md) and the report in
+GTEx-conventions mapping is complete for the **EAS** (n = 280) and **EUR**
+(n = 140) ancestry strata across 9 RNA modalities: 12,482 FDR ≤ 5%
+associations, a combined cross-modality catalog of 1,381 EAS and 1,602 EUR
+eGenes (the *ERAP2*/*ERAP1* preeclampsia locus among the strongest in both
+ancestries), and calibrated null behavior in the splicing modality. AFR/AMR/SAS
+pooled genotypes exist and are the next mapping targets. See the report in
 [`reports/`](reports/).
 
 ## Data availability

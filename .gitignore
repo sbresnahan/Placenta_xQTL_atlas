@@ -1,1 +1,4 @@
-/reports/
+/reports/data/
+/reports/figures/
+/reports/tables/
+/reports/gene_map.tsv

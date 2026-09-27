@@ -145,8 +145,8 @@ for ANC in $ANCESTRIES; do
 done
 
 # ---- 3. Gene map + gene bodies from the normalized GTF --------------------
-# Regenerated in full each round (replaces the ad-hoc round-3 map): every
-# gene in the GTF, version-stripped IDs matching the pipeline's BED files.
+# Regenerated in full at archive time: every gene in the GTF,
+# version-stripped IDs matching the pipeline's BED files.
 if [ ! -f "$GTF" ]; then
     MISSING_CORE+=("normalized_gtf ($GTF)")
 else

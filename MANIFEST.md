@@ -10,10 +10,8 @@ no path wiring is needed for direct invocation; an explicit `SCRIPTS_DIR` env
 var still overrides (and remains required for `bsub < script` submission —
 see landmine 12).
 
-> **Documentation convention.** Descriptions here were written against the
-> 2026-09-19 script set (the current, GTEx-conventions versions) — script headers
-> and usage blocks are the ground truth. Older archived READMEs reflect earlier
-> pipeline versions and may not match the shipped scripts.
+> **Documentation convention.** Script headers and usage blocks are the
+> ground truth; descriptions here summarize the shipped scripts.
 
 **Cluster context.** All stages run on the MD Anderson seadragon HPC: LSF scheduler
 (`#BSUB` directives, `bsub`, job-name/job-ID dependencies), RHEL8, conda envs via
@@ -79,8 +77,7 @@ plink2 files for mapping.
    pgen) → `PC_AiR.R` (GENESIS PC-AiR of cohort samples against 1KG →
    `assigned_ancestry`; `AFR_check.R` + `AFR_LD.bed` support AFR-stratum checks).
    *This is the current ancestry-assignment method and is distinct from the
-   retired mapping-stage PC-AiR genotype PCA (see
-   [`docs/round_history.md`](docs/round_history.md)).*
+   retired mapping-stage PC-AiR genotype PCA.*
 9. **Cross-cohort pooling** — `mega_merge_and_filter.lsf` (+ `mega_merge_and_filter_check.lsf`):
    builds `pooled_sample_ancestry.tsv`, subsets each cohort's Rsq-passing VCF to
    ancestry-stratum samples, splits multiallelics per cohort (DS correctly
@@ -220,8 +217,7 @@ replicates are averaged per individual during Stage-5 harmonization.
 📁 [`05_qtl_mapping/`](05_qtl_mapping/)
 
 **Purpose.** From pooled genotypes + modality BEDs, produce ancestry-stratified
-cis-xQTL summary statistics. Current baseline = the GTEx-conventions design
-(see [`docs/round_history.md`](docs/round_history.md) for design evolution).
+cis-xQTL summary statistics. The mapping design follows GTEx conventions.
 
 **Run order** (per ancestry; scripts 19–20 run once across ancestries):
 
@@ -233,7 +229,7 @@ cis-xQTL summary statistics. Current baseline = the GTEx-conventions design
 | 22 | `22_genotype_pca.sh` | Cohort-only genotype PCA (GTEx convention): LD-prune (`--indep-pairwise 200 50 0.2`) → `plink2 --pca 20 exact` → `genotype_pca_format.py` → `{ANC}_genotype_pcs.tsv` + scree (`PCA_scree.R`) |
 | 23 | `23_prepare_intersection.py` | Genotype×phenotype intersection on the RNA→DNA map; pgen filtered to intersection samples with **MAC ≥ 5** (`--mac 5`; `--mac 0` disables); sample columns renamed rnaseq_id → array_id |
 | 24 | `24_outlier_exclusion.py` | Select first 5 genotype PCs; 6-SD outlier exclusion on PC1–5; removes outliers from pgen/BED/HCP/deconvolution/metadata. **Edits intersection files in place — always rerun 23 before 24** |
-| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–k + sex + GA + cell types (dominant type as compositional reference); `--exclude-covariates ct_Maternal` applied BEFORE pruning (coded replacement for the round-3 hand-edit); near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs — correlated HCPs are dropped, so effective k can fall below nominal k); **no covariate cap** — the 25a-optimal set is used in full. Supports `--hcp-file`/`--hcp-k`/`--out-suffix` for the 25a optimization module |
+| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–k + sex + GA + cell types (dominant type as compositional reference); `--exclude-covariates ct_Maternal` applied BEFORE pruning; near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs — correlated HCPs are dropped, so effective k can fall below nominal k); **no covariate cap** — the 25a-optimal set is used in full. Supports `--hcp-file`/`--hcp-k`/`--out-suffix` for the 25a optimization module |
 | 25a | `25a_optimize_hcp.sh` + `optimize_hcp_chr1.py` | Pre-mapping HCP-count optimization (devBrain §4.2), run after 23/24, before canonical 25: per ancestry, re-estimate HCP at each k ∈ {0,5,10,15,20,25,30}, build per-k covariates, map **chr1 expression only** with tensorQTL (1 Mb window, MAF ≥ 0.01), count eGenes at Storey q ≤ 0.05; k\* = argmax (ties → smaller k). Installs the k\* solution as `{ANC}_hcp_factors_harmonized.tsv` (provisional file backed up to `*.pre25a_backup.tsv`); writes `{ANC}_optimal_hcp.tsv` + `.png` |
 | 26 | `26_harmonize_modalities.py` | Harmonize the 7 non-expression modality BEDs to the final array_id sample set (handles stage-17 namespaced IDs for splicing/IR) |
 | 30 | `30_combine_modalities.py` | Build the combined cross-modality BED (phenotype IDs namespaced `{modality}__{id}`; cross-modality gene groups; modality sidecar TSV) |
@@ -304,9 +300,7 @@ rmarkdown::render(
 4. **Covariate exclusions are coded, not hand-edited** — `ct_Maternal` is
    excluded via `25_build_covariates.py --exclude-covariates` (and the
    `EXCLUDE_COVARIATES` env var in 25a) BEFORE correlation pruning, and there
-   is no covariate cap. The round-3 covariate files were hand-edited after
-   script 25 (maternal cell-fraction removed; 25 → 24 covariates); that
-   manual step is retired — do not re-apply it.
+   is no covariate cap.
 5. **Tier-1 LSF name dependencies** — submit `001`/`002`/`003` back-to-back; LSF
    resolves `done(jobname)` only if a job with that name exists at submission time.
 6. **seadragon LSF does not auto-create log directories** — create

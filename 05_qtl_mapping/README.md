@@ -5,9 +5,8 @@ cross-cohort QN + INT + ComBat of all modalities (normalization first, ComBat
 last — devBrain xQTL schema, 2026-09 revision), cohort-only genotype PCA,
 genotype×phenotype intersection with a minor-allele-count floor, PC-outlier
 exclusion, covariate optimization, chr1-based HCP-count optimization, modality
-harmonization, and tensorQTL mapping with Storey q-values. Current baseline =
-the GTEx-conventions design (see
-[`../docs/round_history.md`](../docs/round_history.md)).
+harmonization, and tensorQTL mapping with Storey q-values. The mapping
+design follows GTEx conventions.
 
 Full stage documentation: [`../MANIFEST.md`](../MANIFEST.md) stage 5. These
 scripts share `config.yml` / `config_get.py` with `../03_phenotyping/` (one

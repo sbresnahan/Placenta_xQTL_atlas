@@ -39,8 +39,7 @@ cohort accessions.
 ## Notes
 
 - The PC-AiR scripts here perform **ancestry assignment for pooling** — distinct
-  from the retired mapping-stage PC-AiR genotype PCA (see
-  [`../docs/round_history.md`](../docs/round_history.md)).
+  from the retired mapping-stage PC-AiR genotype PCA.
 - `extract_topmed.lsf` / `extract_G3A.lsf` take `DIR` and `PASSWORD` via
   `bsub -env` (TOPMed server download credentials).
 - JVM crash logs and other run artifacts were intentionally excluded from this

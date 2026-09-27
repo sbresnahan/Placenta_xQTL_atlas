@@ -1,7 +1,6 @@
 # =============================================================================
 # xqtl_report_functions.R — analysis functions for the placenta multi-ancestry
-# xQTL report (PANTRY-style MAF 0.05 results: grouped, ungrouped, combined
-# layers; honest-null stance; NO ACAT — dropped per user decision).
+# xQTL report (grouped, ungrouped, and combined cross-modality layers).
 #
 # Inputs (per ancestry ANC, modality MOD), all complete sorted TSVs:
 #   grouped:   {ANC}_{MOD}_cisqtl_top.tsv        (one row per gene; carries
@@ -135,7 +134,7 @@ load_layer <- function(data_dir, layer,
 }
 
 # Load independent (stepwise) outputs; empty-aware. Returns 0-row tibble if
-# all are empty (expected for this result set).
+# all are empty.
 load_independent <- function(data_dir,
                              ancestries = c("EAS", "EUR"),
                              modalities = c("expression", setdiff(MODALITY_LEVELS, "expression"), "combined")) {

@@ -65,8 +65,7 @@ ANCESTRY_MAP="${ANCESTRY_MAP:?ERROR: ANCESTRY_MAP env var required}"
 K_GRID="${K_GRID:-0 5 10 15 20 25 30}"
 FDR="${FDR:-0.05}"
 SKIP_EXISTING="${SKIP_EXISTING:-0}"
-# Covariates excluded before correlation pruning in every per-k model
-# (coded replacement for the round-3 manual ct_Maternal hand-edit).
+# Covariates excluded before correlation pruning in every per-k model.
 # Set to "" to disable.
 EXCLUDE_COVARIATES="${EXCLUDE_COVARIATES-ct_Maternal}"
 

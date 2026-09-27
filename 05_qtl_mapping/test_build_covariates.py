@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for 25_build_covariates.py (prune-then-optimize schema).
 
-Covers the round-4 behavior changes:
+Covers the current behavior:
   - --exclude-covariates applied BEFORE correlation pruning (ct_Maternal
     cannot drag a correlated cell type out with it)
   - no covariate cap by default; explicit --max-covariates still caps

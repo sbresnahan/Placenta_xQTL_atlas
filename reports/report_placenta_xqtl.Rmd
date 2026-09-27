@@ -28,11 +28,30 @@ source(params$module_path)
 dir.create(params$fig_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(params$table_dir, showWarnings = FALSE, recursive = TRUE)
 # gene_map.tsv is regenerated in full from the normalized GTF by
-# make_report_archive.sh each round — every tested gene has a symbol entry.
+# make_report_archive.sh — every tested gene has a symbol entry.
 gene_map <- read_tsv(params$gene_map_path, col_types = "cccc", progress = FALSE)
 sym <- function(ids) gene_map$symbol[match(ids, gene_map$gene_id)]
 # display symbol: fall back to the gene ID when the GTF has no gene_name
 symd <- function(ids) ifelse(is.na(sym(ids)) | sym(ids) == "", ids, sym(ids))
+```
+
+```{css, echo=FALSE}
+/* Scrollable tables: cap height and scroll internally so long tables do not
+   push later sections off-screen; header row stays visible. */
+table {
+  display: block;
+  max-height: 480px;
+  overflow-y: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+table thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+  box-shadow: inset 0 -1px 0 #888;
+}
 ```
 
 ```{r load-data}
@@ -41,20 +60,44 @@ ungrouped <- load_layer(params$data_dir, "ungrouped")
 combined  <- load_layer(params$data_dir, "combined") %>% driver_modality()
 independent <- load_independent(params$data_dir)
 
-# Sample sizes: infer per ancestry from the expression layer
-# (n = ma_count / (2*af), median over genes). Modality layers differ by a
-# few samples (modality-specific harmonization); the range is reported.
-n_samp <- grouped %>% filter(modality == "expression") %>%
-  group_by(ancestry) %>%
-  summarise(n = round(median(ma_count / (2 * af))), .groups = "drop") %>%
-  tibble::deframe()
+# Sample sizes: ground truth from the final covariate tables (columns =
+# post-intersection, post-outlier individuals as mapped). The full
+# raw-to-mapping funnel is in the Sample attrition section.
+n_samp <- sapply(c("EAS", "EUR"), function(a) {
+  f <- file.path(params$qc_dir, "qtl_inputs", paste0(a, "_covariates.tsv"))
+  if (!file.exists(f)) return(NA_integer_)
+  ncol(read_tsv(f, col_types = cols(.default = col_double(),
+                                    covariate_id = col_character()),
+                progress = FALSE, n_max = 1)) - 1L
+})
 n_samp <- n_samp[c("EAS", "EUR")]
+# Modality-level sample-size variation (a few samples per layer, from
+# modality-specific harmonization) — descriptive range from the
+# allele-count/frequency denominators.
 n_range <- bind_rows(grouped, ungrouped, combined) %>%
   group_by(ancestry, layer, modality) %>%
   summarise(n = round(median(ma_count / (2 * af))), .groups = "drop") %>%
   group_by(ancestry) %>%
   summarise(n_min = min(n), n_max = max(n), .groups = "drop") %>%
   tibble::deframe()
+
+# Sample-attrition log (raw FASTQ -> QTL mapping), written by
+# make_report_archive.sh
+attr_dir <- file.path(params$qc_dir, "attrition")
+attr_samples <- read_tsv(file.path(attr_dir, "attrition_samples.tsv"),
+                         col_types = cols(.default = col_character()),
+                         progress = FALSE)
+attr_summary <- read_tsv(file.path(attr_dir, "attrition_summary.tsv"),
+                         col_types = "cccdd", progress = FALSE)
+
+# Cross-ancestry concordance of the combined layer (referenced in the
+# executive summary; the full per-modality table is in Cross-ancestry
+# comparison)
+dedup_best <- function(df) df %>% group_by(gene_id) %>%
+  slice_min(pval_beta, n = 1, with_ties = FALSE) %>% ungroup()
+conc_comb <- cross_ancestry_concordance(
+  combined %>% filter(ancestry == "EAS") %>% dedup_best(),
+  combined %>% filter(ancestry == "EUR") %>% dedup_best())
 ```
 
 # Executive summary
@@ -87,7 +130,7 @@ top_by_anc <- bind_rows(grouped, combined, ungrouped) %>%
 best_null <- if (any(yield$fdr05 == 0)) min(yield$min_q[yield$fdr05 == 0]) else NA_real_
 
 # carrier-count audit (MAC >= 5 floor baked into the genotype intersection
-# at module 23 this round — verify it propagated to the mapping outputs)
+# at module 23 — verify it propagated to the mapping outputs)
 mac_audit <- bind_rows(grouped, ungrouped, combined) %>%
   group_by(ancestry) %>%
   summarise(min_carriers = min(ma_count), n_lt5 = sum(ma_count < 5),
@@ -133,26 +176,32 @@ the breakdown, and ungrouped phenotype-level hits are reported descriptively
 `r paste(sprintf("%s: %s", top_by_anc$ancestry, apply(top_by_anc, 1, function(r) sprintf("%s (%s, %s layer, q = %s)", symd(r[["gene_id"]]), r[["modality"]], r[["layer"]], signif(as.numeric(r[["qval"]]), 2)))), collapse = "; ")`.
 `r if (!is.na(best_null)) sprintf("Outside the FDR-significant set, the best remaining q-value anywhere is %s.", signif(best_null, 2))`
 Storey calibration estimates a signal fraction (π1) of
-`r round(100 * pi1_range[1])`–`r round(100 * pi1_range[2])`% across cells;
-at these fractions Storey q-values are numerically close to
-Benjamini–Hochberg (Diagnostics).
+`r round(100 * pi1_range[1])`–`r round(100 * pi1_range[2])`% across cells.
+`r if (pi1_range[2] <= 0.05) "At these fractions Storey q-values are numerically close to Benjamini–Hochberg (Diagnostics)." else "In high-signal cells Storey q-values are correspondingly more liberal than Benjamini–Hochberg (by up to the estimated π0); the per-cell comparison is in Diagnostics."`
 
-For the cells without FDR discoveries, three lines of evidence indicate the
-residual null is a **power limitation, not a pipeline failure**:
+The splicing modality is empirically null in both ancestries (Storey π1 =
+0, no FDR ≤ 5% hits, QQ on the diagonal; Diagnostics). For this residual
+null, three lines of evidence indicate a **power/biology limitation, not a
+pipeline failure**:
 
-1. **Calibration is healthy** — permutation-calibrated p-values track the
-   null through the bulk in every layer (QQ plots, Diagnostics), and a
-   low π1 is the expected outcome when true effects are mostly below the
-   detection floor.
-2. **Detectable effect sizes remain large at our n** — minimum detectable
-   effect (80% power) is r² ≈ 0.10 at n ≈ `r n_samp["EAS"]` (EAS) and
-   r² ≈ 0.19 at n ≈ `r n_samp["EUR"]` (EUR), versus ≈ 0.06 at
-   PANTRY/Geuvadis n = 445. Typical cis-xQTLs explain 5–15% of phenotype
-   variance — mostly below our floor.
-   `r if (!is.null(hit_r2)) sprintf("The FDR-significant hits carry estimated r² of %.2f–%.2f — exactly the class of outsize effect the floor permits.", hit_r2[1], hit_r2[2])`
-3. **Sub-threshold tails are not shared between ancestries** — cross-ancestry
-   rank concordance of gene-level signal is ≈ 0, as expected if near-misses
-   are noise rather than shared weak signal.
+1. **The machinery detects signal where it exists** — the same pipeline
+   yields `r scales::comma(n_fdr05)` FDR ≤ 5% associations across the other
+   eight modalities, including canonical placental loci (Biological
+   interpretation).
+2. **The null is calibrated, not broken** — splicing p-values track the
+   null almost exactly (genomic-control λ ≈ 0.95–1.0 at the median), and
+   the minimum detectable effect (80% power) is r² ≈ 0.10 at
+   n = `r n_samp["EAS"]` (EAS) and r² ≈ 0.19 at n = `r n_samp["EUR"]`
+   (EUR), versus ≈ 0.06 at PANTRY/Geuvadis n = 445. Typical cis-xQTLs
+   explain 5–15% of phenotype variance — mostly below our floor, so a
+   splicing null is the expected outcome if its true effects are modest.
+   `r if (!is.null(hit_r2)) sprintf("The FDR-significant hits in the other modalities carry estimated r² of %.2f–%.2f — exactly the class of outsize effect the floor permits.", hit_r2[1], hit_r2[2])`
+3. **Signal replicates across ancestries** — cross-ancestry rank
+   concordance of gene-level signal on the combined layer is Spearman ρ =
+   `r round(conc_comb$rank_spearman, 2)` (top-100 overlap
+   `r conc_comb$top100_overlap`/100), with same-variant slope concordance
+   `r round(conc_comb$slope_spearman, 2)` — the pattern expected of real,
+   partially shared genetic regulation, not of artifact-driven signal.
 
 `r if (all(mac_audit$n_lt5 == 0)) sprintf("**Carrier-count audit: clean.** The MAC ≥ 5 floor (applied at the genotype intersection in module 23) propagated to every mapping output — minimum minor-allele carrier count across all tested pairs is %d (EAS) and %d (EUR).", mac_audit$min_carriers[mac_audit$ancestry == "EAS"], mac_audit$min_carriers[mac_audit$ancestry == "EUR"]) else sprintf("**Carrier-count caveat.** A fraction of tested pairs retain < 5 minor-allele carriers in the mapping sample sets (EAS: %d tests; EUR: %d tests; audit table below) — the MAC ≥ 5 floor was applied before outlier exclusion. Flagged tests should be discounted; no FDR-significant result should be carrier-limited.", mac_audit$n_lt5[mac_audit$ancestry == "EAS"], mac_audit$n_lt5[mac_audit$ancestry == "EUR"])`
 
@@ -192,8 +241,7 @@ residual null is a **power limitation, not a pipeline failure**:
   (k\* selected by module 25a, chr1 eGene maximization) + sex + gestational
   age + cell-type fractions (Syncytiotrophoblast as reference). The maternal
   cell-fraction covariate (`ct_Maternal`) is excluded BEFORE pruning by
-  analysis decision (coded `--exclude-covariates`, replacing the round-3
-  hand-edit); the remaining pool is correlation-pruned (iterative max-|r| >
+  analysis decision (coded `--exclude-covariates`); the remaining pool is correlation-pruned (iterative max-|r| >
   0.9 removal, protecting sex/GA > PCs > cell types > HCPs — correlated
   HCPs are dropped, so effective k can fall below nominal k\*) with **no
   covariate cap** (details and QC below).
@@ -294,6 +342,90 @@ knitr::include_graphics(file.path(qc_in, "EUR_covariate_correlation.png"))
 Covariate correlation matrices before/after pruning: no |r| > 0.9 pairs
 remain in the final sets.
 
+## Sample attrition
+
+```{r attrition-funnel, fig.width=8.5, fig.height=4.5}
+tot <- attr_summary %>% filter(stratum_type == "total") %>%
+  select(stage, n_present) %>% tibble::deframe()
+n_anc <- table(attr_samples$ancestry)
+funnel <- tibble(
+  stage = c("Raw FASTQ libraries", "Salmon quantified", "QU-corrected",
+            "Assembled modality BEDs", "Ancestry-assigned (EAS/EUR)",
+            "Genotype intersection + PCA-outlier survival",
+            "ComBat inputs (expression)", "QTL inputs (expression)",
+            "Final mapping set (individuals)"),
+  EAS = c(NA, NA, NA, NA, unname(n_anc["EAS"]), tot["in_metadata_EAS"],
+          tot["in_combat_EAS_expression"], tot["in_qtl_EAS_expression"],
+          unname(n_samp["EAS"])),
+  EUR = c(NA, NA, NA, NA, unname(n_anc["EUR"]), tot["in_metadata_EUR"],
+          tot["in_combat_EUR_expression"], tot["in_qtl_EUR_expression"],
+          unname(n_samp["EUR"])),
+  Total = c(tot["fastq_r1_present"], tot["has_quant_sf"],
+            tot["has_qu_quant_sf"], tot["in_expression_bed"],
+            unname(n_anc["EAS"] + n_anc["EUR"]),
+            tot["in_metadata_EAS"] + tot["in_metadata_EUR"],
+            tot["in_combat_EAS_expression"] + tot["in_combat_EUR_expression"],
+            tot["in_qtl_EAS_expression"] + tot["in_qtl_EUR_expression"],
+            sum(n_samp))) %>%
+  mutate(stage = factor(stage, levels = stage))
+
+funnel_long <- funnel %>% pivot_longer(-stage, names_to = "stratum",
+                                       values_to = "n") %>% filter(!is.na(n))
+p_attr <- ggplot(funnel_long, aes(forcats::fct_rev(stage), n, fill = stratum)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.72) +
+  geom_text(aes(label = n), position = position_dodge(width = 0.8),
+            hjust = -0.15, size = 2.8) +
+  scale_fill_manual(values = c(EAS = "#0072B2", EUR = "#D55E00",
+                               Total = "#999999")) +
+  scale_y_continuous(labels = scales::comma,
+                     expand = expansion(mult = c(0, 0.12))) +
+  coord_flip() +
+  labs(x = NULL, y = "samples", fill = NULL) +
+  theme_report() + theme(legend.position = "top")
+print(p_attr)
+ggsave(file.path(params$fig_dir, "fig_attrition_funnel.png"), p_attr,
+       width = 8.5, height = 4.5, dpi = 150)
+
+knitr::kable(funnel %>% arrange(stage) %>% select(stage, EAS, EUR, Total),
+             caption = "Sample attrition from raw FASTQ libraries to the final mapping sets. Pre-ancestry stages are cohort-wide; the final step transitions from RNA-seq samples to individuals (technical replicates averaged).")
+```
+
+```{r attrition-modality}
+mod_ret <- tidyr::crossing(ancestry = c("EAS", "EUR"),
+                           modality = MODALITY_LEVELS) %>%
+  mutate(combat = map2_dbl(ancestry, modality,
+                           ~ unname(tot[paste0("in_combat_", .x, "_", .y)])),
+         qtl_input = map2_dbl(ancestry, modality,
+                              ~ unname(tot[paste0("in_qtl_", .x, "_", .y)]))) %>%
+  pivot_wider(names_from = ancestry,
+              values_from = c(combat, qtl_input)) %>%
+  select(modality, combat_EAS, qtl_input_EAS, combat_EUR, qtl_input_EUR)
+knitr::kable(mod_ret,
+             col.names = c("modality", "ComBat", "QTL input",
+                           "ComBat", "QTL input"),
+             caption = "Per-modality sample retention at the ComBat and QTL-input stages (EAS columns: EAS; EUR columns: EUR).")
+```
+
+Of the `r tot["fastq_r1_present"]` raw libraries, `r tot["has_quant_sf"]`
+were Salmon-quantified and QU-corrected and appear in the assembled modality
+BEDs (one metadata-only entry, SRR13696952, was never quantified).
+Ancestry assignment and the genotype intersection with PCA-outlier removal
+leave `r tot["in_metadata_EAS"]` EAS and `r tot["in_metadata_EUR"]` EUR
+RNA-seq samples; replicate averaging gives the final mapping sets of
+**`r n_samp["EAS"]` EAS and `r n_samp["EUR"]` EUR individuals**.
+
+Two stage-specific notes. (1) ComBat-stage membership is read from the
+on-disk `combat_int` BEDs: the expression files were no longer present at
+archive time, so expression membership is carried forward from the
+genotype-intersection stage; the other modalities measure
+`r tot["in_combat_EAS_isoforms"]` EAS / `r tot["in_combat_EUR_isoforms"]`
+EUR — fewer EUR samples than the downstream QTL inputs
+(`r tot["in_qtl_EUR_expression"]`), indicating those on-disk BEDs predate
+the final QTL-input assembly. The QTL-input counts are the operative sample
+sets for mapping. (2) Splicing is the only modality with QTL-input
+attrition (`r tot["in_qtl_EAS_splicing"]` EAS / `r tot["in_qtl_EUR_splicing"]`
+EUR), from junction-level harmonization.
+
 ## HCP count optimization (module 25a)
 
 ```{r hcp-optimization, fig.width=8, fig.height=4.5}
@@ -386,30 +518,41 @@ At FDR ≤ 5% the grouped (gene-level, per-modality) layers contain
 **`r nrow(egenes_grouped)` ancestry × modality × gene hits**`r if (nrow(n_eg_mod) > 0) sprintf(" (%s)", paste(sprintf("%s %s: %d", n_eg_mod$ancestry, n_eg_mod$modality, n_eg_mod$n), collapse = ", "))`;
 the combined cross-modality layer adds `r sum(n_eg)` eGenes. The figure
 shows the full q-value landscape: genes binned by best q-value per
-ancestry × modality.
+ancestry × modality, with the combined layer as the right-most bar.
+Splicing is the one empirically null modality — its best q-value is
+`r signif(min((grouped %>% filter(ancestry == "EAS", modality == "splicing"))$qval), 2)`
+in EAS and
+`r signif(min((grouped %>% filter(ancestry == "EUR", modality == "splicing"))$qval), 2)`
+in EUR — so its bar sits entirely in the q > 0.50 tier.
 
 ```{r fig-xgenes-tiers, fig.width=9, fig.height=5.5}
-tiers <- grouped %>%
-  mutate(tier = cut(qval, breaks = c(0, 0.05, 0.10, 0.25, 0.50, 1),
+tiers <- bind_rows(
+  grouped %>% select(ancestry, modality, gene_id, qval),
+  combined %>% select(ancestry, modality, gene_id, qval)
+) %>%
+  mutate(modality = factor(modality, levels = c(MODALITY_LEVELS, "combined")),
+         tier = cut(qval, breaks = c(0, 0.05, 0.10, 0.25, 0.50, 1),
                     labels = c("q≤0.05", "q≤0.10", "q≤0.25", "q≤0.50", "q>0.50"),
                     include.lowest = TRUE)) %>%
   count(ancestry, modality, tier, .drop = FALSE)
 tier_cols <- c("q≤0.05" = "#D62728", "q≤0.10" = "#FF9400", "q≤0.25" = "#E9ED4C",
                "q≤0.50" = "#9ECAE1", "q>0.50" = "grey85")
-near_miss <- tiers %>% filter(tier %in% c("q≤0.05", "q≤0.10", "q≤0.25")) %>%
+near_miss <- tiers %>% filter(modality != "combined",
+                              tier %in% c("q≤0.05", "q≤0.10", "q≤0.25")) %>%
   group_by(ancestry, tier) %>% summarise(n = sum(n), .groups = "drop") %>%
   filter(n > 0)
 near_miss_label <- if (nrow(near_miss) == 0) "no genes at q ≤ 0.25" else
-  paste(sprintf("%s: %d gene(s) at %s", near_miss$ancestry, near_miss$n, near_miss$tier),
-        collapse = "; ")
+  paste(sprintf("%s %s: %s", near_miss$ancestry, near_miss$tier,
+                scales::comma(near_miss$n)), collapse = "; ")
 p2 <- ggplot(tiers, aes(modality, n, fill = factor(tier, levels = names(tier_cols)))) +
   geom_col(position = position_stack(reverse = TRUE)) +
   facet_wrap(~ancestry) +
   scale_fill_manual(values = tier_cols, name = "best q-value\nper gene") +
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "genes",
-       caption = paste0("Near-miss genes: ", near_miss_label, ".")) +
-  theme_report() + theme(axis.text.x = element_text(angle = 35, hjust = 1))
+       caption = paste0("Per-modality layers: ", near_miss_label, ".")) +
+  theme_report() + theme(axis.text.x = element_text(angle = 35, hjust = 1),
+                         plot.caption = element_text(size = 8))
 print(p2)
 ggsave(file.path(params$fig_dir, "fig2a_xgenes_qvalue_tiers.png"), p2,
        width = 10, height = 5.2, dpi = 150)
@@ -431,7 +574,7 @@ n_groups_stepwise <- nrow(indep_summary)
 n_secondary <- sum(indep_summary$n_signals > 1)
 ```
 
-`r if (n_groups_stepwise == 0) "No group entered the stepwise scan this round (no FDR ≤ 5% entrant in any ancestry × modality layer), so no conditionally independent signals were called." else sprintf("Stepwise regression (cis.map_independent) ran on %d FDR-qualifying groups; %d group(s) carry a conditionally independent secondary signal (rank ≥ 2).", n_groups_stepwise, n_secondary)`
+`r if (n_groups_stepwise == 0) "No group entered the stepwise scan (no FDR ≤ 5% entrant in any ancestry × modality layer), so no conditionally independent signals were called." else sprintf("Stepwise regression (cis.map_independent) ran on %d FDR-qualifying groups; %d group(s) carry a conditionally independent secondary signal (rank ≥ 2).", n_groups_stepwise, n_secondary)`
 The design-level view below shows how many phenotypes each gene contributes
 to its group (the multiple-testing unit).
 
@@ -540,9 +683,27 @@ ggsave(file.path(params$fig_dir, "fig_qq_pval_beta.png"), p5,
        width = 10, height = 5.2, dpi = 150)
 ```
 
-Calibrated p-values track the null through the bulk with at most a modest
-short tail — the signature of few-or-no detectable associations, without
-systematic inflation (which would bend the whole curve up) or deflation.
+```{r qq-stats}
+lambda_tab <- bind_rows(grouped, combined) %>%
+  group_by(ancestry, modality) %>%
+  summarise(lambda = median(qchisq(1 - pval_beta, 1), na.rm = TRUE) /
+              qchisq(0.5, 1), .groups = "drop")
+lambda_splicing <- range((lambda_tab %>% filter(modality == "splicing"))$lambda)
+lambda_signal <- range((lambda_tab %>% filter(modality != "splicing"))$lambda)
+```
+
+Two reference points calibrate the reading. **Splicing — the empirically
+null modality (π1 = 0, no FDR ≤ 5% hits) — tracks the diagonal almost
+exactly** (genomic-control λ at the median =
+`r round(lambda_splicing[1], 2)`–`r round(lambda_splicing[2], 2)`), so the
+permutation calibration is honest where no signal exists. Every other
+modality departs upward broadly and early, with λ at the median of
+`r round(lambda_signal[1], 2)`–`r round(lambda_signal[2], 2)` — the
+expected QQ signature when a substantial fraction of tests are true
+associations (Storey π1 up to
+`r round(100 * max(pi1_cells$pi1, na.rm = TRUE))`%; below), not technical
+inflation: artifactual inflation would bend the splicing curve by the same
+machinery, and it does not.
 
 ## Signal fraction (Storey π1) per layer
 
@@ -555,11 +716,17 @@ knitr::kable(pi1_tab, digits = 3,
              caption = "Storey pi1 (estimated fraction of true associations) on permutation-calibrated p-values.")
 write_tsv(pi1_tab, file.path(params$table_dir, "pi1_summary.tsv"))
 
-# Verify the pipeline's Storey q-values: with pi0 near 1 they nearly reduce
-# to BH on pval_beta. Report the max |q - BH| per ancestry (combined layer).
+# Compare the pipeline's Storey q-values with BH on pval_beta. With pi0 near
+# 1 the two nearly coincide; as the signal fraction grows Storey is more
+# liberal by up to the estimated pi0. Report max |q - BH| per ancestry
+# (combined layer).
 bh_check <- combined %>% group_by(ancestry) %>%
   summarise(max_abs_q_minus_BH = max(abs(qval - p.adjust(pval_beta, method = "BH"))),
             .groups = "drop")
+bh_eg <- combined %>% group_by(ancestry) %>%
+  summarise(storey = sum(qval <= 0.05),
+            bh = sum(p.adjust(pval_beta, method = "BH") <= 0.05),
+            .groups = "drop") %>% tibble::column_to_rownames("ancestry")
 ```
 
 ```{r pi1-text}
@@ -567,11 +734,8 @@ pi1_range <- range(pi1_tab$pi1, na.rm = TRUE)
 ```
 
 π1 estimates are `r round(100*pi1_range[1])`–`r round(100*pi1_range[2])`%
-across all cells`r if (pi1_range[2] <= 0.05) " — at most a trace signal fraction, concentrated in the highest-signal layers" else sprintf(", with the largest fractions in %s", paste(pi1_tab %>% slice_max(pi1, n = 2) %>% mutate(lbl = paste(ancestry, modality, layer)) %>% pull(lbl), collapse = " and "))`. Storey q-values remain close to BH on this
-data (max |q − BH| across the combined layer =
-`r signif(max(bh_check$max_abs_q_minus_BH), 2)`). Storey remains the correct
-convention — it can only help as signal grows (π0 < 1) — but it provides
-little lift at low signal fractions.
+across all cells`r if (pi1_range[2] <= 0.05) " — at most a trace signal fraction, concentrated in the highest-signal layers" else sprintf(", with the largest fractions in %s", paste(pi1_tab %>% slice_max(pi1, n = 2) %>% mutate(lbl = paste(ancestry, modality, layer)) %>% pull(lbl), collapse = " and "))`.
+`r if (max(bh_check$max_abs_q_minus_BH) < 0.05) sprintf("Storey q-values remain close to BH on this data (max |q − BH| across the combined layer = %s), as expected at low signal fractions.", signif(max(bh_check$max_abs_q_minus_BH), 2)) else sprintf("Storey q-values diverge from BH exactly where they should: in high-π1 cells the estimated π0 < 1 deflates q-values relative to BH (max |q − BH| across the combined layer = %s, at the null end of the ranked list where BH q-values approach 1). At the FDR ≤ 5%% boundary the π0 lift admits %d vs %d (EAS) and %d vs %d (EUR) combined-layer eGenes for Storey vs BH — the expected, principled gain from estimating the null fraction rather than assuming π0 = 1.", signif(max(bh_check$max_abs_q_minus_BH), 2), bh_eg["EAS", "storey"], bh_eg["EAS", "bh"], bh_eg["EUR", "storey"], bh_eg["EUR", "bh"])`
 
 ## Power analysis
 
@@ -619,7 +783,7 @@ variance are detectable at genome-wide thresholds; the larger EAS stratum
 (n ≈ `r n_samp["EAS"]`) brings the floor to ≈ 10% — versus ≈ 6% at PANTRY's
 n = 445. For reference, PANTRY (n = 445) reported 6,798 eGenes and a 66%
 discovery gain from non-expression modalities; GTEx tissues at n ≈ 150
-typically report hundreds to ~2,000 eGenes. Our yield this round
+typically report hundreds to ~2,000 eGenes. The yield
 (`r n_fdr05` FDR ≤ 5% associations; `r sum(n_eg)` combined-layer eGenes)
 sits `r if (sum(n_eg) < 100) "at the pessimistic end of" else "within"` that
 range.
@@ -652,7 +816,7 @@ knitr::kable(hit_tab %>% slice_head(n = 100), digits = 3,
 write_tsv(hit_tab, file.path(params$table_dir, "fdr_hits.tsv"))
 ```
 
-`r if (nrow(hit_tab) == 0) "No association reaches FDR ≤ 5% this round — the near-miss landscape below is the prioritization view."`
+`r if (nrow(hit_tab) == 0) "No association reaches FDR ≤ 5% — the near-miss landscape below is the prioritization view."`
 
 Per-gene context tables show each FDR-significant gene across all layers and
 both ancestries (grouped/combined rows are gene-level; ungrouped rows are
@@ -739,7 +903,7 @@ write_tsv(mac_tab, file.path(params$table_dir, "carrier_count_audit.tsv"))
 ```
 
 The MAC ≥ 5 floor is applied at the genotype intersection in module 23
-(before outlier exclusion). `r if (all(mac_tab$n_lt5 == 0)) sprintf("This round the floor propagated cleanly: every tested pair in every layer retains ≥ %d minor-allele carriers in EAS and ≥ %d in EUR — no post-hoc carrier filtering is needed.", min(mac_tab$min_carriers[mac_tab$ancestry == "EAS"]), min(mac_tab$min_carriers[mac_tab$ancestry == "EUR"])) else "A fraction of tests retain < 5 carriers in the mapping sample sets (audit table) because the floor predates outlier exclusion and modality-specific sample attrition. No FDR-significant result should be carrier-limited; hit lists should be post-filtered to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
+(before outlier exclusion). `r if (all(mac_tab$n_lt5 == 0)) sprintf("The floor propagated cleanly: every tested pair in every layer retains ≥ %d minor-allele carriers in EAS and ≥ %d in EUR — no post-hoc carrier filtering is needed.", min(mac_tab$min_carriers[mac_tab$ancestry == "EAS"]), min(mac_tab$min_carriers[mac_tab$ancestry == "EUR"])) else "A fraction of tests retain < 5 carriers in the mapping sample sets (audit table) because the floor predates outlier exclusion and modality-specific sample attrition. No FDR-significant result should be carrier-limited; hit lists should be post-filtered to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
 
 ## Stepwise regression: independent signals
 
@@ -1111,7 +1275,7 @@ enrich_highlight <- if (exists("enrich_results") && length(enrich_results) > 0) 
 } else NA_character_
 ```
 
-**The discovery landscape this round: `r n_fdr05` FDR ≤ 5% associations —
+**The discovery landscape: `r n_fdr05` FDR ≤ 5% associations —
 `r n_eg["EAS"]` EAS and `r n_eg["EUR"]` EUR eGenes in the primary
 combined-layer catalog** (n ≈ `r n_samp["EAS"]`/`r n_samp["EUR"]`, MAF ≥
 0.01 + MAC ≥ 5, genome-wide permutation calibration). Strongest per
@@ -1124,7 +1288,7 @@ claims.
 
 Three **characterization** observations:
 
-1. **Modality composition.** `r if (!is.null(mod_leader)) paste(sprintf("%s leads the %s grouped-eGene breakdown (%d of %d)", mod_leader$modality, mod_leader$ancestry, mod_leader$n, mod_leader$total), collapse = "; ") else "No grouped-layer eGenes this round."`
+1. **Modality composition.** `r if (!is.null(mod_leader)) paste(sprintf("%s leads the %s grouped-eGene breakdown (%d of %d)", mod_leader$modality, mod_leader$ancestry, mod_leader$n, mod_leader$total), collapse = "; ") else "No grouped-layer eGenes."`
    PANTRY's central finding was that non-expression modalities carry the
    largest share of regulatory signal; the driver-modality composition of
    the catalog (above) tests whether that ordering holds in placenta.
@@ -1132,6 +1296,62 @@ Three **characterization** observations:
    Shared eGenes are the cross-ancestry replication signal; specific sets
    are candidates for ancestry-biased regulation.
 3. **Functional enrichment.** `r if (!is.na(enrich_highlight)) paste0("Top g:Profiler term per set: ", enrich_highlight, ". Full tables in tables/enrichment_*.tsv.") else "No significant enrichment terms (or sets too small for ORA) — see the enrichment section."`
+
+## Literature context
+
+**Positive control: the ERAP1/ERAP2 locus (5q15).** The strongest signal
+shared across ancestries is *ERAP2* — a top-10 combined-layer gene in both
+strata (EAS q = 2.4×10⁻¹⁹, expression driver; EUR q = 5.7×10⁻³⁰,
+**isoform-expression** driver) — with *ERAP1* the #3 gene in EUR
+(q = 2.4×10⁻²⁹, alt_polyA driver). *ERAP2* is a canonical preeclampsia risk
+locus: fetal-genome variants at *ERAP2* associate with preeclampsia in
+Australian/Norwegian ([Johnson et al. 2009](https://doi.org/10.1007/s00439-009-0714-x)),
+Brazilian ([Ferreira et al. 2021](https://doi.org/10.1038/s41598-021-86240-z)),
+and African American ([Hill et al. 2011](https://doi.org/10.1186/1471-2350-12-64))
+cohorts, and ERAP1/ERAP2 are differentially expressed in preeclamptic
+placentas ([Seamon et al. 2020](https://doi.org/10.3389/fimmu.2020.00396)).
+The EUR driver being isoform expression is mechanism-consistent: the
+preeclampsia-associated *ERAP2* variation tags a haplotype under balancing
+selection whose molecular effect is alternative splicing and
+nonsense-mediated decay of *ERAP2* transcripts
+([Andrés et al. 2010](https://doi.org/10.1371/journal.pgen.1001157);
+[Raja & Kuiper 2023](https://doi.org/10.1038/s41435-023-00225-8);
+[Ye et al. 2018](https://doi.org/10.1101/gr.240390.118)) — exactly the
+phenotype class our isoform-expression layer measures. Recovering this
+locus, through the expected modality, is direct evidence that the atlas
+captures disease-relevant placental regulation.
+
+**Top combined-layer genes, per ancestry.** EAS: *PGM1* (expression driver)
+— placental phosphoglucomutase activity is long established
+([Fazi et al. 1990](https://doi.org/10.1080/00327489008050198)) and PGM1
+loss disrupts cellular energy homeostasis
+([Conte et al. 2023](https://doi.org/10.3390/ijms24098247)), relevant to
+placental glycogen handling in diabetic pregnancy
+([Lafta et al. 2021](https://doi.org/10.28969/ijeir.v10.i2.r3)); *IQCG*
+— ciliary/flagellar function with no prior placental association (novel
+candidate); *PSCA* (alt_polyA driver) — overexpressed in gestational
+trophoblastic neoplasia
+([Feng et al. 2007](https://doi.org/10.1111/j.1365-2559.2007.02925.x));
+*FBLN1* — fibulin-1 functions in placentation
+([Singh et al. 2006](https://doi.org/10.1016/j.placenta.2005.10.009)),
+placental ECM remodeling in late-onset preeclampsia
+([García-Montero et al. 2026](https://doi.org/10.3390/medsci14030364)),
+and maternal plasma fibulin-1 tracking pregnancy progression
+([Orvik et al. 2021](https://doi.org/10.1186/s12884-021-04110-y)); *SPSB2*
+— an E3-ligase adaptor targeting iNOS for proteasomal degradation
+([Kuang et al. 2010](https://doi.org/10.1083/jcb.200912087);
+[Li et al. 2021](https://doi.org/10.1016/j.niox.2021.04.004)), placing it
+in nitric-oxide biology central to placental vascular function. EUR:
+*ZSCAN9* — KRAB zinc-finger with no prior placental association (novel
+candidate); *CTNND1* (RNA-editing driver) — p120-catenin is required for
+trophoblast proliferation and lineage specification at implantation
+([Qin et al. 2024](https://doi.org/10.1093/biolre/ioae163)) and sits in the
+Wnt-regulated invasion program
+([Knöfler & Pollheimer 2013](https://doi.org/10.3389/fgene.2013.00190));
+*STBD1* — the glycophagy receptor linking glycogen to selective autophagy
+([Zhang et al. 2024](https://doi.org/10.1073/pnas.2402817121);
+[Tang et al. 2023](https://doi.org/10.1002/jcp.31078)), a second
+glycogen-metabolism hit alongside *PGM1*.
 
 Sub-threshold top-ranked genes (tables above) remain prioritization hints
 only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should be discounted outright" else ""`.
@@ -1143,15 +1363,15 @@ only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should
    Doubling n would roughly halve the detectable r²; matching PANTRY's
    n = 445 would bring the floor to ≈ 0.06. Adding the remaining cohorts and
    the AFR/AMR/SAS strata is the highest-value next step.
-2. **Carrier-count propagation.** `r if (all(mac_tab$n_lt5 == 0)) "Resolved this round: the MAC ≥ 5 floor propagated cleanly to every mapping output (audit table above)." else "The MAC ≥ 5 floor predates outlier exclusion, so low-carrier tests persist in some mapping outputs (audit table above). No reported result depends on them; hit lists should post-filter to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
+2. **Carrier-count propagation.** `r if (all(mac_tab$n_lt5 == 0)) "The MAC ≥ 5 floor propagated cleanly to every mapping output (audit table above)." else "The MAC ≥ 5 floor predates outlier exclusion, so low-carrier tests persist in some mapping outputs (audit table above). No reported result depends on them; hit lists should post-filter to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
 3. **Ancestry asymmetry.** EUR tests more phenotypes than EAS in every
    modality (ancestry-specific filtering), so cross-ancestry comparisons are
    restricted to genes tested in both.
 4. **No pooled cross-ancestry inference** was performed. If combined
    discovery is wanted later, Fisher/Stouffer or an inverse-variance slope
    meta-analysis are the clean options.
-5. **Stepwise secondary signals**: `r if (n_secondary == 0) "none called in any layer this round." else sprintf("%d groups carry a conditionally independent secondary signal (table above).", n_secondary)`
-6. **Fine-mapping and colocalization are out of scope this round.** The
+5. **Stepwise secondary signals**: `r if (n_secondary == 0) "none called in any layer." else sprintf("%d groups carry a conditionally independent secondary signal (table above).", n_secondary)`
+6. **Fine-mapping and colocalization are out of scope.** The
    natural follow-ups on the FDR-significant catalog are SuSiE fine-mapping
    per eGene locus, GWAS colocalization (coloc/eCAVIAR) against placental
    and pregnancy-outcome GWAS, and locus-zoom visual QC of each hit

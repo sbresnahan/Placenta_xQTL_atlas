@@ -2,11 +2,9 @@
 """
 25_build_covariates.py — Assemble and optimize tensorQTL covariate table
 
-REVISED (prune-then-optimize round): ct_Maternal is excluded via
---exclude-covariates BEFORE correlation pruning (replaces the round-3 manual
-hand-edit); the hard cap is removed (--max-covariates default None) so the
-25a HCP grid is not truncated — under the old cap of 25, every nominal
-k ≥ 12 collapsed to the same HCP_1..11 model (14 fixed covariates + cap).
+ct_Maternal is excluded via --exclude-covariates BEFORE correlation
+pruning; there is no covariate cap (--max-covariates default None) so the
+25a HCP grid is not truncated.
 
 Combines:
   - HCP factors (HCP_1 … HCP_k) from harmonized HCP file
