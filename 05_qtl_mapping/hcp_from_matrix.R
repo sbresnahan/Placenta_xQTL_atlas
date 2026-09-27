@@ -17,7 +17,7 @@
 #      SAMPLE space, so a fixed random phenotype subset is statistically
 #      safe — same convention as PEER/SVD practice on large matrices.)
 #   3. Load pooled Picard QC metrics (rnaseq_id rows) -> rename to array_id
-#      via --metadata, subset to BED samples
+#      via --metadata, average technical replicates sharing array_id, and subset to BED samples
 #   4. QC prep: median-impute NAs, drop zero-variance metrics, iteratively
 #      drop |r| > --qc-cor-threshold metrics (avoids singular Z'Z)
 #   5. Standardize both matrices (center + unit sum of squares)
@@ -27,11 +27,11 @@
 #
 # Usage:
 #   Rscript hcp_from_matrix.R \
-#       --bed EAS_splicing_harmonized.bed \
-#       --qc-metrics all_qc_metrics.tsv \
-#       --metadata EAS_metadata.tsv \
-#       --k 15 \
-#       --output EAS_splicing_hcp_factors.tsv
+#      --bed EAS_splicing_harmonized.bed \
+#      --qc-metrics all_qc_metrics.tsv \
+#      --metadata EAS_metadata.tsv \
+#      --k 15 \
+#      --output EAS_splicing_hcp_factors.tsv
 #
 # Dependencies: Rhcpp (GitHub: mvaniterson/Rhcpp), optparse (CRAN)
 #
@@ -70,17 +70,17 @@ option_list <- list(
 
 opt <- parse_args(OptionParser(option_list = option_list))
 
-opt_bed           <- opt[["bed"]]
-opt_qc_metrics    <- opt[["qc-metrics"]]
-opt_metadata      <- opt[["metadata"]]
-opt_k             <- opt[["k"]]
-opt_lambda1       <- opt[["lambda1"]]
-opt_lambda2       <- opt[["lambda2"]]
-opt_lambda3       <- opt[["lambda3"]]
+opt_bed              <- opt[["bed"]]
+opt_qc_metrics       <- opt[["qc-metrics"]]
+opt_metadata         <- opt[["metadata"]]
+opt_k                <- opt[["k"]]
+opt_lambda1          <- opt[["lambda1"]]
+opt_lambda2          <- opt[["lambda2"]]
+opt_lambda3          <- opt[["lambda3"]]
 opt_qc_cor_threshold <- opt[["qc-cor-threshold"]]
-opt_max_phenotypes <- opt[["max-phenotypes"]]
-opt_seed          <- opt[["seed"]]
-opt_output        <- opt[["output"]]
+opt_max_phenotypes   <- opt[["max-phenotypes"]]
+opt_seed             <- opt[["seed"]]
+opt_output           <- opt[["output"]]
 
 if (is.null(opt_bed) || is.null(opt_qc_metrics) || is.null(opt_metadata) ||
     is.null(opt_k) || is.null(opt_output)) {
@@ -145,17 +145,26 @@ cat(sprintf("  Phenotype matrix: %d samples x %d phenotypes\n",
 
 # ---- Load QC metrics and map to array_id space ----
 cat(sprintf("[%s] Loading QC metrics: %s\n", date(), opt_qc_metrics))
-qc_all <- read.delim(opt_qc_metrics, sep = "\t", row.names = 1, check.names = FALSE)
-cat(sprintf("  QC metrics: %d samples x %d metrics\n", nrow(qc_all), ncol(qc_all)))
+qc_raw <- read.delim(opt_qc_metrics, sep = "\t", row.names = 1, check.names = FALSE)
+cat(sprintf("  QC metrics: %d samples x %d metrics\n", nrow(qc_raw), ncol(qc_raw)))
 
 meta <- read.delim(opt_metadata, sep = "\t", stringsAsFactors = FALSE)
 if (!all(c("rnaseq_id", "array_id") %in% colnames(meta))) {
   stop("--metadata must have rnaseq_id and array_id columns; got: ",
        paste(colnames(meta), collapse = ", "))
 }
+
+# Map rnaseq_id to array_id, keeping only QC rows present in metadata
 id_map <- setNames(meta$array_id, meta$rnaseq_id)
-mapped <- id_map[rownames(qc_all)]
-rownames(qc_all) <- ifelse(is.na(mapped), rownames(qc_all), as.character(mapped))
+valid_rnaseq <- intersect(rownames(qc_raw), names(id_map))
+qc_mapped <- qc_raw[valid_rnaseq, , drop = FALSE]
+qc_mapped$array_id <- id_map[valid_rnaseq]
+
+# Average technical replicates by array_id
+cat(sprintf("  Averaging technical replicates by array_id...\n"))
+qc_agg <- aggregate(. ~ array_id, data = qc_mapped, FUN = mean, na.rm = TRUE)
+rownames(qc_agg) <- qc_agg$array_id
+qc_all <- qc_agg[, setdiff(colnames(qc_agg), "array_id"), drop = FALSE]
 
 # Subset QC to BED samples (array_id space); median-impute any missing
 expr_samples <- sample_cols
@@ -197,7 +206,7 @@ if (ncol(qc_subset) > 1) {
     worst <- names(which.max(high_cor_counts))
     drop_cols <- c(drop_cols, worst)
     qc_cor_mat <- qc_cor_mat[rownames(qc_cor_mat) != worst,
-                              colnames(qc_cor_mat) != worst, drop = FALSE]
+                             colnames(qc_cor_mat) != worst, drop = FALSE]
     if (ncol(qc_cor_mat) <= 1) break
   }
   if (length(drop_cols) > 0) {
