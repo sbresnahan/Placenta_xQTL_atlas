@@ -70,7 +70,9 @@ echo "  Output:      $OUT"
 
 rm -rf "$STAGING"
 mkdir -p "$STAGING/data/results" "$STAGING/data/qc/qtl_inputs" \
-         "$STAGING/data/qc/hcp_optimization" "$STAGING/data/qc/genotype_pcs"
+         "$STAGING/data/qc/hcp_optimization" \
+         "$STAGING/data/qc/hcp_optimization_modalities" \
+         "$STAGING/data/qc/genotype_pcs"
 
 MISSING_CORE=()
 MISSING_OTHER=()
