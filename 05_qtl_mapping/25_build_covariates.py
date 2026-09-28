@@ -330,11 +330,26 @@ def main():
 
         aligned_blocks = []
         for bi, block in enumerate(covariate_blocks):
-            # Deduplicate columns (sample IDs) — keep first occurrence
+            # Duplicate sample columns are technical replicates (the same
+            # individual processed in two cohort batches). Average them —
+            # the same convention as 26_harmonize_modalities.py for the
+            # phenotype BEDs. All blocks are numeric by construction (HCPs,
+            # PCs, sex coded 0/1, mean-centered GA, arcsinh cell types).
             if block.columns.duplicated().any():
                 dup_cols = block.columns[block.columns.duplicated(keep=False)].unique().tolist()
-                print(f"  WARN: block {bi} has duplicate sample columns: {dup_cols[:5]}, keeping first")
-                block = block.loc[:, ~block.columns.duplicated(keep='first')]
+                print(f"  NOTE: block {bi}: averaging {len(dup_cols)} technical-replicate "
+                      f"sample column(s): {dup_cols[:5]}")
+                block = block.T.groupby(level=0).mean().T
+                # Concordance guard: sex is coded 0/1, so concordant
+                # replicates average to exactly 0 or 1. A non-integer mean
+                # means the metadata disagree for that individual.
+                if 'sex' in block.index:
+                    sex_vals = block.loc['sex']
+                    nonbinary = sex_vals[~sex_vals.isin([0.0, 1.0])]
+                    if len(nonbinary):
+                        print(f"  WARN: discordant sex across technical replicates for "
+                              f"{len(nonbinary)} sample(s): {nonbinary.index.tolist()[:5]} "
+                              f"(values averaged to non-integer; check metadata)")
             # Also check for duplicate row indices (covariate names)
             if block.index.duplicated().any():
                 dup_idx = block.index[block.index.duplicated(keep=False)].unique().tolist()

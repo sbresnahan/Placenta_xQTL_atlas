@@ -160,6 +160,17 @@ if (!all(c("rnaseq_id", "array_id") %in% colnames(meta))) {
        paste(colnames(meta), collapse = ", "))
 }
 
+# Integrity guard: replicate averaging assumes many rnaseq_ids -> one
+# array_id. An rnaseq_id mapping to multiple DISTINCT array_ids would
+# silently smear this sample's QC values across individuals.
+id_check <- tapply(meta$array_id, meta$rnaseq_id, function(x) length(unique(x)))
+if (any(id_check > 1)) {
+  bad <- names(id_check)[id_check > 1]
+  stop("rnaseq_id(s) map to multiple distinct array_ids in --metadata: ",
+       paste(head(bad, 5), collapse = ", "),
+       " — fix the ID map before averaging replicates")
+}
+
 # Merge QC metrics with metadata on rnaseq_id
 qc_merged <- merge(qc_raw, meta[, c("rnaseq_id", "array_id")], 
                    by.x = sample_col, by.y = "rnaseq_id", all.x = FALSE)

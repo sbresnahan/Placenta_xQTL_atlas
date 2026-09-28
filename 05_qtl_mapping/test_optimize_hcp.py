@@ -203,5 +203,19 @@ if shutil.which('bgzip') and shutil.which('tabix'):
 else:
     check("binary fallback (skipped: no bgzip/tabix on PATH)", True)
 
+# ---------- 7. write_empty_hcp deduplicates array_id (technical replicates) ----------
+print("\n[7] write_empty_hcp with replicated array_ids")
+meta_dup = pd.DataFrame({
+    'rnaseq_id': ['RNA1', 'RNA2', 'RNA3', 'RNA4', 'RNA4b'],
+    'array_id':  ['ARR1', 'ARR2', 'ARR3', 'ARR4', 'ARR4'],  # ARR4 replicated
+})
+dup_path = os.path.join(tmp, 'empty_hcp_dup.tsv')
+m.write_empty_hcp(meta_dup, dup_path)
+with open(dup_path) as f:
+    hdr = f.read().strip().split('\t')
+check("header columns unique despite replicated array_id",
+      len(hdr) == len(set(hdr)) and hdr == ['covariate', 'ARR1', 'ARR2', 'ARR3', 'ARR4'],
+      str(hdr))
+
 print(f"\n{'='*50}\nTOTAL: {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

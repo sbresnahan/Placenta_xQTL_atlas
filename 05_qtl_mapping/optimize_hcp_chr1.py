@@ -135,8 +135,12 @@ def harmonize_hcp(hcp_path, meta, out_path):
 
 
 def write_empty_hcp(meta, out_path):
-    """Header-only HCP file (0 factors) carrying the sample set for k=0."""
-    cols = ['covariate'] + sorted(meta['array_id'].tolist())
+    """Header-only HCP file (0 factors) carrying the sample set for k=0.
+
+    array_id is deduplicated: metadata carries one row per rnaseq sample, so
+    technical replicates (same array_id on multiple rows) would otherwise
+    produce duplicate columns."""
+    cols = ['covariate'] + sorted(meta['array_id'].unique().tolist())
     with open(out_path, 'w') as f:
         f.write('\t'.join(cols) + '\n')
 

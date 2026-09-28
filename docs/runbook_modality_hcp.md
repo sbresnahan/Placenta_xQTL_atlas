@@ -172,6 +172,13 @@ ls "$QTL_DIR"/*_covariates_*.tsv | wc -l
 head -3 "$QTL_DIR/EAS_covariates_splicing.tsv" | cut -f1-3
 ```
 
+Expected log output: each 25 run prints a NOTE line listing the
+technical-replicate samples it averages (4 EAS samples: SRR13696945,
+SRR13696964, SRR13696996, SRR13697029 — the same individuals processed in two
+cohort batches). A `WARN: discordant sex across technical replicates` line
+would instead indicate a metadata inconsistency — investigate before
+proceeding if it appears.
+
 ## 4. xQTL mapping (three submission passes)
 
 28_submit_modalities.sh skips combos with existing results or running jobs,

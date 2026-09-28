@@ -186,5 +186,81 @@ check('k=0: bare name Maternal matched ct_Maternal',
 check('k=0: fixed covariates present',
       {'PC1', 'sex', 'GA', 'ct_Hofbauer'}.issubset(set(covs6.index)))
 
+# ---------- test 7: technical replicates are averaged, not kept-first ----------
+# Duplicate array_id rows in metadata (same individual processed in two
+# cohort batches) must average in the covariate table, matching the
+# 26_harmonize_modalities.py convention for phenotype BEDs.
+tmp7 = tempfile.mkdtemp()
+qtl7, pc7 = write_fixtures(tmp7)
+
+# S00: concordant sex (M/M), distinct GA values; S02: DISCORDANT sex (M/F)
+meta7 = pd.read_csv(os.path.join(qtl7, 'EAS_metadata.tsv'), sep='\t')
+ga_a = float(meta7.loc[meta7['array_id'] == 'S00', 'GA'].iloc[0])
+ga_b = ga_a + 4.0  # distinct second measurement
+dup_rows = pd.DataFrame([
+    {'array_id': 'S00', 'sex': 'M', 'GA': ga_b},                    # concordant
+    {'array_id': 'S02', 'sex': 'F' if meta7.loc[meta7['array_id'] == 'S02', 'sex'].iloc[0] == 'M' else 'M',
+     'GA': float(meta7.loc[meta7['array_id'] == 'S02', 'GA'].iloc[0])},  # discordant
+])
+meta7 = pd.concat([meta7, dup_rows], ignore_index=True)
+meta7.to_csv(os.path.join(qtl7, 'EAS_metadata.tsv'), sep='\t', index=False)
+
+# S00: duplicate deconvolution row with distinct proportions
+dec7 = pd.read_csv(os.path.join(qtl7, 'EAS_deconvolution_harmonized.tsv'), sep='\t')
+s00_row = dec7[dec7['sample_id'] == 'S00'].copy()
+s00_alt = s00_row.copy()
+s00_alt['Endothelial'] = s00_alt['Endothelial'] + 0.02
+dec7 = pd.concat([dec7, s00_alt], ignore_index=True)
+dec7.to_csv(os.path.join(qtl7, 'EAS_deconvolution_harmonized.tsv'),
+            sep='\t', index=False)
+
+r = run_25(qtl7, pc7, ['--exclude-covariates', 'ct_Maternal'])
+check('replicate run exits 0', r.returncode == 0, r.stderr[-500:])
+covs7 = read_covs(qtl7)
+check('no duplicate sample columns in output',
+      not covs7.columns.duplicated().any())
+check('sample count unchanged (24)', covs7.shape[1] == N,
+      f"got {covs7.shape[1]}")
+check('averaging NOTE logged', 'averaging' in r.stdout and 'S00' in r.stdout)
+check('discordant sex WARN logged', 'discordant sex' in r.stdout,
+      r.stdout[-800:])
+
+# GA: averaged then centered. Centering uses the 26-row metadata mean
+# (both duplicates included), then replicate columns average:
+# expected = (ga_a + ga_b)/2 - mean(all 26 GA values)
+ga_all = pd.concat([meta7['GA']])
+m_all = ga_all.mean()
+expected_ga = (ga_a + ga_b) / 2 - m_all
+check('GA averaged across replicates',
+      'GA' in covs7.index and
+      np.isclose(covs7.loc['GA', 'S00'], expected_ga),
+      f"got {covs7.loc['GA', 'S00'] if 'GA' in covs7.index else 'dropped'}, "
+      f"expected {expected_ga}")
+
+# sex: concordant replicate (S00, M/M) averages to exactly 0
+check('concordant sex replicate exact',
+      'sex' in covs7.index and covs7.loc['sex', 'S00'] == 0.0)
+# discordant replicate (S02) averages to 0.5
+check('discordant sex replicate averages to 0.5',
+      'sex' in covs7.index and covs7.loc['sex', 'S02'] == 0.5,
+      f"got {covs7.loc['sex', 'S02'] if 'sex' in covs7.index else 'dropped'}")
+
+# cell types: arcsinh + centering happen before the averaging step, so the
+# expected value is the mean of the two transformed-and-centered values.
+if 'ct_Endothelial' in covs7.index:
+    v1 = float(s00_row['Endothelial'].iloc[0])
+    v2 = float(s00_alt['Endothelial'].iloc[0])
+    # recompute the script's transform on the 25-row deconv table
+    props = dec7.drop(columns=['sample_id', 'cohort'])
+    props = props.drop(columns=[props.mean().idxmax()])  # reference drop
+    tr = np.arcsinh(props) - np.arcsinh(props).mean()
+    s00_vals = tr.loc[dec7['sample_id'] == 'S00', 'Endothelial']
+    expected_ct = float(s00_vals.mean())
+    check('cell-type replicate averaged (post-transform)',
+          np.isclose(covs7.loc['ct_Endothelial', 'S00'], expected_ct),
+          f"got {covs7.loc['ct_Endothelial', 'S00']}, expected {expected_ct}")
+else:
+    check('cell-type replicate averaged (ct_Endothelial pruned — skipped)', True)
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
