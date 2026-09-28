@@ -16,8 +16,9 @@
 #      HCP cost for the ~150k-phenotype combined arm. HCP factors live in
 #      SAMPLE space, so a fixed random phenotype subset is statistically
 #      safe — same convention as PEER/SVD practice on large matrices.)
-#   3. Load pooled Picard QC metrics (rnaseq_id rows) -> rename to array_id
-#      via --metadata, average technical replicates sharing array_id, and subset to BED samples
+#   3. Load pooled Picard QC metrics (rnaseq_id in 'sample' column) -> rename
+#      to array_id via --metadata, average technical replicates sharing array_id,
+#      and subset to BED samples
 #   4. QC prep: median-impute NAs, drop zero-variance metrics, iteratively
 #      drop |r| > --qc-cor-threshold metrics (avoids singular Z'Z)
 #   5. Standardize both matrices (center + unit sum of squares)
@@ -145,8 +146,13 @@ cat(sprintf("  Phenotype matrix: %d samples x %d phenotypes\n",
 
 # ---- Load QC metrics and map to array_id space ----
 cat(sprintf("[%s] Loading QC metrics: %s\n", date(), opt_qc_metrics))
-qc_raw <- read.delim(opt_qc_metrics, sep = "\t", row.names = 1, check.names = FALSE)
-cat(sprintf("  QC metrics: %d samples x %d metrics\n", nrow(qc_raw), ncol(qc_raw)))
+# Read without row.names to preserve the explicit 'sample' column
+qc_raw <- read.delim(opt_qc_metrics, sep = "\t", check.names = FALSE, stringsAsFactors = FALSE)
+
+# Detect sample ID column
+sample_col <- if ("sample" %in% colnames(qc_raw)) "sample" else colnames(qc_raw)[1]
+cat(sprintf("  QC raw: %d samples x %d metrics (sample column: '%s')\n", 
+            nrow(qc_raw), ncol(qc_raw) - 1, sample_col))
 
 meta <- read.delim(opt_metadata, sep = "\t", stringsAsFactors = FALSE)
 if (!all(c("rnaseq_id", "array_id") %in% colnames(meta))) {
@@ -154,17 +160,26 @@ if (!all(c("rnaseq_id", "array_id") %in% colnames(meta))) {
        paste(colnames(meta), collapse = ", "))
 }
 
-# Map rnaseq_id to array_id, keeping only QC rows present in metadata
-id_map <- setNames(meta$array_id, meta$rnaseq_id)
-valid_rnaseq <- intersect(rownames(qc_raw), names(id_map))
-qc_mapped <- qc_raw[valid_rnaseq, , drop = FALSE]
-qc_mapped$array_id <- id_map[valid_rnaseq]
+# Merge QC metrics with metadata on rnaseq_id
+qc_merged <- merge(qc_raw, meta[, c("rnaseq_id", "array_id")], 
+                   by.x = sample_col, by.y = "rnaseq_id", all.x = FALSE)
+
+if (nrow(qc_merged) == 0) {
+  stop("No overlapping samples found between QC metrics ('", sample_col, "') and metadata ('rnaseq_id')")
+}
+
+# Identify numeric metric columns
+metric_cols <- setdiff(colnames(qc_raw), sample_col)
+numeric_metrics <- metric_cols[sapply(qc_merged[, metric_cols, drop = FALSE], is.numeric)]
 
 # Average technical replicates by array_id
-cat(sprintf("  Averaging technical replicates by array_id...\n"))
-qc_agg <- aggregate(. ~ array_id, data = qc_mapped, FUN = mean, na.rm = TRUE)
+cat(sprintf("  Averaging technical replicates across %d matched samples...\n", nrow(qc_merged)))
+qc_agg <- aggregate(qc_merged[, numeric_metrics, drop = FALSE], 
+                    by = list(array_id = qc_merged$array_id), 
+                    FUN = mean, na.rm = TRUE)
+
 rownames(qc_agg) <- qc_agg$array_id
-qc_all <- qc_agg[, setdiff(colnames(qc_agg), "array_id"), drop = FALSE]
+qc_all <- qc_agg[, numeric_metrics, drop = FALSE]
 
 # Subset QC to BED samples (array_id space); median-impute any missing
 expr_samples <- sample_cols
@@ -187,16 +202,14 @@ for (col in colnames(qc_subset)) {
 }
 
 # Remove zero-variance QC columns
-zero_var_qc <- sapply(qc_subset, function(x) sd(as.numeric(x)) == 0)
+zero_var_qc <- sapply(qc_subset, function(x) sd(as.numeric(x), na.rm = TRUE) == 0)
 if (any(zero_var_qc)) {
   cat(sprintf("  Removing %d zero-variance QC metrics: %s\n",
               sum(zero_var_qc), paste(colnames(qc_subset)[zero_var_qc], collapse = ", ")))
   qc_subset <- qc_subset[, !zero_var_qc, drop = FALSE]
 }
 
-# Remove highly correlated QC columns (|r| > threshold) to avoid singular
-# Z'Z in HCP. Iteratively drops the column with the most remaining
-# high-correlation partners.
+# Remove highly correlated QC columns (|r| > threshold) to avoid singular Z'Z
 if (ncol(qc_subset) > 1) {
   qc_cor_mat <- cor(as.matrix(qc_subset), use = "pairwise.complete.obs")
   diag(qc_cor_mat) <- 0
@@ -227,9 +240,7 @@ cat(sprintf("  Phenotypes standardized: %d x %d\n", nrow(expr_std), ncol(expr_st
 cat(sprintf("[%s] Running HCP (k=%d)\n", date(), opt_k))
 suppressPackageStartupMessages(library(Rhcpp))
 
-# Rhcpp::hcp: Z = known covariates (n_samples x d_metrics), Y = phenotype
-# matrix (n_samples x g_phenotypes). Data already standardized -> stand=FALSE.
-# W (n_samples x k) = hidden covariates = QTL covariates.
+# Rhcpp::hcp: Z = known covariates (n_samples x d_metrics), Y = phenotype matrix
 hcp_result <- tryCatch({
   hcp(Z = qc_std, Y = expr_std, k = opt_k,
       lambda1 = opt_lambda1, lambda2 = opt_lambda2, lambda3 = opt_lambda3,
