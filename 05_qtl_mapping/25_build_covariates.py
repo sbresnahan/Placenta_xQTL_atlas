@@ -329,6 +329,7 @@ def main():
         print(f"\n  Final sample count (intersection of all covariate blocks): {len(all_samples)}")
 
         aligned_blocks = []
+        exclude_samples = set()
         for bi, block in enumerate(covariate_blocks):
             # Duplicate sample columns are technical replicates (the same
             # individual processed in two cohort batches). Average them —
@@ -342,20 +343,28 @@ def main():
                 block = block.T.groupby(level=0).mean().T
                 # Concordance guard: sex is coded 0/1, so concordant
                 # replicates average to exactly 0 or 1. A non-integer mean
-                # means the metadata disagree for that individual.
+                # means the metadata disagree for that individual — exclude
+                # the individual outright rather than propagate a fractional
+                # sex covariate.
                 if 'sex' in block.index:
                     sex_vals = block.loc['sex']
                     nonbinary = sex_vals[~sex_vals.isin([0.0, 1.0])]
                     if len(nonbinary):
-                        print(f"  WARN: discordant sex across technical replicates for "
-                              f"{len(nonbinary)} sample(s): {nonbinary.index.tolist()[:5]} "
-                              f"(values averaged to non-integer; check metadata)")
+                        print(f"  NOTE: excluding {len(nonbinary)} sample(s) with "
+                              f"discordant sex across technical replicates: "
+                              f"{nonbinary.index.tolist()[:5]}")
+                        exclude_samples.update(nonbinary.index.tolist())
             # Also check for duplicate row indices (covariate names)
             if block.index.duplicated().any():
                 dup_idx = block.index[block.index.duplicated(keep=False)].unique().tolist()
                 print(f"  WARN: block {bi} has duplicate covariate names: {dup_idx[:5]}, keeping first")
                 block = block[~block.index.duplicated(keep='first')]
-            aligned_blocks.append(block[list(all_samples)])
+            aligned_blocks.append(block)
+        if exclude_samples:
+            print(f"  Excluding {len(exclude_samples)} discordant-sex sample(s) "
+                  f"from all covariate blocks")
+            all_samples = all_samples - exclude_samples
+        aligned_blocks = [b[sorted(all_samples)] for b in aligned_blocks]
         # Check for duplicate covariate names (row indices) before concatenating
         all_names = []
         for b in aligned_blocks:

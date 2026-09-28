@@ -141,6 +141,28 @@ def rename_bed_columns(bed_path, out_path, id_map):
         f.write(new_header)
         f.write(new_data)
     
+    # Duplicate columns after renaming are technical replicates: two
+    # rnaseq_ids mapping to the same array_id. Average them so downstream
+    # sees one column per individual (same convention as
+    # 25_build_covariates.py and 26_harmonize_modalities.py). Normally
+    # collapse_replicates.py handles replicates upstream; this is a guard.
+    if len(set(new_cols)) != len(new_cols):
+        dup_cols = sorted({c for c in new_cols if new_cols.count(c) > 1})
+        print(f"  NOTE: {os.path.basename(out_path)}: averaging "
+              f"{len(dup_cols)} duplicate sample column(s) after "
+              f"rnaseq_id->array_id rename (technical replicates): "
+              f"{dup_cols[:5]}")
+        # read_csv mangles duplicate header names (A1 -> A1.1), so read the
+        # header separately and assign the true (duplicated) names manually.
+        df = pd.read_csv(out_path, sep='\t', header=None, skiprows=1)
+        df.columns = new_cols
+        meta_cols = ['#chr', 'start', 'end', 'phenotype_id', 'chr']
+        meta_present = [c for c in meta_cols if c in df.columns]
+        sample_part = df.drop(columns=meta_present)
+        sample_part = sample_part.T.groupby(level=0).mean().T
+        df = pd.concat([df[meta_present], sample_part], axis=1)
+        df.to_csv(out_path, sep='\t', index=False, float_format='%g')
+    
     return rename_count, len(drop_indices)
 
 

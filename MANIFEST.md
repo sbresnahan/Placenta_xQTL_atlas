@@ -44,8 +44,11 @@ excluded this phase (no matching RNA).
 | NIGMS | cohort4 | SRR Run (placenta only) | WXS Run (SRR) | SRA PRJNA671171 |
 
 NIGMS subjects have two placenta sampling sites (PLAC-RNA1/-2); replicates are
-averaged per individual during harmonization. Accession-level detail and
-ancestry × cohort counts: [`docs/data_availability.md`](docs/data_availability.md).
+averaged per individual during harmonization (or collapsed upstream to one
+column per individual via `05_qtl_mapping/collapse_replicates.py` — see
+[`docs/runbook_modality_hcp.md`](docs/runbook_modality_hcp.md)). Accession-level
+detail and ancestry × cohort counts:
+[`docs/data_availability.md`](docs/data_availability.md).
 
 ---
 
@@ -209,7 +212,8 @@ Verified per-cohort linkage logic:
 
 Includes join diagnostics (match rates, duplicate/NA guards) and optional BED-header
 coverage validation. NIGMS array IDs legitimately appear twice (two sampling sites);
-replicates are averaged per individual during Stage-5 harmonization.
+replicates are averaged per individual during Stage-5 harmonization (optional
+upstream collapse: `05_qtl_mapping/collapse_replicates.py`).
 
 ---
 
@@ -229,7 +233,7 @@ cis-xQTL summary statistics. The mapping design follows GTEx conventions.
 | 22 | `22_genotype_pca.sh` | Cohort-only genotype PCA (GTEx convention): LD-prune (`--indep-pairwise 200 50 0.2`) → `plink2 --pca 20 exact` → `genotype_pca_format.py` → `{ANC}_genotype_pcs.tsv` + scree (`PCA_scree.R`) |
 | 23 | `23_prepare_intersection.py` | Genotype×phenotype intersection on the RNA→DNA map; pgen filtered to intersection samples with **MAC ≥ 5** (`--mac 5`; `--mac 0` disables); sample columns renamed rnaseq_id → array_id |
 | 24 | `24_outlier_exclusion.py` | Select first 5 genotype PCs; 6-SD outlier exclusion on PC1–5; removes outliers from pgen/BED/HCP/deconvolution/metadata. **Edits intersection files in place — always rerun 23 before 24** |
-| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–k + sex + GA + cell types (dominant type as compositional reference); `--exclude-covariates ct_Maternal` applied BEFORE pruning; near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs — correlated HCPs are dropped, so effective k can fall below nominal k); **no covariate cap** — the optimized set is used in full. Technical-replicate sample columns (same array_id on multiple metadata rows) are **averaged** per covariate, matching 26's phenotype convention; discordant sex replicates warn. Supports `--hcp-file`/`--hcp-k`/`--out-suffix` for the 25a/25b optimization modules; the canonical per-modality run writes `{ANC}_covariates_{MOD}.tsv` |
+| 25 | `25_build_covariates.py` | Covariates: PC1–5 + HCP_1–k + sex + GA + cell types (dominant type as compositional reference); `--exclude-covariates ct_Maternal` applied BEFORE pruning; near-zero-variance pre-filter; iterative \|r\| > 0.9 pruning (priority sex/GA > PCs > cell types > HCPs — correlated HCPs are dropped, so effective k can fall below nominal k); **no covariate cap** — the optimized set is used in full. Technical-replicate sample columns (same array_id on multiple metadata rows) are **averaged** per covariate, matching 26's phenotype convention; discordant-sex replicates are **excluded**. Supports `--hcp-file`/`--hcp-k`/`--out-suffix` for the 25a/25b optimization modules; the canonical per-modality run writes `{ANC}_covariates_{MOD}.tsv` |
 | 25a | `25a_optimize_hcp.sh` + `optimize_hcp_chr1.py` | Expression-only HCP-count optimization (devBrain §4.2), run after 23/24, before canonical 25: per ancestry, re-estimate HCP at each k ∈ {0,5,10,15,20,25,30}, build per-k covariates, map **chr1 expression only** with tensorQTL (1 Mb window, MAF ≥ 0.01), count eGenes at Storey q ≤ 0.05; k\* = argmax (ties → smaller k). Installs the k\* solution as `{ANC}_hcp_factors_harmonized.tsv` (provisional file backed up to `*.pre25a_backup.tsv`); writes `{ANC}_optimal_hcp.tsv` + `.png` |
 | 25b | `25b_optimize_hcp_modalities.sh` + `optimize_hcp_modalities.py` + `hcp_from_matrix.R` | Per-modality HCP-count optimization: per ancestry × modality group (9 modalities + combined), estimate HCPs from that group's own harmonized BED at each k ∈ {0,5,10,15,20,25,30} (HCP-only — the BEDs are already QN+INT+ComBat'd; a deterministic phenotype subsample caps HCP-estimation cost at 40k rows for the combined arm), build per-k covariates, map a chr1 subset (genome-wide when the BED has < 300 chr1 phenotypes), count eGenes at Storey q ≤ 0.05; k\* = argmax (ties → smaller k). Installs `{ANC}_{MOD}_hcp_factors_optimized.tsv`; writes `{ANC}_{MOD}_optimal_hcp.tsv` + `.png` to `qtl_inputs/hcp_optimization_modalities/`. One LSF job per ancestry × modality; full procedure in `docs/runbook_modality_hcp.md` |
 | 26 | `26_harmonize_modalities.py` | Harmonize the 7 non-expression modality BEDs to the final array_id sample set (handles stage-17 namespaced IDs for splicing/IR) |

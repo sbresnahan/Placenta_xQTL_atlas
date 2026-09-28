@@ -97,11 +97,18 @@ OUTPUT_BASE="${OUTPUT_BASE}"
 # (Only used by intersection modalities; ignored for pre-pooled splicing/IR.)
 # Override with the COHORT_DIR_MAP env var if the mapping changes.
 COHORT_DIR_MAP="${COHORT_DIR_MAP:-NIEHS_RICHS=cohort1 GUSTO=cohort2 SNUH=cohort3 NIGMS=cohort4}"
+# COLLAPSE_DIR (optional): root of the collapse_replicates.py staging tree
+# (touched cohorts are real dirs there; untouched are symlinks into
+# OUTPUT_BASE). Point --cohort-dirs at the staging root uniformly.
+COHORT_ROOT="${COLLAPSE_DIR:-${OUTPUT_BASE}}"
+if [ -n "$COLLAPSE_DIR" ]; then
+    echo "  Using collapsed replicate staging tree: $COLLAPSE_DIR"
+fi
 COHORT_DIRS_ARGS=""
 for pair in $COHORT_DIR_MAP; do
     name="${pair%%=*}"
     dir="${pair##*=}"
-    COHORT_DIRS_ARGS="${COHORT_DIRS_ARGS} ${name}=${OUTPUT_BASE}/${dir}"
+    COHORT_DIRS_ARGS="${COHORT_DIRS_ARGS} ${name}=${COHORT_ROOT}/${dir}"
 done
 echo "  Cohort dir map: $COHORT_DIRS_ARGS"
 

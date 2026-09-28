@@ -123,29 +123,78 @@ def aggregate_sample_tpm(quant_sf: Path, tx_map: pd.DataFrame) -> pd.Series:
     return gene_tpm
 
 
-def build_bulk_matrix(salmon_dir: Path, samples: list, tx_map: pd.DataFrame) -> pd.DataFrame:
+def aggregate_multirun_tpm(quant_sfs: list, tx_map: pd.DataFrame) -> pd.Series:
+    """Collapse technical-replicate runs into one gene-level TPM profile.
+
+    Sums per-transcript NumReads across the runs, recomputes TPM from the
+    summed counts (rate = NumReads / EffectiveLength, TPM = rate / sum(rate)
+    * 1e6), then aggregates to gene level. TPMs themselves are never
+    averaged. EffectiveLength is taken from the first run (identical across
+    runs of the same cohort/protocol).
+    """
+    summed = None
+    eff_len = None
+    for q in quant_sfs:
+        df = pd.read_csv(q, sep='\t')
+        s = df.set_index('Name')['NumReads'].astype(float)
+        if eff_len is None:
+            eff_len = df.set_index('Name')['EffectiveLength'].astype(float)
+        summed = s if summed is None else summed.add(s, fill_value=0.0)
+    rate = summed / eff_len
+    tpm = rate / rate.sum() * 1e6
+    df = tpm.rename('tpm').reset_index().rename(columns={'Name': 'transcript_id'})
+    df = df.merge(tx_map, on='transcript_id', how='inner')
+    return df.groupby('gene_name')['tpm'].sum()
+
+
+def build_bulk_matrix(salmon_dir: Path, samples: list, tx_map: pd.DataFrame,
+                      collapse_map: dict = None) -> pd.DataFrame:
     """Build genes x samples TPM matrix from per-sample Salmon quant.sf files.
 
     Args:
         salmon_dir: Directory containing <sample>/quant.sf subdirectories.
         samples: List of sample IDs to process.
         tx_map: DataFrame with transcript_id, gene_name columns.
+        collapse_map: Optional dict {sample_id: individual_id}. Samples
+            sharing an individual_id are technical replicates and are
+            collapsed to one column (summed counts, recomputed TPM) named
+            by the individual_id.
 
     Returns:
-        DataFrame: rows = gene_name, columns = sample IDs, values = TPM.
+        DataFrame: rows = gene_name, columns = sample IDs (or individual
+        IDs when collapse_map is given), values = TPM.
     """
+    if collapse_map:
+        # Group samples by individual, preserving first-seen order
+        ind_to_samples = {}
+        for s in samples:
+            ind_to_samples.setdefault(collapse_map.get(s, s), []).append(s)
+        n_pairs = sum(1 for v in ind_to_samples.values() if len(v) > 1)
+        print(f"  Collapse map: {len(samples)} samples -> "
+              f"{len(ind_to_samples)} individuals ({n_pairs} replicated)")
+        work_items = list(ind_to_samples.items())
+    else:
+        work_items = [(s, [s]) for s in samples]
+
     matrices = []
     missing = []
-    for i, sample in enumerate(samples):
-        quant_path = salmon_dir / sample / 'quant.sf'
-        if not quant_path.exists():
-            missing.append(sample)
+    for i, (name, group) in enumerate(work_items):
+        quant_paths = [salmon_dir / s / 'quant.sf' for s in group]
+        present = [q for q in quant_paths if q.exists()]
+        if not present:
+            missing.append(name)
             continue
-        gene_tpm = aggregate_sample_tpm(quant_path, tx_map)
-        gene_tpm.name = sample
+        if len(present) < len(quant_paths):
+            print(f"  WARNING: {name}: only {len(present)}/{len(quant_paths)} "
+                  f"run quant.sf files present")
+        if len(present) == 1:
+            gene_tpm = aggregate_sample_tpm(present[0], tx_map)
+        else:
+            gene_tpm = aggregate_multirun_tpm(present, tx_map)
+        gene_tpm.name = name
         matrices.append(gene_tpm)
-        if (i + 1) % 50 == 0 or (i + 1) == len(samples):
-            print(f"  Processed {i+1}/{len(samples)} samples")
+        if (i + 1) % 50 == 0 or (i + 1) == len(work_items):
+            print(f"  Processed {i+1}/{len(work_items)} samples")
 
     if missing:
         print(f"  WARNING: {len(missing)} samples missing quant.sf: {missing[:5]}{'...' if len(missing)>5 else ''}")
@@ -208,6 +257,11 @@ def main():
                         help='config.yml path (alternative to --gtf/--salmon-dir/--samples)')
     parser.add_argument('--cohort', type=str, default=None,
                         help='Cohort name (used with --config)')
+    parser.add_argument('--collapse-map', type=str, default=None,
+                        help='Optional TSV with rnaseq_id, array_id columns. '
+                             'Runs sharing an array_id are technical '
+                             'replicates and are collapsed to one column '
+                             '(summed counts, recomputed TPM) per individual.')
     args = parser.parse_args()
 
     # Resolve paths from config if --config given
@@ -246,9 +300,18 @@ def main():
     print(f"\nParsing GTF for transcript_id -> gene_name map...")
     tx_map = build_tx_to_gene_name_map(gtf_path)
 
+    # --- Optional replicate collapse map ---
+    collapse_map = None
+    if args.collapse_map:
+        cm = pd.read_csv(args.collapse_map, sep='\t')
+        if not {'rnaseq_id', 'array_id'} <= set(cm.columns):
+            parser.error("--collapse-map TSV must have rnaseq_id and array_id columns")
+        collapse_map = dict(zip(cm['rnaseq_id'], cm['array_id']))
+        print(f"Collapse map: {args.collapse_map} ({len(collapse_map)} runs)")
+
     # --- Build bulk matrix ---
     print(f"\nAggregating Salmon TPMs to gene level...")
-    bulk = build_bulk_matrix(salmon_dir, samples, tx_map)
+    bulk = build_bulk_matrix(salmon_dir, samples, tx_map, collapse_map=collapse_map)
     print(f"\nBulk matrix: {bulk.shape[0]} genes x {bulk.shape[1]} samples")
 
     # --- Report gene overlap with reference ---

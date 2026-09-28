@@ -24,6 +24,14 @@ params:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
                       fig.width = 8, fig.height = 5, dpi = 150)
+# --- User switches -----------------------------------------------------------
+# RUN_ATTRITION: TRUE renders the full sample-attrition section (funnel figure,
+# per-modality retention table, stage notes) from data/qc/attrition/. FALSE
+# skips the attrition logs entirely and prints only the starting and final
+# sample counts (the N_* constants below and the data-driven mapping N).
+RUN_ATTRITION <- FALSE
+N_STARTING_LIBRARIES <- 606  # RNA-seq libraries in the cohort metadata
+N_QUANTIFIED         <- 605  # Salmon-quantified (SRR13696952 never quantified)
 source(params$module_path)
 dir.create(params$fig_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(params$table_dir, showWarnings = FALSE, recursive = TRUE)
@@ -82,13 +90,18 @@ n_range <- bind_rows(grouped, ungrouped, combined) %>%
   tibble::deframe()
 
 # Sample-attrition log (raw FASTQ -> QTL mapping), written by
-# make_report_archive.sh
-attr_dir <- file.path(params$qc_dir, "attrition")
-attr_samples <- read_tsv(file.path(attr_dir, "attrition_samples.tsv"),
-                         col_types = cols(.default = col_character()),
-                         progress = FALSE)
-attr_summary <- read_tsv(file.path(attr_dir, "attrition_summary.tsv"),
-                         col_types = "cccdd", progress = FALSE)
+# make_report_archive.sh — only read when the attrition section is rendered.
+if (RUN_ATTRITION) {
+  attr_dir <- file.path(params$qc_dir, "attrition")
+  attr_samples <- read_tsv(file.path(attr_dir, "attrition_samples.tsv"),
+                           col_types = cols(.default = col_character()),
+                           progress = FALSE)
+  attr_summary <- read_tsv(file.path(attr_dir, "attrition_summary.tsv"),
+                           progress = FALSE, show_col_types = FALSE)
+  # Archives written before the dual-level schema lack `level`; treat their
+  # counts as run-level and reuse them for the individual-level slots.
+  if (!"level" %in% names(attr_summary)) attr_summary$level <- "run"
+}
 
 # Cross-ancestry concordance of the combined layer (referenced in the
 # executive summary; the full per-modality table is in Cross-ancestry
@@ -148,8 +161,8 @@ This report summarizes the multi-ancestry placental xQTL analysis:
 cohort-only genotype PCA on LD-pruned variants within each ancestry stratum,
 a conventional covariate set (first 5 genotype PCs + HCP factors + sex,
 gestational age, and cell-type fractions; maternal cell fraction excluded
-before correlation pruning at |r| > 0.9; HCP count optimized per ancestry
-via module 25a; no covariate cap), a MAF ≥ 0.01 filter with a ≥ 5
+before correlation pruning at |r| > 0.9; HCP count optimized per ancestry × modality
+via module 25b; no covariate cap), a MAF ≥ 0.01 filter with a ≥ 5
 minor-allele-count floor at the
 genotype intersection, Storey q-values (computed with the R `qvalue`
 package), and per-phenotype rank-based inverse-normal transformation of all
@@ -165,6 +178,11 @@ pi1_cells <- bind_rows(grouped, ungrouped, combined) %>%
   summarise(pi1 = storey_pi1(pval_beta), .groups = "drop")
 pi1_range <- range(pi1_cells$pi1, na.rm = TRUE)
 hit_r2 <- if (nrow(hits) > 0) range(approx_r2(hits$slope, hits$af)) else NULL
+# genomic-control lambda on the EAS splicing layer (referenced in the prose)
+lambda_eas_splicing <- (grouped %>%
+  filter(ancestry == "EAS", modality == "splicing") %>%
+  summarise(l = median(qchisq(1 - pval_beta, 1), na.rm = TRUE) /
+              qchisq(0.5, 1), .groups = "drop"))$l
 ```
 
 **Headline result: `r n_fdr05` association`r if (n_fdr05 != 1) "s"` reach`r if (n_fdr05 == 1) "es"` FDR ≤ 5%**
@@ -179,22 +197,35 @@ Storey calibration estimates a signal fraction (π1) of
 `r round(100 * pi1_range[1])`–`r round(100 * pi1_range[2])`% across cells.
 `r if (pi1_range[2] <= 0.05) "At these fractions Storey q-values are numerically close to Benjamini–Hochberg (Diagnostics)." else "In high-signal cells Storey q-values are correspondingly more liberal than Benjamini–Hochberg (by up to the estimated π0); the per-cell comparison is in Diagnostics."`
 
-The splicing modality is empirically null in both ancestries (Storey π1 =
-0, no FDR ≤ 5% hits, QQ on the diagonal; Diagnostics). For this residual
-null, three lines of evidence indicate a **power/biology limitation, not a
-pipeline failure**:
+The splicing modality splits by ancestry. At its modality-matched HCP count
+(k\* = 5; HCP count optimization), EUR splicing yields
+`r n_eg_mod$n[n_eg_mod$ancestry == "EUR" & n_eg_mod$modality == "splicing"]`
+FDR ≤ 5% eGenes — under expression-derived covariates the layer carried no
+detectable signal, so the EUR splicing null was a covariate-specification
+artifact, now resolved. EAS splicing remains near-null
+(`r n_eg_mod$n[n_eg_mod$ancestry == "EAS" & n_eg_mod$modality == "splicing"]`
+eGenes, best q =
+`r signif(min((grouped %>% filter(ancestry == "EAS", modality == "splicing"))$qval), 2)`),
+its eGene yield is flat across the HCP grid (≤ 3 chr1 eGenes at every k),
+and its p-values depart only mildly from the null at the median
+(genomic-control λ = `r round(lambda_eas_splicing, 2)`; Diagnostics). Three
+lines of evidence bear on the residual EAS null:
 
-1. **The machinery detects signal where it exists** — the same pipeline
-   yields `r scales::comma(n_fdr05)` FDR ≤ 5% associations across the other
-   eight modalities, including canonical placental loci (Biological
-   interpretation).
-2. **The null is calibrated, not broken** — splicing p-values track the
-   null almost exactly (genomic-control λ ≈ 0.95–1.0 at the median), and
-   the minimum detectable effect (80% power) is r² ≈ 0.10 at
-   n = `r n_samp["EAS"]` (EAS) and r² ≈ 0.19 at n = `r n_samp["EUR"]`
-   (EUR), versus ≈ 0.06 at PANTRY/Geuvadis n = 445. Typical cis-xQTLs
-   explain 5–15% of phenotype variance — mostly below our floor, so a
-   splicing null is the expected outcome if its true effects are modest.
+1. **The machinery detects splicing signal where it exists** — the same
+   pipeline and covariate machinery yield the EUR splicing catalog above at
+   n ≈ `r n_samp["EUR"]`, a *higher* detection floor (r² ≈ 0.19) than EAS
+   (r² ≈ 0.10 at n = `r n_samp["EAS"]`; Power analysis). A pure
+   sample-power explanation is therefore insufficient for EAS: EUR splicing
+   effects cleared a higher bar. The leading candidate is EAS-specific
+   attenuation of the splicing phenotypes — EAS pools four cohorts spanning
+   single- and paired-end protocols, and junction-level quantification is
+   the most protocol-sensitive of the nine modalities.
+2. **The EAS null is not a covariate artifact** — eGene yield does not
+   improve at any HCP count on the grid (HCP count optimization), and the
+   mild median λ elevation with only a handful of FDR-significant hits is
+   the signature of diffuse, individually weak effects rather than of
+   residual confounding (which would inflate the median without bound) or
+   of a dead layer (λ ≈ 1, no tail).
    `r if (!is.null(hit_r2)) sprintf("The FDR-significant hits in the other modalities carry estimated r² of %.2f–%.2f — exactly the class of outsize effect the floor permits.", hit_r2[1], hit_r2[2])`
 3. **Signal replicates across ancestries** — cross-ancestry rank
    concordance of gene-level signal on the combined layer is Spearman ρ =
@@ -237,8 +268,9 @@ pipeline failure**:
 - **Genotype PCA**: cohort-only PCA per ancestry on LD-pruned variants
   (plink2 `--indep-pairwise 200 50 0.2`, then `--pca 20 exact`) — the GTEx
   convention.
-- **Covariates**: per ancestry, first-5 genotype PCs + HCP factors 1–k\*
-  (k\* selected by module 25a, chr1 eGene maximization) + sex + gestational
+- **Covariates**: per ancestry × modality, first-5 genotype PCs + HCP factors
+  1–k\* (k\* selected per ancestry × modality by module 25b, chr1 eGene
+  maximization on each modality's own HCPs) + sex + gestational
   age + cell-type fractions (Syncytiotrophoblast as reference). The maternal
   cell-fraction covariate (`ct_Maternal`) is excluded BEFORE pruning by
   analysis decision (coded `--exclude-covariates`); the remaining pool is correlation-pruned (iterative max-|r| >
@@ -281,7 +313,7 @@ cov_summary <- tibble(
   n_HCP        = sapply(cov_sets, function(d) sum(grepl("^HCP", d$covariate_id))),
   n_celltypes  = sapply(cov_sets, function(d) sum(grepl("^ct_", d$covariate_id))))
 knitr::kable(cov_summary,
-             caption = "Final covariate sets (as mapped). Maternal cell-fraction covariate excluded before pruning by analysis decision; HCP count per ancestry from module 25a; no covariate cap.")
+             caption = "Final covariate sets (expression arm shown). Maternal cell-fraction covariate excluded before pruning by analysis decision; HCP count is ancestry × modality-specific from module 25b (per-modality k* in the HCP-optimization section); no covariate cap.")
 write_tsv(cov_summary, file.path(params$table_dir, "covariate_summary.tsv"))
 
 prune <- bind_rows(lapply(c("EAS", "EUR"), function(a)
@@ -319,7 +351,7 @@ covariates in EAS (`r prune_fmt("EAS")`) and
 `r sum(prune_by_reason$n[prune_by_reason$ancestry == "EUR"])` in EUR
 (`r prune_fmt("EUR")`); both ancestries retained all of PC1–PC5:
 `r pcs_retained`. Correlated-HCP drops (if any) reduce effective k below the
-nominal 25a optimum — see the HCP-optimization section.
+nominal per-modality k\* — see the HCP-optimization section.
 
 ```{r scree-eas, fig.width=7, fig.height=4, out.width="49%", eval=file.exists(file.path(qc_pc, "EAS_genotype_pcs_scree.png"))}
 knitr::include_graphics(file.path(qc_pc, "EAS_genotype_pcs_scree.png"))
@@ -344,28 +376,39 @@ remain in the final sets.
 
 ## Sample attrition
 
-```{r attrition-funnel, fig.width=8.5, fig.height=4.5}
-tot <- attr_summary %>% filter(stratum_type == "total") %>%
+```{r attrition-funnel, fig.width=8.5, fig.height=4.5, eval=RUN_ATTRITION}
+tot_run <- attr_summary %>%
+  filter(stratum_type == "total", level == "run") %>%
   select(stage, n_present) %>% tibble::deframe()
+tot_ind <- attr_summary %>%
+  filter(stratum_type == "total", level == "individual") %>%
+  select(stage, n_present) %>% tibble::deframe()
+if (length(tot_ind) == 0) tot_ind <- tot_run  # pre-dual-level archives
 n_anc <- table(attr_samples$ancestry)
+# Chronological order: ComBat runs upstream of the genotype intersection.
+# Pre-ancestry stages are run-level (libraries); post-ancestry stages are
+# individual-level (unique array_id) — the operative mapping sets.
 funnel <- tibble(
   stage = c("Raw FASTQ libraries", "Salmon quantified", "QU-corrected",
             "Assembled modality BEDs", "Ancestry-assigned (EAS/EUR)",
+            "ComBat inputs (expression)",
             "Genotype intersection + PCA-outlier survival",
-            "ComBat inputs (expression)", "QTL inputs (expression)",
+            "QTL inputs (expression)",
             "Final mapping set (individuals)"),
-  EAS = c(NA, NA, NA, NA, unname(n_anc["EAS"]), tot["in_metadata_EAS"],
-          tot["in_combat_EAS_expression"], tot["in_qtl_EAS_expression"],
+  EAS = c(NA, NA, NA, NA, unname(n_anc["EAS"]),
+          tot_ind["in_combat_EAS_expression"], tot_ind["in_metadata_EAS"],
+          tot_ind["in_qtl_EAS_expression"],
           unname(n_samp["EAS"])),
-  EUR = c(NA, NA, NA, NA, unname(n_anc["EUR"]), tot["in_metadata_EUR"],
-          tot["in_combat_EUR_expression"], tot["in_qtl_EUR_expression"],
+  EUR = c(NA, NA, NA, NA, unname(n_anc["EUR"]),
+          tot_ind["in_combat_EUR_expression"], tot_ind["in_metadata_EUR"],
+          tot_ind["in_qtl_EUR_expression"],
           unname(n_samp["EUR"])),
-  Total = c(tot["fastq_r1_present"], tot["has_quant_sf"],
-            tot["has_qu_quant_sf"], tot["in_expression_bed"],
+  Total = c(tot_run["fastq_r1_present"], tot_run["has_quant_sf"],
+            tot_run["has_qu_quant_sf"], tot_run["in_expression_bed"],
             unname(n_anc["EAS"] + n_anc["EUR"]),
-            tot["in_metadata_EAS"] + tot["in_metadata_EUR"],
-            tot["in_combat_EAS_expression"] + tot["in_combat_EUR_expression"],
-            tot["in_qtl_EAS_expression"] + tot["in_qtl_EUR_expression"],
+            tot_ind["in_combat_EAS_expression"] + tot_ind["in_combat_EUR_expression"],
+            tot_ind["in_metadata_EAS"] + tot_ind["in_metadata_EUR"],
+            tot_ind["in_qtl_EAS_expression"] + tot_ind["in_qtl_EUR_expression"],
             sum(n_samp))) %>%
   mutate(stage = factor(stage, levels = stage))
 
@@ -387,81 +430,110 @@ ggsave(file.path(params$fig_dir, "fig_attrition_funnel.png"), p_attr,
        width = 8.5, height = 4.5, dpi = 150)
 
 knitr::kable(funnel %>% arrange(stage) %>% select(stage, EAS, EUR, Total),
-             caption = "Sample attrition from raw FASTQ libraries to the final mapping sets. Pre-ancestry stages are cohort-wide; the final step transitions from RNA-seq samples to individuals (technical replicates averaged).")
+             caption = "Sample attrition from raw FASTQ libraries to the final mapping sets. Pre-ancestry stages are cohort-wide run counts; post-ancestry stages count individuals (technical replicates share one array_id column).")
 ```
 
-```{r attrition-modality}
+```{r attrition-modality, eval=RUN_ATTRITION}
 mod_ret <- tidyr::crossing(ancestry = c("EAS", "EUR"),
                            modality = MODALITY_LEVELS) %>%
   mutate(combat = map2_dbl(ancestry, modality,
-                           ~ unname(tot[paste0("in_combat_", .x, "_", .y)])),
+                           ~ unname(tot_ind[paste0("in_combat_", .x, "_", .y)])),
          qtl_input = map2_dbl(ancestry, modality,
-                              ~ unname(tot[paste0("in_qtl_", .x, "_", .y)]))) %>%
+                              ~ unname(tot_ind[paste0("in_qtl_", .x, "_", .y)]))) %>%
   pivot_wider(names_from = ancestry,
               values_from = c(combat, qtl_input)) %>%
   select(modality, combat_EAS, qtl_input_EAS, combat_EUR, qtl_input_EUR)
 knitr::kable(mod_ret,
              col.names = c("modality", "ComBat", "QTL input",
                            "ComBat", "QTL input"),
-             caption = "Per-modality sample retention at the ComBat and QTL-input stages (EAS columns: EAS; EUR columns: EUR).")
+             caption = "Per-modality retention at the ComBat and QTL-input stages, in individuals (unique array_id; run-level counts are in attrition_summary.tsv).")
 ```
 
-Of the `r tot["fastq_r1_present"]` raw libraries, `r tot["has_quant_sf"]`
-were Salmon-quantified and QU-corrected and appear in the assembled modality
-BEDs (one metadata-only entry, SRR13696952, was never quantified).
-Ancestry assignment and the genotype intersection with PCA-outlier removal
-leave `r tot["in_metadata_EAS"]` EAS and `r tot["in_metadata_EUR"]` EUR
-RNA-seq samples; replicate averaging gives the final mapping sets of
-**`r n_samp["EAS"]` EAS and `r n_samp["EUR"]` EUR individuals**.
-
-Two stage-specific notes. (1) ComBat-stage membership is read from the
-on-disk `combat_int` BEDs: the expression files were no longer present at
-archive time, so expression membership is carried forward from the
-genotype-intersection stage; the other modalities measure
-`r tot["in_combat_EAS_isoforms"]` EAS / `r tot["in_combat_EUR_isoforms"]`
-EUR — fewer EUR samples than the downstream QTL inputs
-(`r tot["in_qtl_EUR_expression"]`), indicating those on-disk BEDs predate
-the final QTL-input assembly. The QTL-input counts are the operative sample
-sets for mapping. (2) Splicing is the only modality with QTL-input
-attrition (`r tot["in_qtl_EAS_splicing"]` EAS / `r tot["in_qtl_EUR_splicing"]`
-EUR), from junction-level harmonization.
-
-## HCP count optimization (module 25a)
-
-```{r hcp-optimization, fig.width=8, fig.height=4.5}
-hcp_opt <- bind_rows(lapply(c("EAS", "EUR"), function(a) {
-  f <- file.path(params$qc_dir, "hcp_optimization", paste0(a, "_optimal_hcp.tsv"))
-  if (!file.exists(f)) return(NULL)
-  read_tsv(f, col_types = cols(.default = col_double(), chosen = col_logical()),
-           progress = FALSE) %>% mutate(ancestry = a)
-}))
-if (nrow(hcp_opt) > 0) {
-  k_star <- hcp_opt %>% filter(chosen) %>% select(ancestry, k, n_egenes)
-  p_hcp <- ggplot(hcp_opt, aes(k, n_egenes)) +
-    geom_line(color = "#0279EE") +
-    geom_point(aes(size = chosen), color = "#0279EE") +
-    geom_point(data = hcp_opt %>% filter(chosen), color = "#D62728", size = 3) +
-    geom_text(data = hcp_opt %>% filter(n_hcp_dropped > 0),
-              aes(label = sprintf("eff. k=%d", n_hcp_used)),
-              vjust = -0.9, size = 3, color = "grey30") +
-    facet_wrap(~ancestry) +
-    scale_size_manual(values = c(1.5, 3), guide = "none") +
-    labs(x = "HCP factors (k)", y = "chr1 eGenes (Storey q ≤ 0.05)",
-         caption = "Red: chosen k* (max eGenes, ties to smaller k). 'eff. k' annotates models where correlation pruning dropped HCPs.") +
-    theme_report()
-  print(p_hcp)
-  ggsave(file.path(params$fig_dir, "fig_hcp_optimization.png"), p_hcp,
-         width = 8, height = 4.5, dpi = 150)
-  knitr::kable(hcp_opt %>% select(ancestry, k, n_egenes, n_tested,
-                                  n_hcp_used, n_hcp_dropped, chosen),
-               caption = "25a grid: chr1 eGene yield per candidate HCP count (expression layer). n_hcp_used/dropped record correlation-pruning losses; chosen = k*.")
-  write_tsv(hcp_opt, file.path(params$table_dir, "hcp_optimization.tsv"))
+```{r attrition-narrative, results='asis'}
+if (!RUN_ATTRITION) {
+  cat(sprintf(paste0(
+    "Of the **%d RNA-seq libraries** entering the pipeline (%d Salmon-quantified), ",
+    "**%d individuals** were retained through QTL mapping — **%d EAS** and **%d EUR** — ",
+    "after QC, ancestry assignment, genotype intersection, and PCA-outlier ",
+    "removal.\n"),
+    N_STARTING_LIBRARIES, N_QUANTIFIED, as.integer(sum(n_samp)),
+    as.integer(n_samp[["EAS"]]), as.integer(n_samp[["EUR"]])))
 } else {
-  cat("25a optimization output not found in the archive — section skipped.\n")
+  cat(sprintf(paste0(
+    "Of the %d raw libraries, %d were Salmon-quantified and QU-corrected and appear ",
+    "in the assembled modality BEDs (one metadata-only entry, SRR13696952, was never ",
+    "quantified). Ancestry assignment and the genotype intersection with PCA-outlier ",
+    "removal leave %d EAS and %d EUR RNA-seq samples; collapsing technical ",
+    "replicates to one column per individual gives the final mapping sets of ",
+    "**%d EAS and %d EUR individuals**.\n\n",
+    "Two stage-specific notes. (1) ComBat runs upstream of the genotype intersection ",
+    "on one run per individual, so ComBat-stage membership (%d EAS / %d EUR for the ",
+    "non-expression modalities; the expression ComBat BEDs were no longer present at ",
+    "archive time and are carried forward from the genotype-intersection stage) counts ",
+    "a single run per individual, whereas QTL-input membership (%d EAS / %d EUR) flags ",
+    "every QC-passing run whose individual survives to mapping — both runs of a ",
+    "technical-replicate pair map to the same individual (array_id) column. Run-level ",
+    "counts can therefore exceed ComBat-stage counts without any sample gain; phenotype ",
+    "values for replicated individuals come from the single ComBat-processed run, ",
+    "run-level covariates are averaged across the pair, and the operative mapping sets ",
+    "are the per-individual counts. (2) Splicing is the only modality with QTL-input ",
+    "attrition (%d EAS / %d EUR), from junction-level harmonization.\n"),
+    nrow(attr_samples), tot_run["has_quant_sf"],
+    tot_run["in_metadata_EAS"], tot_run["in_metadata_EUR"],
+    as.integer(n_samp[["EAS"]]), as.integer(n_samp[["EUR"]]),
+    tot_ind["in_combat_EAS_isoforms"], tot_ind["in_combat_EUR_isoforms"],
+    tot_run["in_qtl_EAS_expression"], tot_run["in_qtl_EUR_expression"],
+    tot_run["in_qtl_EAS_splicing"], tot_run["in_qtl_EUR_splicing"]))
 }
 ```
 
-`r if (exists("hcp_opt") && nrow(hcp_opt) > 0) sprintf("Module 25a re-estimates HCPs at each candidate k on the pruned fixed covariate set (no cap), maps the chr1 expression layer per k, and selects k* by eGene yield: EAS k* = %d (%d eGenes), EUR k* = %d (%d eGenes). The k* solution is installed as the canonical harmonized HCP file for module 25.", k_star$k[k_star$ancestry == "EAS"], k_star$n_egenes[k_star$ancestry == "EAS"], k_star$k[k_star$ancestry == "EUR"], k_star$n_egenes[k_star$ancestry == "EUR"])`
+## HCP count optimization (module 25b)
+
+```{r hcp-optimization, fig.width=9, fig.height=6}
+hcp_opt <- bind_rows(lapply(c("EAS", "EUR"), function(a) {
+  lapply(c(MODALITY_LEVELS, "combined"), function(m) {
+    f <- file.path(params$qc_dir, "hcp_optimization_modalities",
+                   paste0(a, "_", m, "_optimal_hcp.tsv"))
+    if (!file.exists(f)) return(NULL)
+    read_tsv(f, col_types = cols(.default = col_double(),
+                                 ancestry = col_character(),
+                                 modality = col_character(),
+                                 mapping_scope = col_character(),
+                                 chosen = col_logical()),
+             progress = FALSE)
+  }) %>% bind_rows()
+}))
+if (nrow(hcp_opt) > 0) {
+  hcp_opt <- hcp_opt %>%
+    mutate(modality = factor(modality, levels = c(MODALITY_LEVELS, "combined")))
+  k_star <- hcp_opt %>% filter(chosen) %>%
+    select(ancestry, modality, k, n_egenes, n_tested, mapping_scope,
+           n_hcp_used, n_hcp_dropped)
+  p_hcp <- ggplot(hcp_opt, aes(k, n_egenes, color = ancestry)) +
+    geom_line() +
+    geom_point(size = 1.4) +
+    geom_point(data = hcp_opt %>% filter(chosen),
+               shape = 21, size = 3, stroke = 1.2, fill = NA) +
+    facet_wrap(~modality, scales = "free_y") +
+    scale_color_manual(values = c(EAS = "#0072B2", EUR = "#D55E00")) +
+    labs(x = "HCP factors (k)", y = "eGenes (Storey q ≤ 0.05)") +
+    theme_report() + theme(legend.position = "top")
+  print(p_hcp)
+  ggsave(file.path(params$fig_dir, "fig_hcp_optimization.png"), p_hcp,
+         width = 9, height = 6, dpi = 150)
+  knitr::kable(k_star %>% arrange(modality, ancestry) %>%
+                 select(ancestry, modality, k, n_egenes, n_tested, mapping_scope),
+               col.names = c("ancestry", "modality", "k*", "eGenes at k*",
+                             "phenotypes tested", "mapping scope"),
+               caption = "Chosen HCP count (k*) per ancestry × modality: argmax eGene yield, ties to the smaller k. Selection maps a chr1 phenotype subset, except modalities whose full phenotype set is too small for a chr1 grid (mapping scope = genome-wide).")
+  write_tsv(hcp_opt, file.path(params$table_dir, "hcp_optimization.tsv"))
+  write_tsv(k_star, file.path(params$table_dir, "hcp_kstar.tsv"))
+} else {
+  cat("Per-modality HCP optimization output not found in the archive — section skipped.\n")
+}
+```
+
+`r if (exists("hcp_opt") && nrow(hcp_opt) > 0) sprintf("Module 25b estimates HCPs from each modality's own harmonized matrix at candidate k = 0–30 (step 5) on the pruned fixed covariate set (no cap), maps a chr1 phenotype subset per k, and selects k* by eGene yield with ties to the smaller k; every ancestry × modality run then mapped with its own matched covariate set. Chosen k* span %d–%d across the %d ancestry × modality cells (table above). The spread is the scientifically important result: EUR splicing and intron retention optimize at k = %d, far below the EUR expression optimum (k = %d), and the EUR splicing layer — which carried no detectable signal under expression-derived covariates — yields %d FDR ≤ 5%% eGenes with splicing-matched factors (Results). EAS splicing is the counterpoint: eGene yield is flat across its entire grid (≤ %d chr1 eGenes at every k), so its near-null result is robust to HCP specification rather than a consequence of it.", min(k_star$k), max(k_star$k), nrow(k_star), k_star$k[k_star$ancestry == "EUR" & k_star$modality == "splicing"], k_star$k[k_star$ancestry == "EUR" & k_star$modality == "expression"], n_eg_mod$n[n_eg_mod$ancestry == "EUR" & n_eg_mod$modality == "splicing"], max(hcp_opt$n_egenes[hcp_opt$ancestry == "EAS" & hcp_opt$modality == "splicing"]))`
 
 ## Test counts
 
@@ -519,11 +591,12 @@ At FDR ≤ 5% the grouped (gene-level, per-modality) layers contain
 the combined cross-modality layer adds `r sum(n_eg)` eGenes. The figure
 shows the full q-value landscape: genes binned by best q-value per
 ancestry × modality, with the combined layer as the right-most bar.
-Splicing is the one empirically null modality — its best q-value is
+Splicing splits by ancestry: EUR splicing reaches the q ≤ 0.05 tier
+(`r n_eg_mod$n[n_eg_mod$ancestry == "EUR" & n_eg_mod$modality == "splicing"]`
+eGenes with splicing-matched covariates), while EAS splicing remains
+near-null — best q-value
 `r signif(min((grouped %>% filter(ancestry == "EAS", modality == "splicing"))$qval), 2)`
-in EAS and
-`r signif(min((grouped %>% filter(ancestry == "EUR", modality == "splicing"))$qval), 2)`
-in EUR — so its bar sits entirely in the q > 0.50 tier.
+— so the EAS splicing bar sits almost entirely in the q > 0.50 tier.
 
 ```{r fig-xgenes-tiers, fig.width=9, fig.height=5.5}
 tiers <- bind_rows(
@@ -688,22 +761,29 @@ lambda_tab <- bind_rows(grouped, combined) %>%
   group_by(ancestry, modality) %>%
   summarise(lambda = median(qchisq(1 - pval_beta, 1), na.rm = TRUE) /
               qchisq(0.5, 1), .groups = "drop")
-lambda_splicing <- range((lambda_tab %>% filter(modality == "splicing"))$lambda)
-lambda_signal <- range((lambda_tab %>% filter(modality != "splicing"))$lambda)
+lambda_eas_spl <- lambda_tab$lambda[lambda_tab$ancestry == "EAS" &
+                                    lambda_tab$modality == "splicing"]
+lambda_eur_spl <- lambda_tab$lambda[lambda_tab$ancestry == "EUR" &
+                                    lambda_tab$modality == "splicing"]
+lambda_signal <- range((lambda_tab %>%
+                        filter(!(ancestry == "EAS" & modality == "splicing")))$lambda)
 ```
 
-Two reference points calibrate the reading. **Splicing — the empirically
-null modality (π1 = 0, no FDR ≤ 5% hits) — tracks the diagonal almost
-exactly** (genomic-control λ at the median =
-`r round(lambda_splicing[1], 2)`–`r round(lambda_splicing[2], 2)`), so the
-permutation calibration is honest where no signal exists. Every other
-modality departs upward broadly and early, with λ at the median of
+Two reference points calibrate the reading. **EAS splicing — the
+lowest-signal layer (a handful of FDR ≤ 5% hits) — departs from the
+diagonal only mildly** (genomic-control λ at the median =
+`r round(lambda_eas_spl, 2)`), while every signal-bearing layer, EUR
+splicing now included (λ = `r round(lambda_eur_spl, 2)`), departs upward
+broadly and early with λ at the median of
 `r round(lambda_signal[1], 2)`–`r round(lambda_signal[2], 2)` — the
 expected QQ signature when a substantial fraction of tests are true
 associations (Storey π1 up to
-`r round(100 * max(pi1_cells$pi1, na.rm = TRUE))`%; below), not technical
-inflation: artifactual inflation would bend the splicing curve by the same
-machinery, and it does not.
+`r round(100 * max(pi1_cells$pi1, na.rm = TRUE))`%; below). The EAS
+splicing curve is the calibration control: technical inflation from the
+shared mapping machinery would bend it like the signal-bearing layers, and
+it is instead the flattest curve on the plot — the calibration is honest
+where signal is weakest, and the EUR splicing departure matches the
+signature of its FDR-significant catalog rather than of artifact.
 
 ## Signal fraction (Storey π1) per layer
 
@@ -1301,9 +1381,9 @@ Three **characterization** observations:
 
 **Positive control: the ERAP1/ERAP2 locus (5q15).** The strongest signal
 shared across ancestries is *ERAP2* — a top-10 combined-layer gene in both
-strata (EAS q = 2.4×10⁻¹⁹, expression driver; EUR q = 5.7×10⁻³⁰,
-**isoform-expression** driver) — with *ERAP1* the #3 gene in EUR
-(q = 2.4×10⁻²⁹, alt_polyA driver). *ERAP2* is a canonical preeclampsia risk
+strata (EAS #6, q = 1.1×10⁻¹⁹, expression driver; EUR #4,
+q = 7.2×10⁻²⁹, **isoform-expression** driver) — with *ERAP1* the #1 gene
+in EUR (q = 3.3×10⁻³¹, alt_polyA driver). *ERAP2* is a canonical preeclampsia risk
 locus: fetal-genome variants at *ERAP2* associate with preeclampsia in
 Australian/Norwegian ([Johnson et al. 2009](https://doi.org/10.1007/s00439-009-0714-x)),
 Brazilian ([Ferreira et al. 2021](https://doi.org/10.1038/s41598-021-86240-z)),
@@ -1321,37 +1401,99 @@ phenotype class our isoform-expression layer measures. Recovering this
 locus, through the expected modality, is direct evidence that the atlas
 captures disease-relevant placental regulation.
 
-**Top combined-layer genes, per ancestry.** EAS: *PGM1* (expression driver)
-— placental phosphoglucomutase activity is long established
+**Top combined-layer genes, per ancestry.** EAS: the top signal is an
+uncharacterized lncRNA (*ENSG00000290199*, q = 3.7×10⁻²³) — a novel
+candidate with no annotation; *PGM1* (#2, expression driver) — placental
+phosphoglucomutase activity is long established
 ([Fazi et al. 1990](https://doi.org/10.1080/00327489008050198)) and PGM1
 loss disrupts cellular energy homeostasis
 ([Conte et al. 2023](https://doi.org/10.3390/ijms24098247)), relevant to
 placental glycogen handling in diabetic pregnancy
-([Lafta et al. 2021](https://doi.org/10.28969/ijeir.v10.i2.r3)); *IQCG*
-— ciliary/flagellar function with no prior placental association (novel
-candidate); *PSCA* (alt_polyA driver) — overexpressed in gestational
-trophoblastic neoplasia
-([Feng et al. 2007](https://doi.org/10.1111/j.1365-2559.2007.02925.x));
-*FBLN1* — fibulin-1 functions in placentation
+([Lafta et al. 2021](https://doi.org/10.28969/ijeir.v10.i2.r3)); *FBLN1*
+(#3, isoform-expression driver) — fibulin-1 functions in placentation
 ([Singh et al. 2006](https://doi.org/10.1016/j.placenta.2005.10.009)),
 placental ECM remodeling in late-onset preeclampsia
 ([García-Montero et al. 2026](https://doi.org/10.3390/medsci14030364)),
 and maternal plasma fibulin-1 tracking pregnancy progression
-([Orvik et al. 2021](https://doi.org/10.1186/s12884-021-04110-y)); *SPSB2*
-— an E3-ligase adaptor targeting iNOS for proteasomal degradation
+([Orvik et al. 2021](https://doi.org/10.1186/s12884-021-04110-y)); *IQCG*
+(#4, expression driver) — ciliary/flagellar function with no prior
+placental association (novel candidate); *PSCA* (#5, alt_polyA driver) —
+overexpressed in gestational trophoblastic neoplasia
+([Feng et al. 2007](https://doi.org/10.1111/j.1365-2559.2007.02925.x));
+*RPS28* (#7, expression driver) — small-subunit ribosomal protein with no
+prior placental association (novel candidate); *TOR1AIP1* (#8,
+isoform-expression driver) — the LAP1 nuclear-envelope protein; biallelic
+loss causes multisystemic nuclear envelopathy with growth retardation
+([Fichtman et al. 2019](https://doi.org/10.1038/s41467-019-08493-7);
+reviewed in [Mackels et al. 2023](https://doi.org/10.3390/ijms24086911)),
+with no prior placental association; *SPSB2* (#9, expression driver) — an
+E3-ligase adaptor targeting iNOS for proteasomal degradation
 ([Kuang et al. 2010](https://doi.org/10.1083/jcb.200912087);
 [Li et al. 2021](https://doi.org/10.1016/j.niox.2021.04.004)), placing it
-in nitric-oxide biology central to placental vascular function. EUR:
-*ZSCAN9* — KRAB zinc-finger with no prior placental association (novel
-candidate); *CTNND1* (RNA-editing driver) — p120-catenin is required for
-trophoblast proliferation and lineage specification at implantation
+in nitric-oxide biology central to placental vascular function; *MRPL43*
+(#10, intron-retention driver) — a mitoribosomal protein already known to
+carry an antagonistic cis-eQTL acting oppositely on transcription and
+translation
+([Han & Lee 2022](https://doi.org/10.1186/s12863-022-01057-7)), and fellow
+mitoribosomal subunit *MRPL13* drives trophoblast mitochondrial stress in
+early-onset preeclampsia
+([Chen et al. 2026](https://doi.org/10.1093/reprod/xaag016)); *ELP5* (#11,
+alt_polyA driver) — an Elongator-complex subunit required for tRNA
+wobble-uridine modification
+([Huang et al. 2005](https://doi.org/10.1261/rna.7247705)), no prior
+placental association; *THNSL2* (#12, expression driver) — no prior
+placental association (novel candidate). EUR: *ERAP1* (#1) and *ERAP2*
+(#4) above; *ZSCAN9* (#2, expression driver) — KRAB zinc-finger with no
+prior placental association (novel candidate); *CTNND1* (#3, RNA-editing
+driver) — p120-catenin is required for trophoblast proliferation and
+lineage specification at implantation
 ([Qin et al. 2024](https://doi.org/10.1093/biolre/ioae163)) and sits in the
 Wnt-regulated invasion program
 ([Knöfler & Pollheimer 2013](https://doi.org/10.3389/fgene.2013.00190));
-*STBD1* — the glycophagy receptor linking glycogen to selective autophagy
+*CTSB* (#5, RNA-editing driver) — cathepsin B, whose serum level is
+elevated in preeclampsia and tracks disease severity
+([Kim et al. 2016](https://doi.org/10.1007/s00404-016-4129-3);
+[Park et al. 2020](https://doi.org/10.1007/s00404-020-05478-6)); *STBD1*
+(#6, expression driver) — the glycophagy receptor linking glycogen to
+selective autophagy
 ([Zhang et al. 2024](https://doi.org/10.1073/pnas.2402817121);
 [Tang et al. 2023](https://doi.org/10.1002/jcp.31078)), a second
-glycogen-metabolism hit alongside *PGM1*.
+glycogen-metabolism hit alongside *PGM1*; *APIP* (#7, stability driver) —
+an anti-apoptotic Apaf-1 inhibitor protective under hypoxia/ischemia
+([Cho et al. 2004](https://doi.org/10.1074/jbc.m405747200)) that is also
+the methionine-salvage enzyme mtnB
+([Mary et al. 2012](https://doi.org/10.1371/journal.pone.0052877)) — a
+plausible hypoxia-response link to placental biology; *WDR91* (#8,
+expression driver) — a Rab7 effector in endolysosomal trafficking
+([Rapiteanu et al. 2016](https://doi.org/10.1111/tra.12409);
+[Ma et al. 2024](https://doi.org/10.1016/j.str.2024.09.023)), no prior
+placental association; *MEAK7* (#9, expression driver) — an
+mTORC1-associated protein; trophoblast mTOR signaling controls placental
+nutrient transport and fetal growth
+([Shao et al. 2021](https://doi.org/10.1073/pnas.2017092118);
+[Rosario et al. 2025](https://doi.org/10.1042/cs20243293)); *ARFGAP3*
+(#10, isoform-expression driver) — COPI vesicle-coat assembly at the Golgi
+([Kartberg et al. 2010](https://doi.org/10.1074/jbc.m110.180380)), no
+prior placental association; *GBP3* (#11, isoform-expression driver) — an
+interferon-inducible GTPase in cell-autonomous immunity
+([Tretina et al. 2019](https://doi.org/10.1084/jem.20182031);
+[Kirkby et al. 2023](https://doi.org/10.1016/j.tibs.2023.07.002)), no
+prior placental association; *KANSL1-AS1* (#12, expression driver) —
+placental expression of this lncRNA tracks infant birthweight in the GAPPS
+cohort
+([Hussey et al. 2025](https://doi.org/10.1017/s204017442500011x)).
+
+**Modality-matched covariates, in line with QTL practice.** Latent-factor
+covariates are a standard power lever in QTL mapping
+([Stegle et al. 2012](https://doi.org/10.1038/nprot.2011.457)), and
+splicing layers — quantified annotation-free from intron usage
+([Li et al. 2017](https://doi.org/10.1038/s41588-017-0004-9)) — have
+hidden structure that need not track gene expression. The per-modality HCP
+choice behaved as that practice predicts: EUR splicing was null under
+expression-derived factors and recovers
+`r n_eg_mod$n[n_eg_mod$ancestry == "EUR" & n_eg_mod$modality == "splicing"]`
+eGenes at its own k\* = 5, while the EAS splicing null is flat across the
+entire k grid, excluding covariate specification as its cause.
 
 Sub-threshold top-ranked genes (tables above) remain prioritization hints
 only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should be discounted outright" else ""`.
@@ -1363,20 +1505,37 @@ only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should
    Doubling n would roughly halve the detectable r²; matching PANTRY's
    n = 445 would bring the floor to ≈ 0.06. Adding the remaining cohorts and
    the AFR/AMR/SAS strata is the highest-value next step.
-2. **Carrier-count propagation.** `r if (all(mac_tab$n_lt5 == 0)) "The MAC ≥ 5 floor propagated cleanly to every mapping output (audit table above)." else "The MAC ≥ 5 floor predates outlier exclusion, so low-carrier tests persist in some mapping outputs (audit table above). No reported result depends on them; hit lists should post-filter to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
-3. **Ancestry asymmetry.** EUR tests more phenotypes than EAS in every
+2. **EAS splicing is near-null.** The layer yields a handful of FDR ≤ 5%
+   eGenes while EUR splicing — at a higher detection floor — yields
+   `r n_eg_mod$n[n_eg_mod$ancestry == "EUR" & n_eg_mod$modality == "splicing"]`.
+   The EAS result is robust to HCP count (flat k-grid), so covariate
+   specification is excluded as the cause; the leading candidate is
+   cross-cohort heterogeneity in junction-level quantification (EAS pools
+   four cohorts spanning single- and paired-end protocols). Revisiting
+   splicing quantification harmonization across the EAS cohorts, and adding
+   EAS cohorts, are the targeted next steps.
+3. **Technical replicates.** 25 mapped individuals (4 EAS, 21 EUR) have two
+   RNA-seq runs. Phenotype values come from the single ComBat-processed run
+   per individual, while run-level covariates (cell-type fractions, QC
+   metrics) are averaged across the pair — a slight phenotype/covariate
+   misalignment for those individuals. Future runs will collapse replicates
+   at the count level before batch correction so phenotypes and covariates
+   are averaged consistently, with a pre-collapse replicate-concordance QC
+   gate.
+4. **Carrier-count propagation.** `r if (all(mac_tab$n_lt5 == 0)) "The MAC ≥ 5 floor propagated cleanly to every mapping output (audit table above)." else "The MAC ≥ 5 floor predates outlier exclusion, so low-carrier tests persist in some mapping outputs (audit table above). No reported result depends on them; hit lists should post-filter to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
+5. **Ancestry asymmetry.** EUR tests more phenotypes than EAS in every
    modality (ancestry-specific filtering), so cross-ancestry comparisons are
    restricted to genes tested in both.
-4. **No pooled cross-ancestry inference** was performed. If combined
+6. **No pooled cross-ancestry inference** was performed. If combined
    discovery is wanted later, Fisher/Stouffer or an inverse-variance slope
    meta-analysis are the clean options.
-5. **Stepwise secondary signals**: `r if (n_secondary == 0) "none called in any layer." else sprintf("%d groups carry a conditionally independent secondary signal (table above).", n_secondary)`
-6. **Fine-mapping and colocalization are out of scope.** The
+7. **Stepwise secondary signals**: `r if (n_secondary == 0) "none called in any layer." else sprintf("%d groups carry a conditionally independent secondary signal (table above).", n_secondary)`
+8. **Fine-mapping and colocalization are out of scope.** The
    natural follow-ups on the FDR-significant catalog are SuSiE fine-mapping
    per eGene locus, GWAS colocalization (coloc/eCAVIAR) against placental
    and pregnancy-outcome GWAS, and locus-zoom visual QC of each hit
    (nominal-scan extraction + LD from the ancestry-matched genotype panel).
-7. **Replication path**: the FDR-significant hits are the priorities for
+9. **Replication path**: the FDR-significant hits are the priorities for
    lookup in larger placental resources or a future meta-analysis; visual QC
    of phenotype levels by genotype is the immediate sanity check for each.
 

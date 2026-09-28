@@ -60,6 +60,16 @@ ANCESTRY_MAP="${ANCESTRY_MAP:?}"
 ANCESTRY="${ANCESTRY:?}"
 MODALITY="${MODALITY:-both}"
 
+# COLLAPSE_DIR (optional): root of the collapse_replicates.py staging tree.
+# Per-cohort splicing numers / IR PSI are read from there when present
+# (collapsed technical replicates), falling back to OUTPUT_BASE.
+COLLAPSE_DIR="${COLLAPSE_DIR:-}"
+STAGING_ARGS=""
+if [ -n "$COLLAPSE_DIR" ]; then
+    STAGING_ARGS="--staging-dir ${COLLAPSE_DIR}"
+    echo "  Using collapsed replicate staging tree: ${COLLAPSE_DIR}"
+fi
+
 # ---- Global init (same as scripts 10-15) ----
 source /etc/profile.d/modules.sh
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
@@ -91,7 +101,8 @@ if [ "${MODALITY}" = "splicing" ] || [ "${MODALITY}" = "both" ]; then
         --ancestry-map "${ANCESTRY_MAP}" \
         --ancestry "${ANCESTRY}" \
         --scripts-dir "${SCRIPTS_DIR}" \
-        --output-dir "${ANCESTRY_OUT}/splicing"
+        --output-dir "${ANCESTRY_OUT}/splicing" \
+        ${STAGING_ARGS}
 fi
 
 if [ "${MODALITY}" = "intron-retention" ] || [ "${MODALITY}" = "both" ]; then
@@ -101,7 +112,8 @@ if [ "${MODALITY}" = "intron-retention" ] || [ "${MODALITY}" = "both" ]; then
         --ancestry-map "${ANCESTRY_MAP}" \
         --ancestry "${ANCESTRY}" \
         --scripts-dir "${SCRIPTS_DIR}" \
-        --output-dir "${ANCESTRY_OUT}/intron_retention"
+        --output-dir "${ANCESTRY_OUT}/intron_retention" \
+        ${STAGING_ARGS}
 fi
 
 conda deactivate 2>/dev/null || true

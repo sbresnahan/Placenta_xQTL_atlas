@@ -136,11 +136,22 @@ echo "[$(date)] Step 1: Building bulk TPM matrix (Python)"
 conda activate samtools-1.16.1
 source /rsrch5/home/epi/bhattacharya_lab/software/MAJIQ/bin/activate
 
+# COLLAPSE_MAP (optional): TSV with rnaseq_id, array_id columns. Technical
+# replicates are collapsed to one column per individual (summed counts,
+# recomputed TPM) before deconvolution.
+COLLAPSE_MAP="${COLLAPSE_MAP:-}"
+COLLAPSE_ARGS=""
+if [ -n "$COLLAPSE_MAP" ]; then
+    COLLAPSE_ARGS="--collapse-map ${COLLAPSE_MAP}"
+    echo "  Collapsing technical replicates via: ${COLLAPSE_MAP}"
+fi
+
 python3 "${SCRIPTS_DIR}/build_bulk_tpm_matrix.py" \
     --gtf "${NORMALIZED_GTF}" \
     --salmon-dir "${SALMON_DIR}" \
     --samples "${SAMPLES_FILE}" \
-    --output "${BULK_TSV}"
+    --output "${BULK_TSV}" \
+    ${COLLAPSE_ARGS}
 
 if [ $? -ne 0 ]; then
     echo "ERROR: build_bulk_tpm_matrix.py failed" >&2

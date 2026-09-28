@@ -205,12 +205,16 @@ fi
 
 # ---- 3.5 Sample-attrition log (raw FASTQ -> QTL mapping) -------------------
 # Per-sample matrix + stage-level summary covering every stage where samples
-# can drop: raw FASTQ staging, Salmon quant, QU correction, assembled BEDs,
-# ancestry assignment, genotype intersection + outlier exclusion
-# ({ANC}_metadata.tsv from scripts 23+24), ComBat (per modality), QTL inputs
-# (per modality), and the final covariate mapping set. All inputs are
-# non-core: gaps produce warnings and zero-filled stage columns, never a
-# failed archive.
+# can drop, in chronological pipeline order: raw FASTQ staging, Salmon
+# quant, QU correction, assembled BEDs, ComBat (per ancestry x modality;
+# runs upstream of the genotype intersection on one run per individual),
+# genotype intersection + outlier exclusion ({ANC}_metadata.tsv from
+# scripts 23+24), the final covariate mapping set, and QTL inputs (per
+# modality). The summary counts every stage at two levels: run (per
+# rnaseq_id) and individual (unique array_id). BED column namespaces from
+# upstream phenotyping stages are stripped before membership tests. All
+# inputs are non-core: gaps produce warnings and zero-filled stage columns,
+# never a failed archive.
 ATTRITION_DIR="$STAGING/data/qc/attrition"
 mkdir -p "$ATTRITION_DIR"
 COMBAT_DIR="${COMBAT_DIR:-${OUTPUT_BASE}/combat_modalities/combat_int}"
@@ -288,6 +292,37 @@ def read_table(path):
             return list(csv.DictReader(fh, delimiter="\t"))
     except OSError:
         return None
+
+
+def strip_namespace(col, id_set):
+    """Try stripping a leading '{prefix}_' namespace from a sample column;
+    return the matching base sample ID, or None. Tries every underscore
+    split point (shortest prefix first) so multi-underscore prefixes such
+    as 'NIEHS_RICHS_SAMPLE1' are handled. Ported from
+    26_harmonize_modalities.py."""
+    parts = col.split('_')
+    for i in range(1, len(parts)):
+        cand = '_'.join(parts[i:])
+        if cand in id_set:
+            return cand
+    return None
+
+
+def normalize_cols(cols, id_set):
+    """Map BED sample columns to base IDs, stripping stage/cohort namespace
+    prefixes where needed. Returns (normalized_set, n_stripped)."""
+    out, n_stripped = set(), 0
+    for c in cols:
+        if c in id_set:
+            out.add(c)
+            continue
+        base = strip_namespace(c, id_set)
+        if base is not None:
+            out.add(base)
+            n_stripped += 1
+        else:
+            out.add(c)  # unmatched columns simply never match a sample
+    return out, n_stripped
 
 
 cohorts = parse_cohorts(config_path)
@@ -418,6 +453,26 @@ for anc in ancestries:
         else:
             warn(f"QTL-input BED not found: {anc}_{mod}")
 
+# ---- normalize BED column ID spaces ------------------------------------------
+# combat_int and QTL-input BED columns can carry stage/cohort namespace
+# prefixes (e.g. 'NIEHS_RICHS_SRR...' written by upstream phenotyping
+# stages). Strip them against the known ID universe so membership tests
+# match; without this, namespaced stages silently score 0.
+known_ids = set(array_of) | {v for v in array_of.values() if v}
+for anc in ancestries:
+    known_ids |= meta_rnaseq.get(anc, set())
+    known_ids |= {v for v in meta_array.get(anc, {}).values() if v}
+    known_ids |= cov_cols.get(anc, set())
+ns_notes = []
+for key, cols in list(combat_cols.items()):
+    combat_cols[key], n_s = normalize_cols(cols, known_ids)
+    if n_s:
+        ns_notes.append(f"combat {key[0]}_{key[1]} ({n_s} cols)")
+for key, cols in list(qtl_cols.items()):
+    qtl_cols[key], n_s = normalize_cols(cols, known_ids)
+    if n_s:
+        ns_notes.append(f"qtl {key[0]}_{key[1]} ({n_s} cols)")
+
 # ---- per-sample matrix -------------------------------------------------------
 all_ids = []
 seen = set()
@@ -439,11 +494,14 @@ for anc in ancestries:
     for sid in meta_rnaseq.get(anc, set()):
         add_id(sid)
 
+# Chronological pipeline order: ComBat runs upstream of the genotype
+# intersection (one run per individual), so in_combat_* precedes
+# in_metadata_*; covariates are the final per-individual mapping set.
 stage_cols = (["fastq_r1_present", "fastq_r2_present", "has_quant_sf",
                "has_qu_quant_sf"] + [f"in_{m}_bed" for m in EXPR_MODS]
+              + [f"in_combat_{a}_{m}" for a in ancestries for m in MODS]
               + [f"in_metadata_{a}" for a in ancestries]
               + [f"in_covariates_{a}" for a in ancestries]
-              + [f"in_combat_{a}_{m}" for a in ancestries for m in MODS]
               + [f"in_qtl_{a}_{m}" for a in ancestries for m in MODS])
 
 matrix = []
@@ -504,9 +562,14 @@ def strata_for(col):
     return out
 
 
+# Every stage is counted at two levels: run (one row per RNA-seq run /
+# rnaseq_id) and individual (unique array_id; technical replicates share an
+# array_id). Run-level counts can exceed individual-level counts without
+# any sample gain — both runs of a replicate pair map to one individual.
 summary = []
 for col in stage_cols:
-    vals = [(r[col], r["ancestry"], r["cohort"]) for r in matrix]
+    vals = [(r[col], r["ancestry"], r["cohort"], r["array_id"] or r["rnaseq_id"])
+            for r in matrix]
     for stype, sname in strata_for(col):
         if stype == "total":
             sub = vals
@@ -514,16 +577,19 @@ for col in stage_cols:
             sub = [v for v in vals if v[2] == sname]
         else:
             sub = [v for v in vals if v[1] == sname]
-        present = sum(1 for v in sub if v[0] == 1)
-        total = sum(1 for v in sub if v[0] != "")
-        summary.append({"stage": col, "stratum_type": stype,
-                        "stratum": sname, "n_present": present,
-                        "n_total": total})
+        summary.append({"stage": col, "level": "run",
+                        "stratum_type": stype, "stratum": sname,
+                        "n_present": sum(1 for v in sub if v[0] == 1),
+                        "n_total": sum(1 for v in sub if v[0] != "")})
+        summary.append({"stage": col, "level": "individual",
+                        "stratum_type": stype, "stratum": sname,
+                        "n_present": len({v[3] for v in sub if v[0] == 1}),
+                        "n_total": len({v[3] for v in sub if v[0] != ""})})
 
 summary_path = os.path.join(attrition_dir, "attrition_summary.tsv")
 with open(summary_path, "w", newline="") as fh:
-    w = csv.DictWriter(fh, fieldnames=["stage", "stratum_type", "stratum",
-                                       "n_present", "n_total"],
+    w = csv.DictWriter(fh, fieldnames=["stage", "level", "stratum_type",
+                                       "stratum", "n_present", "n_total"],
                        delimiter="\t", lineterminator="\n")
     w.writeheader()
     w.writerows(summary)
@@ -533,9 +599,13 @@ if combat_imputed:
     print(f"  NOTE: combat stage carried forward from the post-outlier "
           f"metadata stage for {len(combat_imputed)} ancestry x modality "
           f"cell(s) (combat BEDs not on disk): {', '.join(combat_imputed)}")
+if ns_notes:
+    print(f"  NOTE: stripped stage/cohort namespace prefixes from BED "
+          f"columns: {', '.join(ns_notes)}")
 for row in summary:
     if row["stratum_type"] == "total":
-        print(f"    {row['stage']:<38} {row['n_present']}/{row['n_total']}")
+        print(f"    {row['stage']:<38} {row['level']:<10} "
+              f"{row['n_present']}/{row['n_total']}")
 PYEOF
 then
     MISSING_OTHER+=("attrition log (python section failed — see warnings)")

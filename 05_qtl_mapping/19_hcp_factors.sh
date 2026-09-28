@@ -79,11 +79,19 @@ REF_GENOME="${REF_GENOME}"
 # directories by the map's cohort values, so translate via --cohort-dirs.
 # Override with the COHORT_DIR_MAP env var if the mapping changes.
 COHORT_DIR_MAP="${COHORT_DIR_MAP:-NIEHS_RICHS=cohort1 GUSTO=cohort2 SNUH=cohort3 NIGMS=cohort4}"
+# COLLAPSE_DIR (optional): root of the collapse_replicates.py staging tree.
+# Touched cohorts live there as real directories; untouched cohorts are
+# symlinks back into OUTPUT_BASE, so --cohort-dirs can point at the staging
+# root uniformly.
+COHORT_ROOT="${COLLAPSE_DIR:-${OUTPUT_BASE}}"
+if [ -n "$COLLAPSE_DIR" ]; then
+    echo "  Using collapsed replicate staging tree: $COLLAPSE_DIR"
+fi
 COHORT_DIRS_ARGS=""
 for pair in $COHORT_DIR_MAP; do
     name="${pair%%=*}"
     dir="${pair##*=}"
-    COHORT_DIRS_ARGS="${COHORT_DIRS_ARGS} ${name}=${OUTPUT_BASE}/${dir}"
+    COHORT_DIRS_ARGS="${COHORT_DIRS_ARGS} ${name}=${COHORT_ROOT}/${dir}"
 done
 echo "  Cohort dir map: $COHORT_DIRS_ARGS"
 

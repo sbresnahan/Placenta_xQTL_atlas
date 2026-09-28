@@ -219,10 +219,11 @@ check('replicate run exits 0', r.returncode == 0, r.stderr[-500:])
 covs7 = read_covs(qtl7)
 check('no duplicate sample columns in output',
       not covs7.columns.duplicated().any())
-check('sample count unchanged (24)', covs7.shape[1] == N,
+check('discordant-sex sample excluded (23 of 24)', covs7.shape[1] == N - 1,
       f"got {covs7.shape[1]}")
 check('averaging NOTE logged', 'averaging' in r.stdout and 'S00' in r.stdout)
-check('discordant sex WARN logged', 'discordant sex' in r.stdout,
+check('discordant sex exclusion logged',
+      'discordant sex' in r.stdout and 'excluding' in r.stdout,
       r.stdout[-800:])
 
 # GA: averaged then centered. Centering uses the 26-row metadata mean
@@ -240,10 +241,9 @@ check('GA averaged across replicates',
 # sex: concordant replicate (S00, M/M) averages to exactly 0
 check('concordant sex replicate exact',
       'sex' in covs7.index and covs7.loc['sex', 'S00'] == 0.0)
-# discordant replicate (S02) averages to 0.5
-check('discordant sex replicate averages to 0.5',
-      'sex' in covs7.index and covs7.loc['sex', 'S02'] == 0.5,
-      f"got {covs7.loc['sex', 'S02'] if 'sex' in covs7.index else 'dropped'}")
+# discordant replicate (S02) is excluded outright, not averaged to 0.5
+check('discordant sex replicate excluded',
+      'S02' not in covs7.columns)
 
 # cell types: arcsinh + centering happen before the averaging step, so the
 # expected value is the mean of the two transformed-and-centered values.

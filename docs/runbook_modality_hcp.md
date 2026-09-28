@@ -59,6 +59,75 @@ are reused as-is):
 The existing `{ANC}_{MOD}.bed.gz` + `.tbi` files in qtl_inputs are still valid
 (the harmonized BEDs are unchanged), so 27_run_tensorqtl.sh will reuse them.
 
+## Technical replicates: collapse policy (optional pre-step for future runs)
+
+58 individuals each have two sequenced runs (all in the NIGMS cohort — paired
+placental-quadrant samples). The EAS/EUR results in the current report were
+mapped WITHOUT collapsing: both runs entered ComBat and the QTL inputs, and
+the duplicate individual columns were averaged downstream (scripts 23/25/26).
+That is why run-level and individual-level counts differ in the report (e.g.,
+EUR 145 individuals at ComBat vs 161 runs at QTL input). For AFR/AMR/SAS — and
+any regeneration of EAS/EUR — collapse replicates to one column per individual
+BEFORE stages 17/19/20:
+
+```bash
+COLLAPSE_DIR="$OUTPUT_BASE/replicate_collapsed"
+python3 "$SCRIPTS_DIR/collapse_replicates.py" \
+  --metadata /path/to/placenta_QTL_cohort_metadata.tsv \
+  --ancestry-map "$ANCESTRY_MAP" \
+  --config "$CONFIG" \
+  --out-dir "$COLLAPSE_DIR" \
+  --ref-anno "$NORMALIZED_GTF" \
+  --dry-run        # first pass: reports only, no staging tree
+```
+
+Inspect `$COLLAPSE_DIR/reports/replicate_collapses.tsv` (action per pair x
+modality) and `replicate_concordance.tsv` (Pearson/Spearman per pair), then
+re-run without `--dry-run` to write the staging tree. Point the downstream
+stages at the collapsed inputs:
+
+```bash
+export COLLAPSE_DIR="$OUTPUT_BASE/replicate_collapsed"                          # 17, 19, 20
+export ANCESTRY_MAP="$COLLAPSE_DIR/reports/ancestry_map_collapsed.tsv"          # non-primary runs removed
+export COLLAPSE_MAP=/path/to/placenta_QTL_cohort_metadata.tsv                   # 18b deconvolution
+```
+
+Policy summary (defaults):
+
+- Pairs are discovered from the pooled metadata (rnaseq_id -> array_id), NOT
+  the ancestry map — second runs are often absent from the ancestry map.
+- Primary run = the run present in the ancestry map, else lexicographically
+  first. Non-primary runs are dropped from every cohort file (one global
+  representative per individual, so pooling can never duplicate a person).
+- Count-exact collapse per modality: raw counts are SUMMED across runs and
+  every ratio is recomputed from the summed counts (expression/isoform BEDs;
+  isoform + alt_TSS/alt_polyA within-gene ratios with the full transcript
+  denominator; LeafCutter numers -> within-cluster ratios; stability
+  exon/intron ratio with the >=10 count floor applied AFTER summing; RNA
+  editing (n+0.5)/(d+0.5) per site with the original row-mean imputation).
+- Concordance gate: a pair with Spearman < 0.9 (or < 100 pairwise-complete
+  features) on the cohort unnorm BED falls back to keep-primary and is
+  flagged in `replicate_concordance.tsv` for review.
+- Cross-protocol pairs (runs from > 1 cohort): default keep-primary.
+  `--cross-protocol average` allows count-exact collapse only for the
+  source-file ratio modalities (isoforms, alt_TSS/alt_polyA, stability,
+  RNA editing) — never expression/isoform_expression BEDs, splicing, or IR.
+- CAVEAT — intron_retention is ALWAYS keep-primary: MAJIQ PSI has no
+  per-run counts to sum, so the primary run's PSI is kept and the pair is
+  flagged `keep_primary_no_counts` in the report.
+- Splicing and IR are staged as intermediates (numers counts / PSI tsv);
+  stage 17 re-derives the pooled features from them. Untouched cohorts are
+  symlinked into the staging tree unchanged.
+
+Even without collapsing, the downstream guards hold: 23 averages duplicate
+sample columns after the rnaseq_id -> array_id rename, and 25 averages
+duplicate covariate columns and EXCLUDES samples with discordant sex across
+runs (previously warn-only).
+
+Seadragon-side check: the ancestry map and cohort manifests may already drop
+second runs in places — verify where before assuming a pair reaches a given
+stage.
+
 ## 1. Smoke test: hcp_from_matrix.R (5 min)
 
 Run one HCP estimation interactively before launching the grid. Expected:

@@ -182,6 +182,22 @@ def parse_leafcutter_counts(path: str) -> tuple:
     return sample_ids, rows
 
 
+def resolve_cohort_input(output_base: str, staging_dir, cohort: str,
+                         *relparts: str) -> Path:
+    """Resolve a per-cohort input file: collapse staging tree first (when
+    --staging-dir is set), falling back to the original output_base tree.
+
+    collapse_replicates.py writes collapsed splicing numers / IR PSI tables
+    for touched cohorts under <staging_dir>/<cohort>/...; untouched cohorts
+    fall through to <output_base>/<cohort>/... .
+    """
+    if staging_dir:
+        cand = Path(staging_dir).joinpath(cohort, *relparts)
+        if cand.exists():
+            return cand
+    return Path(output_base).joinpath(cohort, *relparts)
+
+
 def harmonize_splicing(config: dict, cohorts: list, ancestry_samples: dict,
                        output_dir: Path, scripts_dir: str,
                        ref_anno: str) -> None:
@@ -204,7 +220,9 @@ def harmonize_splicing(config: dict, cohorts: list, ancestry_samples: dict,
     junction_to_clusters = {}
 
     for cohort in cohorts:
-        counts_path = Path(output_base) / cohort / "intermediate" / "splicing" / "leafcutter_perind_numers.counts.gz"
+        counts_path = resolve_cohort_input(
+            output_base, config.get("STAGING_DIR"), cohort,
+            "intermediate", "splicing", "leafcutter_perind_numers.counts.gz")
         if not counts_path.exists():
             print(f"[WARN] {cohort}: splicing counts not found at {counts_path}, skipping", file=sys.stderr)
             continue
@@ -387,7 +405,9 @@ def harmonize_intron_retention(config: dict, cohorts: list,
     all_samples = []
 
     for cohort in cohorts:
-        psi_path = Path(output_base) / cohort / "intermediate" / "intron_retention" / "retained_intron_psi.tsv.gz"
+        psi_path = resolve_cohort_input(
+            output_base, config.get("STAGING_DIR"), cohort,
+            "intermediate", "intron_retention", "retained_intron_psi.tsv.gz")
         if not psi_path.exists():
             print(f"[WARN] {cohort}: IR PSI not found at {psi_path}, skipping", file=sys.stderr)
             continue
@@ -596,6 +616,10 @@ def main():
                         help="Column name for sample IDs in ancestry map (default: sample_id)")
     common.add_argument("--ancestry-col", default="ancestry",
                         help="Column name for ancestry in ancestry map (default: ancestry)")
+    common.add_argument("--staging-dir", default=None,
+                        help="Optional collapse_replicates.py staging root; "
+                             "per-cohort inputs are read from there when "
+                             "present, falling back to output_base")
 
     sub.add_parser("splicing", parents=[common], help="Harmonize splicing")
     sub.add_parser("intron-retention", parents=[common], help="Harmonize intron retention")
@@ -604,6 +628,7 @@ def main():
 
     # Load config
     config = load_config(args.config, args.scripts_dir)
+    config["STAGING_DIR"] = args.staging_dir
     cohorts = load_cohorts(args.config)
     if not cohorts:
         raise RuntimeError("No cohorts found in config.yml")
@@ -620,7 +645,8 @@ def main():
     ancestry_samples = {}
     all_namespaced = {}
     for cohort in cohorts:
-        samples_file = Path(output_base) / cohort / "samples.txt"
+        samples_file = resolve_cohort_input(
+            output_base, config.get("STAGING_DIR"), cohort, "samples.txt")
         if not samples_file.exists():
             print(f"[WARN] {cohort}: samples.txt not found, skipping", file=sys.stderr)
             continue
