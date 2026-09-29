@@ -102,7 +102,7 @@ def prepare_loci(args):
         if not pq_path.exists():
             print(f"  WARNING: missing {pq_path.name}; skipping {anc} windows")
             continue
-        df = pd.read_parquet(pq_path, columns=["phenotype_id", "variant_id"])
+        df = pd.read_parquet(pq_path, columns=["variant_id"]).reset_index()
         df = df[df["phenotype_id"].isin(union)]
         chrom, pos = _parse_variant_positions(df["variant_id"])
         df = df.assign(chrom=chrom.values, pos=pos.values)
