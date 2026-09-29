@@ -1,0 +1,231 @@
+---
+title: "Cross-ancestry fine-mapping diagnostics"
+subtitle: "SuSHiE credible sets, PIPs, and functional-annotation enrichment (Objective 1.5)"
+author: "Bhattacharya Lab (analysis: S. Bresnahan; report generated with Biomni/Phylo)"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    self_contained: true
+    df_print: paged
+params:
+  agg_dir: "finemap/aggregated"
+  enrichment_path: "finemap/aggregated/pip_annotation_enrichment.tsv"
+  fig_dir: "figures_finemap"
+  table_dir: "tables_finemap"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 8, fig.height = 5, dpi = 150)
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(ggprism)
+  library(dplyr)
+  library(readr)
+  library(tidyr)
+  library(scales)
+})
+theme_set(theme_prism() + theme(text = element_text(family = "Liberation Sans")))
+dir.create(params$fig_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(params$table_dir, showWarnings = FALSE, recursive = TRUE)
+
+pips   <- read_tsv(file.path(params$agg_dir, "finemap_pips.tsv.gz"),
+                   col_types = cols(), progress = FALSE)
+loci   <- read_tsv(file.path(params$agg_dir, "finemap_locus_summary.tsv"),
+                   col_types = cols(), progress = FALSE)
+cs     <- read_tsv(file.path(params$agg_dir, "finemap_credible_sets.tsv.gz"),
+                   col_types = cols(), progress = FALSE)
+has_enr <- file.exists(params$enrichment_path)
+if (has_enr) {
+  enr <- read_tsv(params$enrichment_path, col_types = cols(), progress = FALSE)
+}
+anc_cols <- grep("_effect_weight$", names(pips), value = TRUE)
+anc_labels <- sub("_effect_weight$", "", anc_cols)
+corr_cols <- grep("_est_corr$", names(cs), value = TRUE)
+save_fig <- function(p, name, w = 8, h = 5) {
+  ggsave(file.path(params$fig_dir, paste0(name, ".png")), p,
+         width = w, height = h, dpi = 150, bg = "white")
+  p
+}
+```
+
+# Overview
+
+SuSHiE jointly fine-maps each significant xQTL locus across ancestry strata,
+leveraging ancestry-specific LD to refine 95% credible sets and estimate
+cross-ancestry effect correlations. This report summarizes run diagnostics,
+credible-set properties, cross-ancestry concordance, and functional
+annotation enrichment of high-PIP variants.
+
+```{r overview}
+n_ok <- sum(loci$status == "ok", na.rm = TRUE)
+n_conv <- sum(loci$converged == TRUE, na.rm = TRUE)
+tibble(
+  Metric = c("Loci attempted", "Loci fine-mapped", "Converged (min-tolerance)",
+             "Loci with >=1 credible set", "Credible sets total",
+             "Variants fine-mapped (unique locus-variant rows)"),
+  Value = c(nrow(loci), n_ok, n_conv,
+            sum(loci$n_cs > 0, na.rm = TRUE), nrow(cs), nrow(pips))
+) |> knitr::kable()
+```
+
+# PIP diagnostics
+
+```{r fig_maxpip, fig.cap="Maximum joint PIP per locus."}
+p <- ggplot(loci |> filter(!is.na(max_pip)), aes(x = max_pip)) +
+  geom_histogram(bins = 50, fill = "#0279EE", color = "white") +
+  labs(x = "Maximum joint PIP per locus", y = "Loci")
+save_fig(p, "fig_fm_maxpip")
+```
+
+```{r fig_pipdist, fig.cap="Distribution of joint PIPs across all fine-mapped variants (log scale)."}
+p <- ggplot(pips, aes(x = pip_all)) +
+  geom_histogram(bins = 60, fill = "#75A025", color = "white") +
+  scale_y_log10() +
+  labs(x = "Joint PIP", y = "Variants (log10)")
+save_fig(p, "fig_fm_pipdist")
+```
+
+# Credible sets
+
+```{r fig_cssize, fig.cap="Credible-set size distribution (number of variants per 95% CS)."}
+if (nrow(cs) > 0) {
+  p <- ggplot(cs, aes(x = n_variants)) +
+    geom_histogram(bins = 40, fill = "#FF9400", color = "white") +
+    scale_x_log10() +
+    labs(x = "Variants per credible set (log10)", y = "Credible sets")
+  save_fig(p, "fig_fm_cs_size")
+} else {
+  cat("No credible sets passed purity pruning.\n")
+}
+```
+
+```{r fig_csperlocus, fig.cap="Credible sets per locus."}
+if (nrow(cs) > 0) {
+  p <- cs |> count(modality, phenotype_id) |>
+    ggplot(aes(x = factor(n))) +
+    geom_bar(fill = "#0279EE") +
+    labs(x = "Credible sets per locus", y = "Loci")
+  save_fig(p, "fig_fm_cs_per_locus")
+}
+```
+
+# Cross-ancestry concordance
+
+```{r fig_rho, fig.cap="Cross-ancestry effect correlation (rho) per credible set. Values near 1 indicate shared causal effects; low/negative values indicate ancestry-specific effects."}
+if (nrow(cs) > 0 && length(corr_cols) > 0) {
+  rho_long <- cs |>
+    select(modality, phenotype_id, cs_index, all_of(corr_cols)) |>
+    pivot_longer(all_of(corr_cols), names_to = "pair", values_to = "rho") |>
+    filter(!is.na(rho))
+  p <- ggplot(rho_long, aes(x = rho)) +
+    geom_histogram(bins = 40, fill = "#75A025", color = "white") +
+    labs(x = "Cross-ancestry effect correlation (rho)", y = "Credible sets")
+  save_fig(p, "fig_fm_rho")
+} else {
+  cat("No cross-ancestry correlations (single-ancestry loci only).\n")
+}
+```
+
+```{r fig_weights, fig.cap="Per-ancestry posterior effect weights for credible-set variants. Concordant effects lie along the diagonal."}
+if (nrow(cs) > 0 && length(anc_cols) >= 2) {
+  cs_vars <- pips |> filter(!is.na(cs_index))
+  n_cs_levels <- length(unique(cs_vars$cs_index))
+  okabe_ito <- c("#E69F00", "#0072B2", "#009E73", "#CC79A7", "#D55E00",
+                 "#56B4E9", "#F0E442", "#000000")
+  p <- ggplot(cs_vars,
+              aes(x = .data[[anc_cols[1]]], y = .data[[anc_cols[2]]],
+                  color = factor(cs_index))) +
+    geom_point(alpha = 0.7, size = 1.6) +
+    scale_color_manual(values = colorRampPalette(okabe_ito)(n_cs_levels)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+                color = "grey50") +
+    labs(x = paste(anc_labels[1], "posterior effect weight"),
+         y = paste(anc_labels[2], "posterior effect weight"),
+         color = "CS index") +
+    theme(legend.position = "none")
+  save_fig(p, "fig_fm_effect_concordance")
+}
+```
+
+# Top loci
+
+```{r fig_locus_tracks, fig.cap="Joint PIP by position for the six loci with the highest lead-variant PIP. Points in a credible set are colored by CS index."}
+if (nrow(cs) > 0) {
+  top_loci <- cs |> arrange(desc(lead_pip)) |>
+    distinct(modality, phenotype_id, .keep_all = TRUE) |>
+    slice_head(n = 6) |> select(modality, phenotype_id)
+  tracks <- pips |> inner_join(top_loci, by = c("modality", "phenotype_id")) |>
+    mutate(locus = paste(modality, phenotype_id, sep = " / "),
+           in_cs = ifelse(is.na(cs_index), "not in CS",
+                          paste0("CS", cs_index))) |>
+    arrange(in_cs == "not in CS")   # draw CS points last (on top)
+  cs_levels <- sort(setdiff(unique(tracks$in_cs), "not in CS"))
+  okabe_ito <- c("#E69F00", "#0072B2", "#009E73", "#CC79A7", "#D55E00",
+                 "#56B4E9", "#F0E442", "#000000")
+  cs_pal <- setNames(c("grey75", colorRampPalette(okabe_ito)(length(cs_levels))),
+                     c("not in CS", cs_levels))
+  p <- ggplot(tracks, aes(x = pos / 1e6, y = pip_all, color = in_cs,
+                          size = in_cs == "not in CS")) +
+    geom_point(alpha = 0.8) +
+    scale_size_manual(values = c(`TRUE` = 0.7, `FALSE` = 2.0), guide = "none") +
+    scale_color_manual(values = cs_pal) +
+    facet_wrap(~locus, scales = "free_x", ncol = 2) +
+    labs(x = "Position (Mb)", y = "Joint PIP", color = NULL) +
+    theme(legend.position = "bottom")
+  save_fig(p, "fig_fm_locus_tracks", w = 9, h = 7)
+}
+```
+
+# Functional-annotation enrichment
+
+High-PIP variants (PIP >= 0.9) tested for enrichment against VEP consequence
+classes, ENCODE SCREEN cCRE classes, and placenta open-chromatin peaks;
+background = all other fine-mapped variants. Odds ratios and 95% CIs are
+recomputed from the 2x2 cell counts; FDR is Benjamini-Hochberg across
+classes.
+
+```{r fig_enrichment, fig.cap="Annotation enrichment of high-PIP variants (Fisher exact odds ratio, 95% CI)."}
+if (has_enr && nrow(enr) > 0) {
+  ci <- lapply(seq_len(nrow(enr)), function(i) {
+    m <- matrix(c(enr$cell_a_high_in[i], enr$cell_b_high_out[i],
+                  enr$cell_c_bg_in[i], enr$cell_d_bg_out[i]), nrow = 2,
+                byrow = TRUE)
+    ft <- fisher.test(m)
+    tibble(or = unname(ft$estimate), lo = ft$conf.int[1],
+           hi = ft$conf.int[2])
+  }) |> bind_rows()
+  enr_plot <- enr |> bind_cols(ci) |>
+    mutate(annotation = reorder(annotation, or))
+  write_tsv(enr_plot, file.path(params$table_dir,
+                                "pip_annotation_enrichment_with_ci.tsv"))
+  p <- enr_plot |>
+    ggplot(aes(x = annotation, y = or)) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "grey50") +
+    geom_pointrange(aes(ymin = lo, ymax = pmin(hi, quantile(hi[is.finite(hi)], 0.95) * 3)),
+                    color = "#0279EE") +
+    coord_flip() +
+    scale_y_log10() +
+    labs(x = NULL, y = "Odds ratio (log10, 95% CI; upper CI capped for display)")
+  save_fig(p, "fig_fm_enrichment", w = 8, h = 6)
+} else {
+  cat("Enrichment table not found; run 34_pip_annotation_enrichment.py.\n")
+}
+```
+
+# Run diagnostics
+
+```{r diagnostics}
+loci |> count(status) |> knitr::kable(col.names = c("Status", "Loci"))
+if (nrow(loci |> filter(status == "ok")) > 0) {
+  p <- loci |> filter(status == "ok") |>
+    ggplot(aes(x = wall_sec)) +
+    geom_histogram(bins = 40, fill = "#FF9400", color = "white") +
+    labs(x = "Per-locus wall time (s)", y = "Loci")
+  save_fig(p, "fig_fm_walltime")
+}
+```

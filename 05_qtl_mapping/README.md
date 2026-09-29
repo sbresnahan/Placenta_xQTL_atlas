@@ -31,9 +31,16 @@ scripts directory on seadragon).
 | 27 | `27_run_tensorqtl.sh` + `27_run_tensorqtl.py` | tensorQTL `cis.map_cis` per ancestry × modality (grouped when `phenotype_groups.txt` exists); `--independent` stepwise conditional mode; Storey q-values via `compute_qvalues.R` bridge (`QVALUE_RSCRIPT`), `--qvalue-method bh` escape hatch |
 | 28 | `28_submit_modalities.sh` | Submission driver: one LSF job per ancestry × modality (`TEST=1` pilot) |
 | 29 | `29_make_top_tables.py` | Rebuild sorted `*_cisqtl_top.tsv` from parquets |
+| 31 | `31_sushie_finemap.py` | Cross-ancestry fine-mapping (Objective 1.5): `prepare-loci` builds per-modality locus lists (union of q ≤ 0.05 lead phenotypes across ancestries; exact tested windows from parquets; L = min(10, max(5, n_independent + 2))); `run` fine-maps one shard of loci jointly across ancestries with SuSHiE (individual-level mode, in-sample LD from the intersected pgens; purity 0.5; per-locus `.ancestries`/`.done` markers + per-shard diagnostics) |
+| 32 | `32_submit_sushie.sh` + `32a_run_sushie_shard.sh` | LSF driver: prepare loci per modality → shard (50 loci/shard) → one array job per shard (`TEST=1` pilot; skip-if-done/running; `FORCE_LOCI`/`FORCE_RUN`; `ANCESTRIES`/`MODALITIES`/`SHARD_SIZE`/`QUEUE`/`WALLTIME` env overrides) |
+| 33 | `33_aggregate_finemap.py` | Aggregate per-locus SuSHiE outputs → `finemap/aggregated/`: `finemap_pips.tsv.gz` (per-variant PIPs, CS membership, per-ancestry effect weights), `finemap_credible_sets.tsv.gz` (per-CS summaries incl. cross-ancestry rho), `finemap_locus_summary.tsv` (convergence/ELBO diagnostics) |
+| 34 | `34_pip_annotation_enrichment.py` | High-PIP (≥ 0.9) variant annotation enrichment: `--make-vep-input` → VEP consequences; intersects ENCODE SCREEN cCRE classes + placenta OCR BED; Fisher exact (primary), distance-adjusted logistic (sensitivity), PIP-weighted enrichment; BH-FDR per test family |
 
 Diagnostics/utilities: `hcp_diagnostic.R`, `hcp_diagnostic2.R`,
-`check_hcp_chunks.sh`, `test_hcp.py`, `test_combat_modalities.py`.
+`check_hcp_chunks.sh`, `test_hcp.py`, `test_combat_modalities.py`,
+`test_sushie_finemap.py` (end-to-end fine-mapping fixture: locus prep,
+SuSHiE causal-variant recovery, aggregation, enrichment, report render).
+Full fine-mapping procedure: `../docs/runbook_modality_hcp.md` §7.
 
 ## Inputs / outputs
 

@@ -307,6 +307,130 @@ Upload `placenta_xqtl_report_inputs_<date>.tar.gz` back to Biomni for the
 report revision (per-modality k* table/figure, updated covariate QC, and
 refreshed results sections).
 
+## 7. Cross-ancestry fine-mapping (Objective 1.5)
+
+SuSHiE joint multi-ancestry fine-mapping of every grouped-layer lead
+phenotype at FDR ≤ 5%, using in-sample LD from the intersected pgens
+(individual-level mode — LD and genotypes are guaranteed consistent).
+Each locus is fine-mapped jointly across all ancestries in `ANCESTRIES`,
+regardless of which ancestry reached significance. Outputs: 95% credible
+sets, per-variant PIPs, per-ancestry effect weights, and cross-ancestry
+effect-size correlations (rho) per credible set.
+
+### 7.0 One-time setup
+
+```bash
+# SuSHiE into the tensorqtl env (same env scripts 27/28 use)
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate tensorqtl
+pip install sushie
+sushie finemap --help   # smoke test
+```
+
+Annotation sources for the enrichment step (7.4):
+
+- **VEP** (variant consequences): assumed available on seadragon
+  (`vep --help` to confirm; needs a GRCh38 offline cache).
+- **ENCODE SCREEN cCREs**: download GRCh38 "cCREs by class" BEDs from
+  https://screen.wenglab.org/downloads — one file per class: PLS, pELS,
+  dELS, CTCF-bound, CA-TF (e.g. `GRCh38-cCREs.PLS.bed.gz`).
+- **Placenta open chromatin**: query the ENCODE portal
+  (type=Experiment, assay = DNase-seq or ATAC-seq, biosample = placenta,
+  assembly GRCh38, file type = bed narrowPeak). Prefer replicated /
+  IDR-thresholded peak calls per the ENCODE4 standards. No single
+  canonical accession — pick the experiment(s) that best match the
+  cohort's gestational-age range and record the accession(s) used.
+
+### 7.1 Pilot (measure throughput before the full run)
+
+```bash
+cd "$SCRIPTS_DIR"
+TEST=1 bash 32_submit_sushie.sh
+```
+
+Builds per-modality locus lists (`$RESULTS_DIR/finemap/loci/{MOD}_loci.tsv`:
+union of q ≤ 0.05 lead phenotypes across ancestries, exact tested windows
+from the mapping parquets, L = min(10, max(5, n_independent + 2))), shards
+them (50 loci/shard), and submits ONE pilot shard. Check
+`$LOG_DIR/sushie_*.out` for per-locus wall time to size `SHARD_SIZE` /
+`WALLTIME` for the full run (fixture rate ≈ 17 s per 300-variant locus).
+
+### 7.2 Full submission
+
+```bash
+bash 32_submit_sushie.sh          # all 9 modalities, EAS+EUR
+```
+
+Skip-if-done / skip-if-running guards make reruns safe. `FORCE_RUN=1`
+re-runs loci with existing `.done` markers; `FORCE_LOCI=1` rebuilds the
+locus lists. Per-locus outputs land in
+`$RESULTS_DIR/finemap/{MOD}/{phenotype_id}/` (SuSHiE `.sushie.weights.tsv`,
+`.sushie.cs.tsv`, `.sushie.corr.tsv`, `.log`, plus `.ancestries` and
+`.done` markers); per-shard diagnostics in `$RESULTS_DIR/finemap/{MOD}/logs/`.
+
+### 7.3 Aggregate
+
+```bash
+python3 "$SCRIPTS_DIR/33_aggregate_finemap.py" \
+  --finemap-dir "$RESULTS_DIR/finemap" --ancestries EAS EUR
+```
+
+Writes to `$RESULTS_DIR/finemap/aggregated/`:
+`finemap_pips.tsv.gz` (per-variant PIPs + CS membership + per-ancestry
+effect weights), `finemap_credible_sets.tsv.gz` (per-CS summaries incl.
+cross-ancestry rho), `finemap_locus_summary.tsv` (per-locus diagnostics:
+convergence, ELBO, n CS, max PIP).
+
+### 7.4 Annotation enrichment
+
+```bash
+AGG="$RESULTS_DIR/finemap/aggregated"
+
+# 1. VEP input (one row per unique fine-mapped variant)
+python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
+  --pips "$AGG/finemap_pips.tsv.gz" --make-vep-input --out vep_input.tsv
+
+# 2. Run VEP (command printed by the previous step)
+vep -i vep_input.tsv --cache --offline --assembly GRCh38 \
+  --output_file vep_output.txt --force_overwrite
+
+# 3. Enrichment (high-PIP ≥ 0.9 vs all fine-mapped variants as background)
+python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
+  --pips "$AGG/finemap_pips.tsv.gz" \
+  --vep vep_output.txt \
+  --ccre GRCh38-cCREs.PLS.bed.gz:PLS GRCh38-cCREs.pELS.bed.gz:pELS \
+         GRCh38-cCREs.dELS.bed.gz:dELS GRCh38-cCREs.CTCF-bound.bed.gz:CTCF_bound \
+         GRCh38-cCREs.CA-TF.bed.gz:CA_TF \
+  --placenta-ocr placenta_ocr.bed.gz \
+  --out "$AGG/finemap_enrichment.tsv"
+```
+
+Per annotation class: Fisher exact test (primary), logistic regression
+adjusting for log10(distance to phenotype start) (sensitivity), and a
+PIP-weighted enrichment; BH-FDR within each test family.
+
+### 7.5 Diagnostic report
+
+```bash
+singularity exec --bind /rsrch5 --bind /rsrch9 \
+  /risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif \
+  Rscript -e 'rmarkdown::render("reports/report_finemap.Rmd",
+    params=list(agg_dir="'$RESULTS_DIR'/finemap/aggregated",
+                enrichment_path="'$RESULTS_DIR'/finemap/aggregated/finemap_enrichment.tsv",
+                fig_dir="reports/fig_finemap", table_dir="reports/tables_finemap"))'
+```
+
+Sections: overview, max-PIP-per-locus and PIP distributions, credible-set
+sizes and CSs per locus, cross-ancestry rho, per-ancestry effect-weight
+concordance, top-locus PIP tracks, enrichment forest plot, run diagnostics.
+
+### 7.6 Fallback
+
+Loci with `status=failed` or non-converged SuSHiE runs (see
+`finemap_locus_summary.tsv`) are candidates for the documented fallback:
+single-ancestry FINEMAP, or restricting to the strongest single signal.
+Not implemented here — flag and handle case-by-case.
+
 ## Notes
 
 - k grid: 0 5 10 15 20 25 30 for every group (same as the expression-only
@@ -316,8 +440,9 @@ refreshed results sections).
 - `ct_Maternal` is excluded before correlation pruning in every covariate
   build; no covariate cap.
 - The design is ancestry-agnostic: when AFR/AMR/SAS inputs land, add the
-  labels to the ANC loop in steps 2-4 (and ANCESTRIES in 28) with no code
-  changes.
+  labels to the ANC loop in steps 2-4 (and ANCESTRIES in 28 and 32) with
+  no code changes. SuSHiE then fine-maps jointly across all listed
+  ancestries.
 - Per-k staging lives under `$QTL_DIR/hcp_optimization_modalities/{ANC}/{MOD}/`
   (logs, per-k HCPs, covariates, mapping parquets) — keep it until the
   results are signed off; it is the audit trail for each k* choice.
