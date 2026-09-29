@@ -22,7 +22,7 @@ eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 
 # conda create -n sushie python=3.11
 # conda activate sushie
-# pip install sushie
+# pip install sushie pandas
 
 conda activate sushie
 
