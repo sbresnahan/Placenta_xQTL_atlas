@@ -119,7 +119,7 @@ PYEOF
             echo "  SKIP ${SHARD_NAME}: job already running/pending"
             continue
         fi
-        ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},QTL_DIR=${QTL_DIR},RESULTS_DIR=${RESULTS_DIR},LOCUS_SHARD=${SHARD},ANCESTRIES=$(echo $ANCESTRIES | tr ' ' ','),THREADS=${THREADS},FORCE_RUN=${FORCE_RUN}"
+        ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},QTL_DIR=${QTL_DIR},RESULTS_DIR=${RESULTS_DIR},LOCUS_SHARD=${SHARD},ANCESTRIES='$(echo "$ANCESTRIES" | tr ' ' ',')',THREADS=${THREADS},FORCE_RUN=${FORCE_RUN}"
         bsub -J "sushie_${SHARD_NAME}" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
              -o "${LOG_DIR}/sushie_${SHARD_NAME}.%J.out" \
              -e "${LOG_DIR}/sushie_${SHARD_NAME}.%J.err" \
