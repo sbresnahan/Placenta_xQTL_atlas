@@ -18,7 +18,7 @@ prepare-loci
 run
     Fine-map a shard of loci. For each locus, writes per-ancestry
     phenotype/covariate TSVs in SuSHiE's no-header format and calls
-    `sushie finemap` on the intersected pgens. Phenotypes missing from an
+    `sushie finemap` on per-locus VCFs exported from the intersected pgens. Phenotypes missing from an
     ancestry's harmonized BED (e.g., detection-filtered in that stratum)
     drop that ancestry for the locus; loci with no eligible ancestry are
     recorded as skipped. Per-locus diagnostics (convergence, credible-set
@@ -240,7 +240,7 @@ def run_shard(args):
             continue
 
         # --- gather per-ancestry inputs ---
-        pheno_paths, covar_paths, pgen_prefixes, anc_used = [], [], [], []
+        pheno_paths, covar_paths, vcf_paths, anc_used = [], [], [], []
         for anc in args.ancestries:
             key = (anc, mod)
             if key not in bed_cache:
@@ -274,8 +274,28 @@ def run_shard(args):
                 continue
             pheno_paths.append(str(pheno_path))
             covar_paths.append(str(covar_path))
-            pgen_prefixes.append(args.pgen_template.format(
-                qtl_dir=args.qtl_dir, anc=anc, mod=mod))
+            pgen_prefix = args.pgen_template.format(
+                qtl_dir=args.qtl_dir, anc=anc, mod=mod)
+            vcf_prefix = locus_dir / f"{trait}.{anc}.geno"
+            vcf_path = Path(str(vcf_prefix) + ".vcf.gz")
+            export_cmd = [
+                "bash", "-lc",
+                "module load plink && "
+                f"plink2 --pfile {pgen_prefix} "
+                f"--chr {locus['chrom']} "
+                f"--from-bp {int(locus['start'])} "
+                f"--to-bp {int(locus['end'])} "
+                "--export vcf bgz vcf-dosage=DS-force "
+                f"--out {vcf_prefix}"
+            ]
+            export_proc = subprocess.run(
+                export_cmd, capture_output=True, text=True)
+            if export_proc.returncode != 0:
+                rec["status"] = "vcf_export_failed"
+                rec["stderr_tail"] = (
+                    export_proc.stderr or export_proc.stdout)[-500:]
+                continue
+            vcf_paths.append(str(vcf_path))
             anc_used.append(anc)
 
         if not anc_used:
@@ -285,7 +305,7 @@ def run_shard(args):
 
         # --- call sushie ---
         cmd = [args.sushie_bin, "finemap"]
-        cmd += ["--plink2"] + pgen_prefixes
+        cmd += ["--vcf"] + vcf_paths
         cmd += ["--pheno"] + pheno_paths
         if all(c is not None for c in
                [cov_cache.get((a, mod)) for a in anc_used]):
@@ -320,8 +340,9 @@ def run_shard(args):
             ",".join(anc_used) + "\n")
         out_prefix.with_suffix(".done").write_text("ok\n")
         # clean per-locus input TSVs (regenerable; keeps the tree small)
-        for p in pheno_paths + covar_paths:
-            os.remove(p)
+        for p in pheno_paths + covar_paths + vcf_paths:
+            if os.path.exists(p):
+                os.remove(p)
         diagnostics.append(rec)
         print(f"  {mod}/{trait}: anc={len(anc_used)} "
               f"snps={diag['n_snps']} cs={diag['n_cs']} "
