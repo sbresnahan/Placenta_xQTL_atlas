@@ -95,26 +95,41 @@ def prepare_loci(args):
         for ph, r in per.items():
             n_signals[ph] = max(n_signals.get(ph, 1), int(r))
 
-    # --- exact tested windows from mapping parquets ---
+    # --- reconstruct the cis windows actually used by tensorQTL ---
+    # read_phenotype_bed() converts BED start to 1-based (start + 1), then
+    # tests [phenotype_start - window, phenotype_end + window].  The cis
+    # permutation parquet contains only the top variant per phenotype, so it
+    # cannot be used to reconstruct the tested interval.
+    qtl_dir = (Path(args.qtl_dir) if args.qtl_dir is not None
+               else Path(args.results_dir).parent / "qtl_inputs")
     windows = {}
     for anc in anc_list:
-        pq_path = Path(args.results_dir) / f"{anc}_{mod}_cisqtl.parquet"
-        if not pq_path.exists():
-            print(f"  WARNING: missing {pq_path.name}; skipping {anc} windows")
+        bed_path = Path(args.bed_template.format(
+            qtl_dir=qtl_dir, anc=anc, mod=mod))
+        if not bed_path.exists():
+            print(f"  WARNING: missing {bed_path.name}; skipping {anc} windows")
             continue
-        df = pd.read_parquet(pq_path, columns=["variant_id"]).reset_index()
-        df = df[df["phenotype_id"].isin(union)]
-        chrom, pos = _parse_variant_positions(df["variant_id"])
-        df = df.assign(chrom=chrom.values, pos=pos.values)
-        grp = df.groupby("phenotype_id").agg(
-            chrom=("chrom", "first"), lo=("pos", "min"), hi=("pos", "max"))
-        for ph, row in grp.iterrows():
+        bed = pd.read_csv(
+            bed_path, sep="\t", compression="gzip",
+            usecols=["#chr", "start", "end", "phenotype_id"],
+            dtype={"#chr": str})
+        bed = bed[bed["phenotype_id"].isin(union)]
+        for _, row in bed.iterrows():
+            ph = row["phenotype_id"]
+            chrom = str(row["#chr"])
+            phenotype_start = int(row["start"]) + 1
+            phenotype_end = int(row["end"])
+            lo = max(1, phenotype_start - args.cis_window)
+            hi = phenotype_end + args.cis_window
             if ph in windows:
-                w = windows[ph]
-                windows[ph] = (w[0], min(w[1], row["lo"]), max(w[2], row["hi"]))
+                old_chrom, old_lo, old_hi = windows[ph]
+                if old_chrom != chrom:
+                    raise ValueError(
+                        f"Chromosome mismatch for {ph}: {old_chrom} vs {chrom}")
+                windows[ph] = (chrom, min(old_lo, lo), max(old_hi, hi))
             else:
-                windows[ph] = (row["chrom"], int(row["lo"]), int(row["hi"]))
-        print(f"  {anc}: windows for {len(grp)} phenotypes")
+                windows[ph] = (chrom, lo, hi)
+        print(f"  {anc}: windows for {len(bed)} phenotypes")
 
     rows = []
     missing_window = 0
@@ -134,7 +149,7 @@ def prepare_loci(args):
     print(f"  wrote {len(out)} loci -> {args.out}")
     if missing_window:
         print(f"  WARNING: {missing_window} significant phenotypes had no "
-              f"tested window in any parquet (dropped from locus list)")
+              f"cis window in any phenotype BED (dropped from locus list)")
 
 
 # ---------------------------------------------------------------------------
@@ -233,11 +248,16 @@ def run_shard(args):
         locus_dir = out_dir / mod
         locus_dir.mkdir(parents=True, exist_ok=True)
         out_prefix = locus_dir / trait
+        done_path = out_prefix.with_suffix(".done")
+        weights_path = Path(str(out_prefix) + ".sushie.weights.tsv")
 
-        if out_prefix.with_suffix(".done").exists() and not args.force:
-            rec["status"] = "skipped_done"
-            diagnostics.append(rec)
-            continue
+        if done_path.exists() and not args.force:
+            if weights_path.exists() and weights_path.stat().st_size > 0:
+                rec["status"] = "skipped_done"
+                diagnostics.append(rec)
+                continue
+            print(f"  WARNING: stale .done without weights for {mod}/{trait}; rerunning")
+            done_path.unlink()
 
         # --- gather per-ancestry inputs ---
         pheno_paths, covar_paths, vcf_paths, anc_used = [], [], [], []
@@ -272,8 +292,6 @@ def run_shard(args):
                                     pheno_path, covar_path)
             if n < args.min_samples:
                 continue
-            pheno_paths.append(str(pheno_path))
-            covar_paths.append(str(covar_path))
             pgen_prefix = args.pgen_template.format(
                 qtl_dir=args.qtl_dir, anc=anc, mod=mod)
             vcf_prefix = locus_dir / f"{trait}.{anc}.geno"
@@ -295,7 +313,12 @@ def run_shard(args):
                 rec["stderr_tail"] = (
                     export_proc.stderr or export_proc.stdout)[-500:]
                 continue
+            # Append ancestry-specific inputs only after the genotype export
+            # succeeds, so VCF/pheno/covar lists cannot get out of sync.
             vcf_paths.append(str(vcf_path))
+            pheno_paths.append(str(pheno_path))
+            if cov_cache[key] is not None:
+                covar_paths.append(str(covar_path))
             anc_used.append(anc)
 
         if not anc_used:
@@ -332,13 +355,19 @@ def run_shard(args):
 
         diag = parse_sushie_log(Path(str(out_prefix) + ".log"))
         rec.update(diag)
+        if not weights_path.exists() or weights_path.stat().st_size == 0:
+            rec["status"] = "failed_missing_weights"
+            rec["stderr_tail"] = (
+                "SuShiE exited 0 but no non-empty .sushie.weights.tsv was produced")
+            diagnostics.append(rec)
+            continue
         rec["ancestries"] = ",".join(anc_used)
         rec["n_ancestries"] = len(anc_used)
         rec["wall_sec"] = round(time.time() - t0, 2)
         # record ancestry order (weights columns are positional)
         Path(str(out_prefix) + ".ancestries").write_text(
             ",".join(anc_used) + "\n")
-        out_prefix.with_suffix(".done").write_text("ok\n")
+        done_path.write_text("ok\n")
         # clean per-locus input TSVs (regenerable; keeps the tree small)
         for p in pheno_paths + covar_paths + vcf_paths:
             if os.path.exists(p):
@@ -367,8 +396,13 @@ def main():
 
     pp = sub.add_parser("prepare-loci", help="Build per-modality locus list")
     pp.add_argument("--results-dir", required=True)
+    pp.add_argument("--qtl-dir", default=None,
+                    help="QTL input directory; default: sibling qtl_inputs")
     pp.add_argument("--ancestries", nargs="+", default=["EAS", "EUR"])
     pp.add_argument("--modality", required=True)
+    pp.add_argument("--bed-template", default="{qtl_dir}/{anc}_{mod}.bed.gz")
+    pp.add_argument("--cis-window", type=int, default=1_000_000,
+                    help="TensorQTL cis-window in bp (default: 1,000,000)")
     pp.add_argument("--qval", type=float, default=0.05)
     pp.add_argument("--l-min", type=int, default=5)
     pp.add_argument("--l-max", type=int, default=10)
