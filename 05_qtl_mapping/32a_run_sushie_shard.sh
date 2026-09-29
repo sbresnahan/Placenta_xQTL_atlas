@@ -19,7 +19,12 @@ FORCE_RUN="${FORCE_RUN:-0}"
 # tensorqtl conda env (sushie installed there — see runbook); same setup as
 # scripts 27/28 — proven on this cluster.
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
-conda activate tensorqtl
+
+# conda create -n sushie python=3.11
+# conda activate sushie
+# pip install sushie
+
+conda activate sushie
 
 # comma-separated ANCESTRIES -> space-separated for argparse
 ANC_ARGS=$(echo "$ANCESTRIES" | tr ',' ' ')
