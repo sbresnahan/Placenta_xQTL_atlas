@@ -349,7 +349,7 @@ def run_shard(args):
               f"conv={diag['converged']} ({rec['wall_sec']}s)")
 
     diag_df = pd.DataFrame(diagnostics)
-    diag_path = logs_dir / f"{shard_name}.diagnostics.tsv"
+    diag_path = logs_dir / f"{mod}_{shard_name}.diagnostics.tsv"
     diag_df.to_csv(diag_path, sep="\t", index=False)
     n_ok = int((diag_df["status"] == "ok").sum())
     print(f"[run] {shard_name}: {n_ok}/{len(diag_df)} loci fine-mapped; "
