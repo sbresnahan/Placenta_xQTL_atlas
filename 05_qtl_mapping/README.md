@@ -418,7 +418,7 @@ conda create -n fastvep -c conda-forge -y rust c-compiler
 conda activate fastvep
 cargo install --path crates/fastvep-cli --root "$CONDA_PREFIX"
 conda install pip
-pip install pandas
+pip install pandas scipy
 ```
 
 ```bash
@@ -471,12 +471,18 @@ PIP-weighted enrichment; BH-FDR within each test family.
 ### 6.5 Diagnostic report
 
 ```bash
+cd /rsrch5/home/epi/stbresnahan/bhattacharya_lab/software/Pantry/phenotyping/scripts
 singularity exec --bind /rsrch5 --bind /rsrch9 \
   /risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif \
-  Rscript -e 'rmarkdown::render("reports/report_finemap.Rmd",
-    params=list(agg_dir="'$RESULTS_DIR'/finemap/aggregated",
-                enrichment_path="'$RESULTS_DIR'/finemap/aggregated/finemap_enrichment.tsv",
-                fig_dir="reports/fig_finemap", table_dir="reports/tables_finemap"))'
+  Rscript -e '.libPaths(c("/home/stbresnahan/R/ubuntu/4.3.1", .libPaths())); rmarkdown::render(
+    "reports/report_finemap.Rmd",
+    params=list(
+      agg_dir="'$RESULTS_DIR'/finemap/aggregated",
+      enrichment_path="'$RESULTS_DIR'/finemap/aggregated/finemap_enrichment.tsv",
+      fig_dir="reports/fig_finemap",
+      table_dir="reports/tables_finemap"
+    )
+  )'
 ```
 
 Sections: overview, max-PIP-per-locus and PIP distributions, credible-set

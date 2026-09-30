@@ -21,6 +21,9 @@ params:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
                       fig.width = 8, fig.height = 5, dpi = 150)
+
+.libPaths(c("/home/stbresnahan/R/ubuntu/4.3.1", .libPaths()))
+
 suppressPackageStartupMessages({
   library(ggplot2)
   library(ggprism)
