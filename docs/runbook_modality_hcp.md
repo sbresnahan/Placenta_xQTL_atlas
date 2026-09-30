@@ -319,6 +319,10 @@ effect-size correlations (rho) per credible set.
 
 ### 7.0 One-time setup
 
+*Note for future cleanup: sushie requires python > 3.11; it requires
+its own conda env. All sushie-related scripts have been modified to
+use `conda activate sushie` instead.*
+
 ```bash
 # SuSHiE into the tensorqtl env (same env scripts 27/28 use)
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
