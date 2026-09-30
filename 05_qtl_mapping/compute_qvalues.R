@@ -34,7 +34,44 @@ ok <- tryCatch({
     stop("fewer than 2 unique p-values — qvalue cannot estimate pi0")
   }
 
-  q <- qvalue(p)                 # default lambda: automatic smoother (GTEx)
+  # qvalue <= 2.38 pi0est() bug workaround: the default lambda grid
+  # (0.05..0.95 by 0.05) assumes at least one p-value >= max(lambda).
+  # pi0est computes pi0(lambda) via tabulate(findInterval(p, lambda)) WITHOUT
+  # an nbins argument, so when max(p) <= 0.95 the tabulated vector is short,
+  # the reverse-indexing yields NA, and smooth.spline aborts with
+  # "missing or infinite values in inputs are not allowed". This bites
+  # strong-signal subsets (e.g. chr1 HCP-optimization arms) where every
+  # group's pval_beta can fall below 0.95. Remedy — the one qvalue's own
+  # (devel) error message recommends: restrict lambda to the observed range.
+  # Falls back to a fixed-lambda Storey pi0 when fewer than 4 grid points
+  # remain (smoother minimum), and finally to pi0 = 1 (BH-equivalent,
+  # conservative) when max(p) < 0.05.
+  lam <- seq(0.05, 0.95, 0.05)
+  if (max(p) <= max(lam)) {
+    lam <- lam[lam < max(p)]
+    cat(sprintf(paste0("  NOTE: max(pval_beta) = %.4f <= 0.95 — restricting ",
+                       "qvalue lambda grid to %d point(s)\n"),
+                max(p), length(lam)))
+  }
+  # Nested fallback: if the pi0 smoother still fails (e.g. "estimated pi0
+  # <= 0" on heavily discrete inputs), retry with lambda = 0, which forces
+  # pi0 = 1 — BH-equivalent q-values, conservative, and cannot fail (the
+  # single-lambda pi0est path uses no spline). A pathological k then simply
+  # deflates its own eGene count instead of aborting the whole grid.
+  q <- tryCatch({
+    if (length(lam) >= 4) {
+      qvalue(p, lambda = lam)      # smoother pi0 (GTEx convention)
+    } else if (length(lam) >= 1) {
+      qvalue(p, lambda = max(lam)) # fixed-lambda Storey pi0 (no spline)
+    } else {
+      qvalue(p, lambda = 0)        # pi0 = 1: conservative, BH-equivalent
+    }
+  }, error = function(e) {
+    cat(sprintf(paste0("  NOTE: qvalue smoother failed (%s); falling back ",
+                       "to pi0 = 1 (BH-equivalent, conservative)\n"),
+                conditionMessage(e)))
+    qvalue(p, lambda = 0)
+  })
   df$qval <- q$qvalues
   cat(sprintf("  R qvalue: pi0 = %.4f (estimated signal fraction 1-pi0 = %.4f)\n",
               q$pi0, 1 - q$pi0))
