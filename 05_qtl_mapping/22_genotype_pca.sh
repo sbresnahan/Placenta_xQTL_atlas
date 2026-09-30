@@ -9,7 +9,7 @@
 #
 # Per ancestry:
 #   1. LD-prune the pooled per-ancestry pgen (--indep-pairwise 200 50 0.2,
-#      same parameters as the retired PC-AiR script).
+#      GTEx-convention parameters).
 #   2. plink2 --pca 20 exact on the pruned variants (cohort samples only).
 #      If this cluster's plink2 alpha rejects 'exact', drop the modifier —
 #      the default approximate PCA is fine at this sample size.
@@ -48,7 +48,7 @@ CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 # copy of the script; self-location would resolve to the spool directory).
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # config_get.py lives in ../03_phenotyping in the repo layout; a flat copy in
-# SCRIPTS_DIR (legacy deployment) takes precedence.
+# SCRIPTS_DIR (flat deployment) takes precedence.
 CONFIG_GET="${SCRIPTS_DIR}/config_get.py"
 [ -f "$CONFIG_GET" ] || CONFIG_GET="${SCRIPTS_DIR}/../03_phenotyping/config_get.py"
 if [ ! -f "$CONFIG_GET" ]; then

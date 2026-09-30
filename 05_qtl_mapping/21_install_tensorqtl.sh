@@ -18,11 +18,8 @@
 #      scripts 19/20 already use. 27_run_tensorqtl.py calls it through
 #      compute_qvalues.R (file-based bridge, no rpy2).
 #
-# NOTE: if you previously ran the rpy2 version of this script, your conda
-# env contains r-base/rpy2/bioconductor-qvalue that are now UNUSED. They are
-# harmless — the 'rfunc cannot be imported' warning at 'import tensorqtl'
-# is cosmetic and does not affect mapping. (Optional cleanup:
-# conda remove -n tensorqtl r-base rpy2 bioconductor-qvalue.)
+# NOTE: the tensorqtl env has no R/rpy2. The 'rfunc cannot be imported'
+# warning at 'import tensorqtl' is cosmetic and does not affect mapping.
 # =============================================================================
 
 set -euo pipefail

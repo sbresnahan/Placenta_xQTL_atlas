@@ -13,7 +13,7 @@
 ##   - ancestry  : assigned_ancestry from pooled_sample_ancestry.tsv
 ##   - cohort    : NIEHS_RICHS / GUSTO / SNUH / NIGMS
 ##
-## Verified linkage logic (against the actual files, 2026-09):
+## Per-cohort linkage logic:
 ##   NIEHS_RICHS: key file Run (SRR) -> SUBJECT_ID_Array (S1, S2, ...) = pooled ID
 ##   GUSTO      : BED IDs are "J" + covars$ID (J1001-J1200);
 ##                pooled ID = paste0(SubjectID, "_B", SubjectID)

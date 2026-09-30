@@ -8,7 +8,7 @@
 | GUSTO | Placenta RNA-seq + array genotypes | Available on request | GUSTO study investigators |
 | SNUH | Placenta RNA-seq + genotypes | Public | SRA BioProject **PRJNA820329** (102 RNA-seq runs) |
 | NIGMS | Placenta RNA-seq (2 sampling sites/subject) + WXS | Public | SRA BioProject **PRJNA671171** (154 RNA-seq + 95 WXS runs) |
-| MALI_G3A | Array genotypes only | Controlled access | Pooled but **excluded in the current phase** (no matching RNA) |
+| MALI_G3A | Array genotypes only | Controlled access | Pooled but excluded (no matching RNA) |
 
 No sample-level genotype, phenotype, or covariate data are distributed in this
 repository. The sample-linkage script (`04_sample_linkage/`) and all mapping
@@ -27,9 +27,9 @@ imputation QC and PC-AiR ancestry assignment:
 | NIGMS | 19 | 2 | 5 | 27 | 6 |
 | MALI_G3A *(excluded)* | 746 | – | – | – | – |
 
-Mapping to date has been carried through for **EAS** (n ≈ 272) and **EUR**
-(n ≈ 136) after genotype×phenotype intersection and outlier exclusion; AFR/AMR/SAS
-pooled genotypes exist and are the next mapping targets.
+After genotype×phenotype intersection and outlier exclusion, the mapped
+strata carry n ≈ 272 (EAS) and n ≈ 136 (EUR) samples. AFR/AMR/SAS pooled
+genotypes exist.
 
 ## Reference data
 

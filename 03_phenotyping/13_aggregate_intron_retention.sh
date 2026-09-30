@@ -175,7 +175,7 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" intron-retention \
     --ref-anno "$REF_ANNO" \
     --output "${UNNORM_DIR}/intron_retention.bed"
 
-# ---- Canonical BED = unnorm (2026-09 schema: normalization moved to stage 5) ----
+# ---- Canonical BED = unnorm (normalization applied in stage 5) ----
 cp "${UNNORM_DIR}/intron_retention.bed" "${OUTPUT_DIR}/intron_retention.bed"
 
 conda deactivate 2>/dev/null || true

@@ -15,8 +15,9 @@
 #   - Scripts 23-28 completed (qtl_inputs has {ANC}_qtl.pgen,
 #     {ANC}_{MOD}.bed.gz, {ANC}_covariates_{MOD}.tsv; qtl_results has the
 #     cisqtl parquets + top tables from 27/29)
-#   - sushie installed into the tensorqtl conda env:
-#       conda activate tensorqtl && pip install sushie
+#   - sushie installed into a dedicated conda env (python 3.11):
+#       conda create -n sushie python=3.11 && conda activate sushie
+#       pip install sushie pandas pyarrow fastparquet
 #
 # Usage:
 #   TEST=1 bash 32_submit_sushie.sh   # prepare loci + submit ONE pilot shard

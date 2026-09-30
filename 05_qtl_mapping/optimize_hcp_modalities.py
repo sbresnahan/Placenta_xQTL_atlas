@@ -29,7 +29,7 @@ Design (per ancestry x modality, per k in --k-grid):
 k* = argmax(eGenes); ties break toward the smaller k. Writes
 {work_dir}/{ANC}_{MOD}_optimal_hcp.tsv + .png and installs the k* HCP set as
 {qtl_dir}/{ANC}_{MOD}_hcp_factors_optimized.tsv (input to the canonical
-per-modality 25_build_covariates.py run; see docs/runbook_modality_hcp.md).
+per-modality 25_build_covariates.py run; see README.md in this directory).
 
 Usage (typically via 25b_optimize_hcp_modalities.sh):
   python3 optimize_hcp_modalities.py \
@@ -342,7 +342,7 @@ def main():
         print(f"\nWritten: {summary_path}")
 
     print(f"\nNext: run the canonical per-modality 25_build_covariates.py "
-          f"(see docs/runbook_modality_hcp.md).")
+          f"(see README.md in this directory).")
 
 
 if __name__ == '__main__':

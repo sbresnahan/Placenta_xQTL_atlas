@@ -19,7 +19,7 @@
 #       pass through pre-pooled BEDs from harmonize_within_ancestry.py
 #       (namespaced sample IDs)
 #   Stage 2: QN + INT + ComBat per ancestry x modality (R via singularity)
-#     - normalization first, ComBat last (devBrain xQTL schema, 2026-09 revision)
+#     - normalization first, ComBat last (devBrain xQTL schema)
 #     - isoforms additionally exclude the expression-outlier samples written
 #       by 19_hcp_factors.sh (devBrain §3.3)
 #
@@ -65,7 +65,7 @@ CONFIG="${CONFIG:?ERROR: CONFIG env var required (path to config.yml)}"
 # copy of the script; self-location would resolve to the spool directory).
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # config_get.py lives in ../03_phenotyping in the repo layout; a flat copy in
-# SCRIPTS_DIR (legacy deployment) takes precedence.
+# SCRIPTS_DIR (flat deployment) takes precedence.
 CONFIG_GET="${SCRIPTS_DIR}/config_get.py"
 [ -f "$CONFIG_GET" ] || CONFIG_GET="${SCRIPTS_DIR}/../03_phenotyping/config_get.py"
 if [ ! -f "$CONFIG_GET" ]; then

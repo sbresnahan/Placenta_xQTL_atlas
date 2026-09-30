@@ -11,7 +11,7 @@
 # >= CHR1_MIN chr1 phenotypes (default 300), else genome-wide.
 #
 # Intended parallel unit: ONE ancestry x modality per job (20 jobs for
-# EAS+EUR x 9 modalities + combined). See docs/runbook_modality_hcp.md for
+# EAS+EUR x 9 modalities + combined). See README.md (this directory) for
 # the full submission loop.
 #
 # Usage:
@@ -59,7 +59,7 @@ CONFIG="${CONFIG:?ERROR: CONFIG env var required (path to config.yml)}"
 # copy of the script; self-location would resolve to the spool directory).
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # config_get.py lives in ../03_phenotyping in the repo layout; a flat copy in
-# SCRIPTS_DIR (legacy deployment) takes precedence.
+# SCRIPTS_DIR (flat deployment) takes precedence.
 CONFIG_GET="${SCRIPTS_DIR}/config_get.py"
 [ -f "$CONFIG_GET" ] || CONFIG_GET="${SCRIPTS_DIR}/../03_phenotyping/config_get.py"
 if [ ! -f "$CONFIG_GET" ]; then
@@ -156,4 +156,4 @@ echo "[$(date)] Per-modality HCP optimization complete"
 echo "  Results: ${WORK_DIR}/*_optimal_hcp.tsv / .png"
 echo "  Installed: ${QTL_DIR}/*_hcp_factors_optimized.tsv"
 echo "  Next: canonical per-modality 25_build_covariates.py"
-echo "        (see docs/runbook_modality_hcp.md)"
+echo "        (see README.md in this directory)"

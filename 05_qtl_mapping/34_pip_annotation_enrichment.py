@@ -5,7 +5,7 @@ high-PIP fine-mapped variants (Objective 1.5, second half).
 Annotates the fine-mapped variant universe (all variants in the aggregated
 PIP table) with:
   - fastVEP consequence classes (from a fastVEP run on the variant universe;
-    see runbook — the fastVEP input VCF is generated with
+    see README.md — the fastVEP input VCF is generated with
     --make-fastvep-input),
   - ENCODE SCREEN cCRE classes (PLS, pELS, dELS, CTCF-bound, CA-TF BEDs),
   - placenta-specific open chromatin (ENCODE placenta DNase/ATAC peaks BED).

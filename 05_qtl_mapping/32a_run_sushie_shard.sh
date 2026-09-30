@@ -16,7 +16,7 @@ ANCESTRIES="${ANCESTRIES:-EAS,EUR}"
 THREADS="${THREADS:-2}"
 FORCE_RUN="${FORCE_RUN:-0}"
 
-# tensorqtl conda env (sushie installed there — see runbook); same setup as
+# dedicated sushie conda env (python 3.11; see README.md); same submission setup as
 # scripts 27/28 — proven on this cluster.
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 

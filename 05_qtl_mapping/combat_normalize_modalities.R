@@ -6,7 +6,7 @@
 # HCP estimation (HCP factors are estimated once on gene-level expression and
 # reused as covariates for every modality).
 #
-# SCHEMA (2026-09 revision, modeled on the devBrain xQTL atlas — Wen et al.,
+# SCHEMA (modeled on the devBrain xQTL atlas — Wen et al.,
 # Science 2024, 384:eadh0829): normalization FIRST, batch correction LAST.
 # Per ancestry stratum, per modality:
 #   1. Load pooled unnorm BED (samples x features)
@@ -152,9 +152,8 @@ quantile_normalize_rows <- function(mat) {
   # Assign by ORDER (preprocessCore / PANTRY normalize_phenotypes.py
   # convention): the smallest value in a sample gets the smallest mean
   # quantile. Tied values get the mean of the quantiles they span.
-  # (The previous implementation assigned result[ranked, j] <- mean_dist,
-  # which applies the INVERSE permutation and scrambles values across
-  # features — fixed 2026-09-25.)
+  # (Assigning result[ranked, j] <- mean_dist here would apply the
+  # INVERSE permutation and scramble values across features.)
   for (j in seq_len(ncol(t_mat))) {
     o <- order(t_mat[, j])
     result[o, j] <- mean_dist

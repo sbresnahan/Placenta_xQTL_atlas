@@ -4,3 +4,6 @@
 /reports/gene_map.tsv
 /reports/data/gene_bodies.tsv
 /reports/output/
+__pycache__/
+*.pyc
+.DS_Store

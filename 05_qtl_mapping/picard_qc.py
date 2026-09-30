@@ -295,7 +295,7 @@ def load_tpm_matrix(salmon_dir, samples, tx_to_gene=None):
 
     Aggregates transcript-level TPM to gene-level by summing transcripts per gene.
     If tx_to_gene (from load_tx_to_gene) is given, transcript Names are mapped
-    exactly to GTF gene_ids; otherwise falls back to the legacy heuristic
+    exactly to GTF gene_ids; otherwise falls back to a heuristic
     (Name prefix before the first '.' or '__').
     """
     tpm_dfs = []
@@ -511,7 +511,7 @@ def load_config_vars(config_path, cohort):
         # repo layout: config_get.py lives in ../03_phenotyping
         config_get = os.path.join(scripts_dir, "..", "03_phenotyping", "config_get.py")
     if not os.path.exists(config_get):
-        config_get = "config_get.py"  # last resort: cwd/PATH (legacy flat deploy)
+        config_get = "config_get.py"  # last resort: cwd/PATH (flat deploy)
 
     result = subprocess.run(
         ["python3", config_get, config_path, "--cohort", cohort],

@@ -25,7 +25,7 @@ CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 # (LSF executes a spool copy; self-location would resolve to the spool dir).
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # picard_qc.py lives in ../05_qtl_mapping in the repo layout; a flat copy in
-# SCRIPTS_DIR (legacy deployment) takes precedence.
+# SCRIPTS_DIR (flat deployment) takes precedence.
 PICARD_QC="${SCRIPTS_DIR}/picard_qc.py"
 [ -f "$PICARD_QC" ] || PICARD_QC="${SCRIPTS_DIR}/../05_qtl_mapping/picard_qc.py"
 if [ ! -f "$PICARD_QC" ]; then

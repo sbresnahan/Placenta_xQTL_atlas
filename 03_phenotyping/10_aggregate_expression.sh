@@ -140,7 +140,7 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
     --output-isoforms "${UNNORM_DIR}/isoforms.bed" \
     --output-isoform-expr "${UNNORM_DIR}/isoform_expression.bed"
 
-# ---- Canonical BEDs = unnorm (2026-09 schema) ----
+# ---- Canonical BEDs = unnorm (normalization applied in stage 5) ----
 # Per-cohort QN+INT is discontinued: normalization now happens once, after
 # cross-cohort pooling, in stage 5 (19_hcp_factors.sh / 20_combat_modalities.sh).
 # The canonical output/<modality>.bed is the unnorm BED so downstream paths

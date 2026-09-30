@@ -57,7 +57,7 @@ CONFIG="${CONFIG:?ERROR: CONFIG env var required (path to config.yml)}"
 # copy of the script; self-location would resolve to the spool directory).
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # config_get.py lives in ../03_phenotyping in the repo layout; a flat copy in
-# SCRIPTS_DIR (legacy deployment) takes precedence.
+# SCRIPTS_DIR (flat deployment) takes precedence.
 CONFIG_GET="${SCRIPTS_DIR}/config_get.py"
 [ -f "$CONFIG_GET" ] || CONFIG_GET="${SCRIPTS_DIR}/../03_phenotyping/config_get.py"
 if [ ! -f "$CONFIG_GET" ]; then
@@ -104,8 +104,8 @@ export QVALUE_RSCRIPT="$SING_R"
 
 # ---- Determine ancestries ----
 # Canonical env var is ANCESTRIES (space-separated). ANCESTRY (singular) is
-# accepted as a fallback alias — passing ANCESTRY alone previously fell
-# through to the all-in-map default and tried to run unprocessed ancestries.
+# accepted as a fallback alias; with neither variable set the script falls
+# through to the all-in-map default and tries to run unprocessed ancestries.
 if [ -z "${ANCESTRIES:-}" ] && [ -n "${ANCESTRY:-}" ]; then
     echo "  NOTE: ANCESTRY (singular) set; treating as ANCESTRIES='$ANCESTRY'"
     ANCESTRIES="$ANCESTRY"

@@ -382,9 +382,9 @@ def test_combat_normalize_hcp():
                     f"Expected {len(all_samples)} samples in output, got {len(expr_samples)}")
 
         # Check that values are approximately standard normal. With ComBat
-        # LAST (2026-09 schema) the output is approximately but not exactly
-        # N(0,1) per gene — use a looser tolerance than the old ComBat->INT
-        # ordering allowed.
+        # LAST, the output is approximately but not exactly N(0,1) per
+        # gene — use a looser tolerance than a ComBat->INT ordering
+        # would allow.
         data_values = expr_out[expr_samples].values.flatten()
         data_values = data_values[~np.isnan(data_values)]
         mean_val = np.mean(data_values)

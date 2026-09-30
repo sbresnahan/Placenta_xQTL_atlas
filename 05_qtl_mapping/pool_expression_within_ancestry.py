@@ -72,7 +72,7 @@ def load_config_cohorts(config_path):
         # repo layout: config_get.py lives in ../03_phenotyping
         config_get = os.path.join(scripts_dir, "..", "03_phenotyping", "config_get.py")
     if not os.path.exists(config_get):
-        config_get = "config_get.py"  # last resort: cwd/PATH (legacy flat deploy)
+        config_get = "config_get.py"  # last resort: cwd/PATH (flat deploy)
 
     result = subprocess.run(
         ["python3", config_get, config_path],

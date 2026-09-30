@@ -87,7 +87,7 @@ if [ ! -f "$CONFIG" ]; then
     exit 1
 fi
 # config_get.py lives in ../03_phenotyping in the repo layout; a flat copy in
-# SCRIPTS_DIR (legacy deployment) takes precedence.
+# SCRIPTS_DIR (flat deployment) takes precedence.
 CONFIG_GET="${SCRIPTS_DIR}/config_get.py"
 [ -f "$CONFIG_GET" ] || CONFIG_GET="${SCRIPTS_DIR}/../03_phenotyping/config_get.py"
 if [ ! -f "$CONFIG_GET" ]; then

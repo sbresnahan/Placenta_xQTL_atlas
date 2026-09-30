@@ -70,9 +70,8 @@ def test_detection_filter_and_int():
     samples = [f"s{i}" for i in range(n_samp)]
     feats = {f"BG{i}__f{i}": rng.rand(n_samp).tolist() for i in range(n_bg)}
     feats["G1__ok1"] = rng.rand(n_samp).tolist()
-    # 75% exact zeros but detected in all samples -> KEPT under the
-    # 2026-09 schema (zeros are real PSI values; the old >50%-zeros rule
-    # was removed)
+    # 75% exact zeros but detected in all samples -> KEPT (zeros are
+    # real PSI values; a zeros fraction is not a detection filter)
     feats["G2__zeros"] = [0.0] * 30 + rng.rand(10).tolist()
     # detected (non-NA) in only 10/40 = 25% < 40% -> dropped (devBrain
     # detection filter for proportion modalities)
@@ -322,7 +321,6 @@ def test_combat_endtoend():
 
     # Paired design: run the SAME input twice.
     #   Run A: single-cohort ancestry map -> ComBat skipped -> QN+INT only
-    #          (the pre-ComBat reference state under the 2026-09 schema)
     #   Run B: two-cohort ancestry map -> QN+INT then ComBat (ComBat last)
     anc_single = pd.DataFrame({
         "sample_id": samples,
