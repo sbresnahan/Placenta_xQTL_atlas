@@ -460,7 +460,7 @@ python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
          $CRE_DIR/GRCh38-cCREs.pELS.bed:pELS \
          $CRE_DIR/GRCh38-cCREs.PLS.bed:PLS \
          $CRE_DIR/GRCh38-cCREs.TF.bed:TF \
-  --placenta-ocr $DIR_ENCODE/placenta_dnase_merged_bothstrands.bed \
+  --placenta-ocr $ENCODE_DIR/placenta_dnase_merged_bothstrands.bed \
   --out "$AGG/finemap_enrichment.tsv"
 ```
 
