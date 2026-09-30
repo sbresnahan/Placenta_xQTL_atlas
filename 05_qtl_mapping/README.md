@@ -411,8 +411,27 @@ convergence, ELBO, n CS, max PIP).
 
 ### 6.4 Annotation enrichment
 
+Install fastVEP
+
+```bash
+conda create -n fastvep -c conda-forge -y rust c-compiler
+conda activate fastvep
+cargo install --path crates/fastvep-cli --root "$CONDA_PREFIX"
+conda install pip
+pip install pandas
+```
+
 ```bash
 AGG="$RESULTS_DIR/finemap/aggregated"
+GENOME_DIR=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/GenomicReferences/genome
+REF_DIR=/rsrch9/home/epi/bhattacharya_lab/data/fastVEP/references
+mkdir -p $REF_DIR
+cd $REF_DIR
+
+wget https://ftp.ensembl.org/pub/release-115/gff3/homo_sapiens/Homo_sapiens.GRCh38.115.gff3.gz && gunzip Homo_sapiens.GRCh38.115.gff3.gz
+
+mkdir -p /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/qtl_results/finemap_annotate
+cd /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/qtl_results/finemap_annotate
 
 # 1. fastVEP input VCF (one row per unique fine-mapped variant)
 python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
@@ -420,20 +439,28 @@ python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
 
 # 2. Run fastVEP (command printed by the previous step; seconds-to-minutes,
 #    single node, <1 GB RAM — no batch job needed)
-conda activate fastvep
 fastvep annotate -i fastvep_input.vcf -o fastvep_output.txt \
   --output-format tab \
   --gff3 "$REF_DIR/Homo_sapiens.GRCh38.115.gff3" \
   --fasta "$GENOME_DIR/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
 
 # 3. Enrichment (high-PIP >= 0.9 vs all fine-mapped variants as background)
+CRE_DIR=/rsrch9/home/epi/bhattacharya_lab/data/functional_annotations/placenta/cCREs
+ENCODE_DIR=/rsrch9/home/epi/bhattacharya_lab/data/functional_annotations/placenta/ENCODE
+
 python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
   --pips "$AGG/finemap_pips.tsv.gz" \
   --fastvep fastvep_output.txt \
-  --ccre GRCh38-cCREs.PLS.bed.gz:PLS GRCh38-cCREs.pELS.bed.gz:pELS \
-         GRCh38-cCREs.dELS.bed.gz:dELS GRCh38-cCREs.CTCF-bound.bed.gz:CTCF_bound \
-         GRCh38-cCREs.CA-TF.bed.gz:CA_TF \
-  --placenta-ocr placenta_ocr.bed.gz \
+  --ccre $CRE_DIR/GRCh38-cCREs.CA.bed:CA \
+         $CRE_DIR/GRCh38-cCREs.CA-CTCF.bed:CA_CTCF \
+         $CRE_DIR/GRCh38-cCREs.CA-H3K4me3.bed:CA_H3K4me3 \
+         $CRE_DIR/GRCh38-cCREs.CA-TF.bed:CA_TF \
+         $CRE_DIR/GRCh38-cCREs.CTCF-bound.bed:CTCF_bound \
+         $CRE_DIR/GRCh38-cCREs.dELS.bed:dELS \
+         $CRE_DIR/GRCh38-cCREs.pELS.bed:pELS \
+         $CRE_DIR/GRCh38-cCREs.PLS.bed:PLS \
+         $CRE_DIR/GRCh38-cCREs.TF.bed:TF \
+  --placenta-ocr $DIR_ENCODE/placenta_dnase_merged_bothstrands.bed \
   --out "$AGG/finemap_enrichment.tsv"
 ```
 
