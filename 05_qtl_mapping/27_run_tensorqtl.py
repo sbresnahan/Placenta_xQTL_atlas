@@ -42,9 +42,9 @@ import pandas as pd
 
 def bh_qvalues(pvals):
     """Benjamini-Hochberg adjusted p-values (q-values), preserving input
-    order. NaN p-values are treated as 1."""
+    order. Non-finite p-values are treated as 1."""
     p = np.asarray(pvals, dtype=float)
-    p = np.where(np.isnan(p), 1.0, p)
+    p = np.where(np.isfinite(p), p, 1.0)
     n = len(p)
     if n == 0:
         return p
@@ -275,10 +275,31 @@ def main():
         if not os.path.exists(bridge):
             sys.exit(f"ERROR: compute_qvalues.R not found next to {__file__} — "
                      "deploy it from gtex_conventions_xqtl_scripts.zip")
+        # tensorQTL's beta approximation can occasionally return NaN/Inf
+        # for an otherwise completed permutation test (e.g. a numerically
+        # degenerate phenotype/group at high covariate counts). Do not let a
+        # single invalid p-value abort the whole mapping run. For q-value
+        # estimation only, replace non-finite values with p=1 so the full
+        # number of tested hypotheses remains in Storey's calculation; then
+        # force those rows to q=1 below. The original pval_beta values are
+        # retained in the written tensorQTL output for QC/auditability.
+        pval_beta = pd.to_numeric(result["pval_beta"], errors="coerce").to_numpy(dtype=float)
+        nonfinite_mask = ~np.isfinite(pval_beta)
+        if nonfinite_mask.any():
+            bad_ids = result.index[nonfinite_mask].astype(str).tolist()
+            preview = ", ".join(bad_ids[:10])
+            suffix = " ..." if len(bad_ids) > 10 else ""
+            print(f"  WARNING: {nonfinite_mask.sum()} non-finite pval_beta "
+                  f"value(s); using p=1 for Storey q-value estimation and "
+                  f"forcing qval=1 for those rows. IDs: {preview}{suffix}")
+        qvalue_input = pval_beta.copy()
+        qvalue_input[nonfinite_mask] = 1.0
+
         with tempfile.TemporaryDirectory() as tmpd:
             in_tsv = os.path.join(tmpd, "pval_beta.tsv")
             out_tsv = os.path.join(tmpd, "qval.tsv")
-            result[["pval_beta"]].to_csv(in_tsv, sep="\t", index=False)
+            pd.DataFrame({"pval_beta": qvalue_input}).to_csv(
+                in_tsv, sep="\t", index=False)
             proc = subprocess.run(
                 f'{rscript_cmd} "{bridge}" "{in_tsv}" "{out_tsv}"',
                 shell=True, capture_output=True, text=True)
@@ -298,6 +319,8 @@ def main():
                 sys.exit("ERROR: compute_qvalues.R output malformed "
                          f"({len(qdf)} rows vs {len(result)} expected)")
             result["qval"] = qdf["qval"].values
+            if nonfinite_mask.any():
+                result.loc[nonfinite_mask, "qval"] = 1.0
         print(f"\n  Storey q-values (on pval_beta, GTEx convention via R qvalue): "
               f"{(result['qval'] <= args.independent_fdr).sum()} "
               f"phenotypes/groups at FDR <= {args.independent_fdr}")
