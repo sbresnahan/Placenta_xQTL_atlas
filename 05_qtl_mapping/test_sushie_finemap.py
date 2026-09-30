@@ -163,13 +163,17 @@ def _run_module(mod, *cli):
 def test_prepare_loci(fx):
     out = fx / "loci.expression.tsv"
     _run_module(MOD31, "prepare-loci", "--results-dir", str(fx / "results"),
+                "--qtl-dir", str(fx / "pheno"),
                 "--ancestries", "ANC1", "ANC2", "--modality", "expression",
                 "--out", str(out))
     loci = pd.read_csv(out, sep="\t")
     assert len(loci) == 1
     row = loci.iloc[0]
     assert row["chrom"] == 1
-    assert row["start"] == POS0 and row["end"] == POS0 + STEP * (N_VAR - 1)
+    # windows are BED start/end +/- cis-window (1-based start), not clipped
+    # to the tested-variant range
+    assert row["start"] == POS_SHARED + 1 - 1_000_000
+    assert row["end"] == POS_SHARED + 100 + 1_000_000
     assert row["n_signals"] == 2          # max rank across ancestries
     assert row["L"] == 5                  # max(5, 2 + 2)
     assert row["sig_in"] == "ANC1,ANC2"
@@ -192,7 +196,7 @@ def test_run_recovers_causal(fx):
     assert (out / "GENEX.ancestries").read_text().strip() == "ANC1,ANC2"
     assert (out / "GENEX.done").exists()
     diag = pd.read_csv(fx / "finemap" / "logs"
-                       / "loci.expression.diagnostics.tsv", sep="\t")
+                       / "expression_loci.expression.diagnostics.tsv", sep="\t")
     rec = diag.iloc[0]
     assert rec["status"] == "ok" and rec["converged"] == True  # noqa: E712
     assert rec["n_snps"] == N_VAR and rec["n_cs"] == 2
@@ -215,7 +219,7 @@ def test_aggregate(fx):
     w.to_csv(finemap / "expression" / "GENEY.sushie.weights.tsv",
              sep="\t", index=False)
     (finemap / "expression" / "GENEY.ancestries").write_text("ANC1,ANC2\n")
-    dpath = finemap / "logs" / "loci.expression.diagnostics.tsv"
+    dpath = finemap / "logs" / "expression_loci.expression.diagnostics.tsv"
     d = pd.read_csv(dpath, sep="\t")
     fail = d.iloc[0].copy()
     fail["phenotype_id"], fail["status"] = "GENEFAIL", "failed"
@@ -248,8 +252,12 @@ def test_enrichment(fx):
         test_aggregate(fx)
     pips = pd.read_csv(agg / "finemap_pips.tsv.gz", sep="\t")
     snps = sorted(pips["snp"].unique())
-    rows = ["## fixture", "#Uploaded_variation\tLocation\tAllele\tGene"
-            "\tFeature\tFeature_type\tConsequence\tIMPACT"]
+    # fastVEP --output-format tab: 17 columns, VEP-default-compatible layout
+    rows = ["## fastVEP output",
+            "#Uploaded_variation\tLocation\tAllele\tGene\tFeature"
+            "\tFeature_type\tConsequence\tcDNA_position\tCDS_position"
+            "\tProtein_position\tAmino_acids\tCodons\tExisting_variation"
+            "\tIMPACT\tDISTANCE\tSTRAND\tFLAGS"]
     for i, s in enumerate(snps):
         chrom, pos, ref, alt = s.split(":")
         if pos == str(POS_SHARED):
@@ -260,9 +268,10 @@ def test_enrichment(fx):
             cons = "intron_variant"
         else:
             cons = "upstream_gene_variant"
-        rows.append(f"{s}\t{chrom}:{pos}\t{alt}\tG\tT\tTranscript\t{cons}\tX")
-    vep = fx / "vep_fixture.txt"
-    vep.write_text("\n".join(rows) + "\n")
+        rows.append(f"{s}\t{chrom}:{pos}\t{alt}\tG\tT\tTranscript\t{cons}"
+                    "\t-\t-\t-\t-\t-\t-\tMODIFIER\t-\t1\t-")
+    fv = fx / "fastvep_fixture.txt"
+    fv.write_text("\n".join(rows) + "\n")
     ccre = fx / "ccre_fixture.bed"
     ccre.write_text(f"chr1\t{POS_SHARED - 1000}\t{POS_SHARED + 1000}\n"
                     f"chr1\t{POS0}\t{POS0 + 5000}\n")
@@ -271,24 +280,29 @@ def test_enrichment(fx):
 
     out = fx / "enrichment.tsv"
     _run_module(MOD34, "--pips", str(agg / "finemap_pips.tsv.gz"),
-                "--vep", str(vep), "--ccre", f"{ccre}:PLS",
+                "--fastvep", str(fv), "--ccre", f"{ccre}:PLS",
                 "--placenta-ocr", str(ocr), "--out", str(out))
     res = pd.read_csv(out, sep="\t")
     by_anno = res.set_index("annotation")
     # planted: causal variants carry these annotations -> enriched
-    assert by_anno.loc["vep_coding_nonsynonymous", "n_high_pip"] == 1
-    assert by_anno.loc["vep_splice_site", "n_high_pip"] == 1
+    assert by_anno.loc["consequence_coding_nonsynonymous", "n_high_pip"] == 1
+    assert by_anno.loc["consequence_splice_site", "n_high_pip"] == 1
     assert by_anno.loc["placenta_ocr", "n_high_pip"] == 1
     assert by_anno.loc["ccre_PLS", "n_high_pip"] == 1
     assert by_anno.loc["placenta_ocr", "odds_ratio"] > 1
     assert "fisher_fdr" in res.columns
-    # VEP input generator
-    vep_in = fx / "vep_input.tsv"
-    _run_module(MOD34, "--make-vep-input",
+    # fastVEP input generator: minimal VCF, ID = original snp string
+    fv_in = fx / "fastvep_input.vcf"
+    _run_module(MOD34, "--make-fastvep-input",
                 "--pips", str(agg / "finemap_pips.tsv.gz"),
-                "--out", str(vep_in))
-    first = vep_in.read_text().splitlines()[0].split("\t")
-    assert len(first) == 6 and first[5].count(":") == 3
+                "--out", str(fv_in))
+    lines = fv_in.read_text().splitlines()
+    assert lines[0] == "##fileformat=VCFv4.2"
+    assert any(l.startswith("##contig=<ID=") for l in lines)
+    hdr = lines.index("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO")
+    first = lines[hdr + 1].split("\t")
+    assert len(first) == 8 and first[2].count(":") == 3
+    assert not first[0].startswith("chr")
 
 
 @needs_tools

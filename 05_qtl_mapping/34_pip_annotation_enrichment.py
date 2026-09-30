@@ -4,8 +4,9 @@ high-PIP fine-mapped variants (Objective 1.5, second half).
 
 Annotates the fine-mapped variant universe (all variants in the aggregated
 PIP table) with:
-  - VEP consequence classes (from a VEP run on the variant universe; see
-    runbook — VEP input is generated with --make-vep-input),
+  - fastVEP consequence classes (from a fastVEP run on the variant universe;
+    see runbook — the fastVEP input VCF is generated with
+    --make-fastvep-input),
   - ENCODE SCREEN cCRE classes (PLS, pELS, dELS, CTCF-bound, CA-TF BEDs),
   - placenta-specific open chromatin (ENCODE placenta DNase/ATAC peaks BED).
 
@@ -25,13 +26,13 @@ BH-FDR is applied across classes for each test family.
 Usage:
   python3 34_pip_annotation_enrichment.py \
       --pips finemap/aggregated/finemap_pips.tsv.gz \
-      --vep vep_output.txt \
+      --fastvep fastvep_output.txt \
       --ccre GRCh38-cCREs.PLS.bed:PLS GRCh38-cCREs.pELS.bed:pELS ... \
       --placenta-ocr encode_placenta_dnase_peaks.bed \
       --out pip_annotation_enrichment.tsv
 
-  python3 34_pip_annotation_enrichment.py --make-vep-input \
-      --pips finemap/aggregated/finemap_pips.tsv.gz --out vep_input.tsv
+  python3 34_pip_annotation_enrichment.py --make-fastvep-input \
+      --pips finemap/aggregated/finemap_pips.tsv.gz --out fastvep_input.vcf
 """
 
 import argparse
@@ -41,10 +42,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# VEP Sequence Ontology consequence -> grouped class, in priority order
+# Sequence Ontology consequence -> grouped class, in priority order
 # (first match wins; a variant's class = highest-priority term across all
-# its transcript rows).
-VEP_PRIORITY = [
+# its transcript rows). Terms follow the Ensembl VEP / fastVEP vocabulary.
+CONSEQUENCE_PRIORITY = [
     ("splice_site", {"splice_acceptor_variant", "splice_donor_variant"}),
     ("coding_lof", {"stop_gained", "stop_lost", "start_lost",
                     "frameshift_variant"}),
@@ -57,31 +58,62 @@ VEP_PRIORITY = [
     ("flanking", {"upstream_gene_variant", "downstream_gene_variant"}),
     ("intergenic", {"intergenic_variant"}),
 ]
-TERM_TO_CLASS = {t: c for c, terms in VEP_PRIORITY for t in terms}
-CLASS_PRIORITY = {c: i for i, (c, _) in enumerate(VEP_PRIORITY)}
+TERM_TO_CLASS = {t: c for c, terms in CONSEQUENCE_PRIORITY for t in terms}
+CLASS_PRIORITY = {c: i for i, (c, _) in enumerate(CONSEQUENCE_PRIORITY)}
 
 
-def make_vep_input(pips_path, out_path):
-    """Write VEP region-format input: chrom start end ref/alt strand id."""
+def make_fastvep_input(pips_path, out_path):
+    """Write a minimal VCF (v4.2) of the variant universe for fastVEP.
+
+    CHROM is stripped of any leading 'chr' to match the Ensembl GFF3/FASTA
+    contig naming; the original 'chrom:pos:ref:alt' snp string is kept in
+    the ID column and round-trips through fastVEP's Uploaded_variation
+    output column, so the join back to the PIP table is unaffected.
+    """
     pips = pd.read_csv(pips_path, sep="\t", usecols=["snp"])
     snps = pips["snp"].drop_duplicates()
     parts = snps.str.split(":", expand=True)
-    vep = pd.DataFrame({
-        "chrom": parts[0], "start": parts[1].astype(int),
-        "end": parts[1].astype(int),
-        "allele": parts[2] + "/" + parts[3], "strand": "+", "id": snps})
-    vep = vep.sort_values(["chrom", "start"])
-    vep.to_csv(out_path, sep="\t", header=False, index=False)
-    print(f"wrote {len(vep)} variants -> {out_path}")
-    print("Run VEP with default output, e.g.:")
-    print(f"  vep -i {out_path} --cache --offline --assembly GRCh38 "
-          f"--output_file vep_output.txt --force_overwrite")
+    vcf = pd.DataFrame({
+        "chrom": parts[0].str.replace("^chr", "", regex=True),
+        "pos": parts[1].astype(int),
+        "id": snps.to_numpy(),
+        "ref": parts[2],
+        "alt": parts[3],
+    })
+    chrom_order = {c: i for i, c in enumerate(
+        [str(c) for c in range(1, 23)] + ["X", "Y", "MT", "M"])}
+    vcf["_k"] = vcf["chrom"].map(lambda c: chrom_order.get(c, 100))
+    vcf = vcf.sort_values(["_k", "pos"]).drop(columns="_k")
+    with open(out_path, "w") as f:
+        f.write("##fileformat=VCFv4.2\n")
+        for chrom in vcf["chrom"].unique():
+            f.write(f"##contig=<ID={chrom}>\n")
+        f.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+    out = vcf[["chrom", "pos", "id", "ref", "alt"]].copy()
+    out["qual"] = "."
+    out["filter"] = "."
+    out["info"] = "."
+    out.to_csv(out_path, sep="\t", index=False, header=False, mode="a")
+    print(f"wrote {len(vcf)} variants -> {out_path}")
+    print("Annotate with fastVEP (tab output), e.g.:")
+    print(f"  fastvep annotate -i {out_path} -o fastvep_output.txt "
+          "--output-format tab "
+          "--gff3 Homo_sapiens.GRCh38.115.gff3 "
+          "--fasta Homo_sapiens.GRCh38.dna.primary_assembly.fa")
 
 
-def parse_vep(vep_path):
-    """Parse VEP default output -> {variant_id: grouped_class}."""
+def parse_fastvep(tab_path):
+    """Parse fastVEP tab output -> {variant_id: grouped_class}.
+
+    fastVEP's 17-column tab layout matches VEP's default output at the
+    positions used here: column 0 = Uploaded_variation (the input VCF ID,
+    i.e. the original 'chrom:pos:ref:alt' snp string), column 6 =
+    comma-separated Sequence Ontology consequence terms. Comment lines
+    ('## fastVEP output' prologue and the '#Uploaded_variation' column
+    header) start with '#' and are skipped.
+    """
     best = {}
-    with open(vep_path) as f:
+    with open(tab_path) as f:
         for line in f:
             if line.startswith("#"):
                 continue
@@ -98,7 +130,10 @@ def parse_vep(vep_path):
                         cls = c
             if cls is None:
                 cls = "other"
-            if var_id not in best or CLASS_PRIORITY[cls] < CLASS_PRIORITY[best[var_id]]:
+            # "other" (unmapped SO term, e.g. non_coding_transcript_variant)
+            # ranks below every named class
+            if (var_id not in best
+                    or CLASS_PRIORITY.get(cls, 99) < CLASS_PRIORITY.get(best[var_id], 99)):
                 best[var_id] = cls
     return best
 
@@ -192,20 +227,21 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--pips", required=True,
                    help="Aggregated finemap_pips.tsv.gz from script 33")
-    p.add_argument("--vep", default=None,
-                   help="VEP default-format output for the variant universe")
+    p.add_argument("--fastvep", default=None,
+                   help="fastVEP tab-format output (--output-format tab) for "
+                        "the variant universe")
     p.add_argument("--ccre", nargs="*", default=[],
                    help="BED:label pairs, e.g. GRCh38-cCREs.PLS.bed:PLS")
     p.add_argument("--placenta-ocr", default=None,
                    help="BED of placenta open-chromatin peaks")
     p.add_argument("--pip-threshold", type=float, default=0.9)
-    p.add_argument("--make-vep-input", action="store_true",
-                   help="Only write the VEP input file and exit")
+    p.add_argument("--make-fastvep-input", action="store_true",
+                   help="Only write the fastVEP input VCF and exit")
     p.add_argument("--out", required=True)
     args = p.parse_args()
 
-    if args.make_vep_input:
-        make_vep_input(args.pips, args.out)
+    if args.make_fastvep_input:
+        make_fastvep_input(args.pips, args.out)
         return
 
     print(f"Loading PIPs from {args.pips} ...")
@@ -221,18 +257,18 @@ def main():
 
     anno_cols = []
 
-    if args.vep:
-        print(f"Parsing VEP consequences from {args.vep} ...")
-        vep_cls = parse_vep(args.vep)
-        uni["vep_class"] = uni["snp"].map(vep_cls).fillna("not_annotated")
+    if args.fastvep:
+        print(f"Parsing fastVEP consequences from {args.fastvep} ...")
+        csq_cls = parse_fastvep(args.fastvep)
+        uni["consequence_class"] = uni["snp"].map(csq_cls).fillna("not_annotated")
         for cls in ["coding_lof", "coding_nonsynonymous", "synonymous",
                     "splice_site", "utr", "intron", "regulatory_region",
                     "flanking", "intergenic"]:
-            uni[f"vep_{cls}"] = uni["vep_class"] == cls
-            anno_cols.append(f"vep_{cls}")
-        uni["vep_coding_any"] = (uni["vep_coding_lof"]
-                                 | uni["vep_coding_nonsynonymous"])
-        anno_cols.append("vep_coding_any")
+            uni[f"consequence_{cls}"] = uni["consequence_class"] == cls
+            anno_cols.append(f"consequence_{cls}")
+        uni["consequence_coding_any"] = (uni["consequence_coding_lof"]
+                                         | uni["consequence_coding_nonsynonymous"])
+        anno_cols.append("consequence_coding_any")
 
     for spec in args.ccre:
         bed_path, label = spec.rsplit(":", 1)
@@ -251,7 +287,7 @@ def main():
         anno_cols.append("placenta_ocr")
 
     if not anno_cols:
-        raise SystemExit("No annotations supplied (--vep, --ccre, "
+        raise SystemExit("No annotations supplied (--fastvep, --ccre, "
                          "--placenta-ocr)")
 
     res = enrichment_table(uni, anno_cols, args.pip_threshold)

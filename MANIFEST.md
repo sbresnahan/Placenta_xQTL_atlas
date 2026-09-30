@@ -244,7 +244,7 @@ cis-xQTL summary statistics. The mapping design follows GTEx conventions.
 | 31 | `31_sushie_finemap.py` | Cross-ancestry fine-mapping (Objective 1.5): `prepare-loci` (union of q ≤ 0.05 grouped-layer lead phenotypes across ancestries per modality; exact tested windows from parquets; L = min(10, max(5, n_independent + 2)) from the stepwise layer) + `run` (per-shard SuSHiE joint multi-ancestry fine-mapping, individual-level mode with in-sample LD from the intersected pgens; purity 0.5; phenotypes missing from an ancestry's BED drop that ancestry for the locus; per-locus `.ancestries`/`.done` markers, per-shard diagnostics TSV) |
 | 32 | `32_submit_sushie.sh` + `32a_run_sushie_shard.sh` | LSF driver: per-modality locus prep → shard (default 50 loci/shard) → one array job per shard in the `tensorqtl` conda env (SuSHiE pip-installed); `TEST=1` pilot, skip-if-done/running guards, `FORCE_LOCI`/`FORCE_RUN`, `ANCESTRIES`/`MODALITIES`/`SHARD_SIZE`/`QUEUE`/`WALLTIME`/`THREADS` env overrides |
 | 33 | `33_aggregate_finemap.py` | Aggregate per-locus SuSHiE outputs across modalities → `finemap/aggregated/`: `finemap_pips.tsv.gz` (per-variant PIPs, CS membership, per-ancestry effect weights, locus diagnostics joined), `finemap_credible_sets.tsv.gz` (per-CS summaries incl. cross-ancestry effect correlation rho), `finemap_locus_summary.tsv` (convergence, ELBO, n CS, max PIP per locus) |
-| 34 | `34_pip_annotation_enrichment.py` | Functional enrichment of high-PIP (≥ 0.9) variants vs all fine-mapped variants: `--make-vep-input` for VEP (consequence grouping: splice/LoF/missense/synonymous/UTR/intron/regulatory/flanking/intergenic), ENCODE SCREEN cCRE classes (PLS/pELS/dELS/CTCF-bound/CA-TF) + placenta OCR BED intersection; Fisher exact (primary), log10(distance)-adjusted logistic (sensitivity), PIP-weighted enrichment; BH-FDR per test family |
+| 34 | `34_pip_annotation_enrichment.py` | Functional enrichment of high-PIP (≥ 0.9) variants vs all fine-mapped variants: `--make-fastvep-input` for fastVEP (consequence grouping: splice/LoF/missense/synonymous/UTR/intron/regulatory/flanking/intergenic), ENCODE SCREEN cCRE classes (PLS/pELS/dELS/CTCF-bound/CA-TF) + placenta OCR BED intersection; Fisher exact (primary), log10(distance)-adjusted logistic (sensitivity), PIP-weighted enrichment; BH-FDR per test family |
 
 **Diagnostics/utilities.** `hcp_diagnostic.R`, `hcp_diagnostic2.R` (HCP–genotype
 correlation diagnostics), `check_hcp_chunks.sh`, `test_hcp.py`,
@@ -265,7 +265,7 @@ locus-summary, and enrichment tables).
 
 **Software.** tensorqtl 1.0.10 (python-only conda env: pandas, pyarrow, genotypeio,
 matplotlib), sushie ≥ 0.20 (pip, same env), plink2, R 4.3.1 singularity (qvalue,
-sva, Rhcpp, data.table, ggplot2, patchwork), bgzip/tabix; VEP (GRCh38 cache)
+sva, Rhcpp, data.table, ggplot2, patchwork), bgzip/tabix; fastVEP 0.4.0 (Ensembl 115 GFF3 + GRCh38 FASTA)
 for the enrichment annotation.
 
 ---

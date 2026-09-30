@@ -183,7 +183,7 @@ if (nrow(cs) > 0) {
 
 # Functional-annotation enrichment
 
-High-PIP variants (PIP >= 0.9) tested for enrichment against VEP consequence
+High-PIP variants (PIP >= 0.9) tested for enrichment against fastVEP consequence
 classes, ENCODE SCREEN cCRE classes, and placenta open-chromatin peaks;
 background = all other fine-mapped variants. Odds ratios and 95% CIs are
 recomputed from the 2x2 cell counts; FDR is Benjamini-Hochberg across

@@ -333,8 +333,19 @@ sushie finemap --help   # smoke test
 
 Annotation sources for the enrichment step (7.4):
 
-- **VEP** (variant consequences): assumed available on seadragon
-  (`vep --help` to confirm; needs a GRCh38 offline cache).
+- **fastVEP** (variant consequences): Rust reimplementation of Ensembl VEP;
+  no multi-GB cache download. On seadragon:
+  `conda create -n fastvep -c conda-forge rust c-compiler`, then
+  `cargo install --path crates/fastvep-cli --root "$CONDA_PREFIX"` from a
+  clone of https://github.com/Huang-lab/fastVEP at tag v0.4.0.
+  Requires two reference files (both bare `1`-style contigs):
+  Ensembl release-115 GFF3 (`Homo_sapiens.GRCh38.115.gff3`, ~50 MB from
+  ftp.ensembl.org) and the GRCh38 primary-assembly FASTA with `.fai`
+  (already at `$GENOME_DIR/Homo_sapiens.GRCh38.dna.primary_assembly.fa`).
+  Note: fastVEP v0.4.0 does not annotate Ensembl regulatory-build features,
+  so the `consequence_regulatory_region` class is expected to be empty —
+  the same was true of the old default VEP invocation (no `--regulatory`).
+  Regulatory signal is captured by the cCRE/OCR intersections below.
 - **ENCODE SCREEN cCREs**: download GRCh38 "cCREs by class" BEDs from
   https://screen.wenglab.org/downloads — one file per class: PLS, pELS,
   dELS, CTCF-bound, CA-TF (e.g. `GRCh38-cCREs.PLS.bed.gz`).
@@ -390,18 +401,22 @@ convergence, ELBO, n CS, max PIP).
 ```bash
 AGG="$RESULTS_DIR/finemap/aggregated"
 
-# 1. VEP input (one row per unique fine-mapped variant)
+# 1. fastVEP input VCF (one row per unique fine-mapped variant)
 python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
-  --pips "$AGG/finemap_pips.tsv.gz" --make-vep-input --out vep_input.tsv
+  --pips "$AGG/finemap_pips.tsv.gz" --make-fastvep-input --out fastvep_input.vcf
 
-# 2. Run VEP (command printed by the previous step)
-vep -i vep_input.tsv --cache --offline --assembly GRCh38 \
-  --output_file vep_output.txt --force_overwrite
+# 2. Run fastVEP (command printed by the previous step; seconds-to-minutes,
+#    single node, <1 GB RAM — no batch job needed)
+conda activate fastvep
+fastvep annotate -i fastvep_input.vcf -o fastvep_output.txt \
+  --output-format tab \
+  --gff3 "$REF_DIR/Homo_sapiens.GRCh38.115.gff3" \
+  --fasta "$GENOME_DIR/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
 
 # 3. Enrichment (high-PIP ≥ 0.9 vs all fine-mapped variants as background)
 python3 "$SCRIPTS_DIR/34_pip_annotation_enrichment.py" \
   --pips "$AGG/finemap_pips.tsv.gz" \
-  --vep vep_output.txt \
+  --fastvep fastvep_output.txt \
   --ccre GRCh38-cCREs.PLS.bed.gz:PLS GRCh38-cCREs.pELS.bed.gz:pELS \
          GRCh38-cCREs.dELS.bed.gz:dELS GRCh38-cCREs.CTCF-bound.bed.gz:CTCF_bound \
          GRCh38-cCREs.CA-TF.bed.gz:CA_TF \
