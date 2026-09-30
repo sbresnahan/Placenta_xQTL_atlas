@@ -204,7 +204,7 @@ def main():
                              "25_build_covariates.py, 27_run_tensorqtl.py")
     parser.add_argument("--ancestries", default="EAS EUR",
                         help="Space-separated ancestry labels")
-    parser.add_argument("--k-grid", default="0 5 10 15 20 25 30",
+    parser.add_argument("--k-grid", default="0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100",
                         help="Space-separated candidate HCP counts")
     parser.add_argument("--work-dir", default=None,
                         help="Staging dir (default: {qtl-dir}/hcp_optimization)")

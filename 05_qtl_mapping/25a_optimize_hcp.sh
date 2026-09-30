@@ -28,7 +28,7 @@
 # Optional env vars:
 #   ANCESTRIES   — space-separated ancestry labels (default: all in map;
 #                  ANCESTRY singular accepted as a fallback alias)
-#   K_GRID       — candidate HCP counts (default: "0 5 10 15 20 25 30")
+#   K_GRID       — candidate HCP counts (default: "0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100")
 #   QTL_DIR      — canonical QTL inputs dir (default: ${OUTPUT_BASE}/qtl_inputs)
 #   HCP_DIR      — script-19 output dir (default: ${OUTPUT_BASE}/hcp)
 #   PC_DIR       — genotype PCs dir (default: ${OUTPUT_BASE}/genotype_pcs)
@@ -66,7 +66,7 @@ if [ ! -f "$CONFIG_GET" ]; then
     exit 1
 fi
 ANCESTRY_MAP="${ANCESTRY_MAP:?ERROR: ANCESTRY_MAP env var required}"
-K_GRID="${K_GRID:-0 5 10 15 20 25 30}"
+K_GRID="${K_GRID:-0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100}"
 FDR="${FDR:-0.05}"
 SKIP_EXISTING="${SKIP_EXISTING:-0}"
 # Covariates excluded before correlation pruning in every per-k model.
