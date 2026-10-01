@@ -354,6 +354,7 @@ python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
   --results-dir "$RESULTS_DIR" --qtl-dir "$QTL_DIR" --only qc \
   --pooled-bed-dir "$OUTPUT_BASE/combat_modalities/pooled" \
   --ancestry-map "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/pooled_sample_ancestry_RNAseq.tsv" \
+  --geno-ancestry-map "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/genotypes/pooled_sample_ancestry.tsv" \
   --cohort-qc-glob "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/*/genotypes/imputed/qc" \
   --geno-pooled-dir "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/genotypes" \
   --picard-glob "$OUTPUT_BASE/hcp/qc_metrics/*_qc_metrics.tsv"

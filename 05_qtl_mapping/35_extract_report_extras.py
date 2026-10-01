@@ -678,27 +678,40 @@ def stage_pcair(pcair_dir, out_dir):
 # stage counts, Picard sequencing metrics
 # ---------------------------------------------------------------------------
 
-def _cohort_labels(samples, ancestry_map, sidecar_dir, anc, mod):
-    """Series sample_id -> cohort. Priority: per-modality sidecar
-    ({anc}_{mod}_cohort_labels.tsv under sidecar_dir), then the ancestry map
-    (sample_id, assigned_ancestry, cohort), then the namespaced-id prefix
-    ({cohort}_{sample}; pool_modalities_within_ancestry.py convention)."""
-    m = None
+def _cohort_labels(samples, ancestry_map, sidecar_dir, anc, mod,
+                   geno_map=None):
+    """Series sample_id -> cohort. Lookup priority per sample: per-modality
+    sidecar ({anc}_{mod}_cohort_labels.tsv under sidecar_dir), then the
+    RNAseq-space ancestry map (sample_id, assigned_ancestry, cohort), then
+    the genotype-space map (module 23 renames rnaseq_id -> array_id, so
+    post-intersection BED columns live in array-id space). Ids missing from
+    every map are retried after stripping a leading namespace prefix
+    (pool_modalities_within_ancestry.py writes {label}_{sample} ids for some
+    modalities). Last resorts: the namespace prefix itself, then 'unknown'.
+    """
+    maps = []
     if sidecar_dir:
         p = os.path.join(sidecar_dir, f"{anc}_{mod}_cohort_labels.tsv")
         if os.path.exists(p):
             d = pd.read_csv(p, sep="\t")
-            m = dict(zip(d["sample_id"].astype(str), d["cohort"].astype(str)))
-    if m is None and ancestry_map is not None:
-        d = ancestry_map
+            maps.append(dict(zip(d["sample_id"].astype(str),
+                                 d["cohort"].astype(str))))
+    for d in (ancestry_map, geno_map):
+        if d is None:
+            continue
         if "assigned_ancestry" in d.columns:
             d = d[d["assigned_ancestry"] == anc]
-        m = dict(zip(d["sample_id"].astype(str), d["cohort"].astype(str)))
+        maps.append(dict(zip(d["sample_id"].astype(str),
+                             d["cohort"].astype(str))))
     out = {}
     for s in samples:
         s = str(s)
-        if m and s in m:
-            out[s] = m[s]
+        hit = next((m[s] for m in maps if s in m), None)
+        if hit is None and "_" in s:
+            bare = s.partition("_")[2]
+            hit = next((m[bare] for m in maps if bare in m), None)
+        if hit is not None:
+            out[s] = hit
         elif "_" in s:
             out[s] = s.partition("_")[0]
         else:
@@ -734,8 +747,8 @@ def _qc_pca(pheno, n_features, rng):
 
 def qc_phenotype_summaries(qtl_dir, ancestries, out_dir,
                            pooled_bed_dir=None, ancestry_map_path=None,
-                           cohort_labels_dir=None, n_values=5000,
-                           n_features=5000, seed=42):
+                           cohort_labels_dir=None, geno_map_path=None,
+                           n_values=5000, n_features=5000, seed=42):
     """Before/after processing summaries per ancestry x modality.
 
     Stages: 'before' = pooled unnormalized BED
@@ -753,6 +766,9 @@ def qc_phenotype_summaries(qtl_dir, ancestries, out_dir,
     amap = None
     if ancestry_map_path and os.path.exists(ancestry_map_path):
         amap = pd.read_csv(ancestry_map_path, sep="\t")
+    gmap = None
+    if geno_map_path and os.path.exists(geno_map_path):
+        gmap = pd.read_csv(geno_map_path, sep="\t")
     val_rows, qtl_rows, pca_rows, cnt_rows = [], [], [], []
     for anc in ancestries:
         for mod in MODALITIES:
@@ -769,7 +785,8 @@ def qc_phenotype_summaries(qtl_dir, ancestries, out_dir,
                 pheno, _ = read_bed(path)
                 pheno = pheno.loc[:, pheno.notna().any(axis=0)]
                 cohorts = _cohort_labels(pheno.columns, amap,
-                                         cohort_labels_dir, anc, mod)
+                                         cohort_labels_dir, anc, mod,
+                                         geno_map=gmap)
                 cnt_rows.append({"ancestry": anc, "modality": mod,
                                  "stage": stage, "n_features": len(pheno),
                                  "n_samples": pheno.shape[1]})
@@ -875,9 +892,13 @@ def qc_genotype_stage_counts(out_dir, cohort_qc_glob=None,
     return p
 
 
-def qc_picard_metrics(picard_glob, out_dir):
+def qc_picard_metrics(picard_glob, out_dir, ancestry_map_path=None):
     """Concatenate per-cohort *_qc_metrics.tsv (module 19a outputs), cohort
-    parsed from the filename prefix. Writes qc_picard_metrics.tsv."""
+    parsed from the filename prefix. Module 19a uses cohortN working labels;
+    when ancestry_map_path is given, each file-cohort is relabeled to the
+    modal map cohort of its samples (the sample column holds RNAseq ids),
+    provided at least half the samples map and >= 90% of those agree.
+    Writes qc_picard_metrics.tsv."""
     os.makedirs(out_dir, exist_ok=True)
     files = sorted(glob.glob(picard_glob)) if picard_glob else []
     frames = []
@@ -889,6 +910,21 @@ def qc_picard_metrics(picard_glob, out_dir):
         print("  WARN: no Picard qc_metrics files matched — skipped")
         return None
     out = pd.concat(frames, ignore_index=True)
+    if ancestry_map_path and os.path.exists(ancestry_map_path) \
+            and "sample" in out.columns:
+        amap = pd.read_csv(ancestry_map_path, sep="\t")
+        s2c = dict(zip(amap["sample_id"].astype(str),
+                       amap["cohort"].astype(str)))
+        relabel = {}
+        for co, grp in out.groupby("cohort"):
+            mapped = grp["sample"].astype(str).map(s2c).dropna()
+            if len(mapped) >= max(1, int(0.5 * len(grp))):
+                top = mapped.value_counts()
+                if len(top) and top.iloc[0] / len(mapped) >= 0.9:
+                    relabel[co] = top.index[0]
+        if relabel:
+            out["cohort"] = out["cohort"].replace(relabel)
+            print(f"  Picard cohorts relabeled via ancestry map: {relabel}")
     p = os.path.join(out_dir, "qc_picard_metrics.tsv")
     out.to_csv(p, sep="\t", index=False)
     print(f"  wrote {len(out)} samples x {len(frames)} cohorts -> {p}")
@@ -929,6 +965,9 @@ def main():
                          "assigned_ancestry, cohort) for cohort labels")
     ap.add_argument("--cohort-labels-dir", default=None,
                     help="dir with {ANC}_{MOD}_cohort_labels.tsv sidecars")
+    ap.add_argument("--geno-ancestry-map", default=None,
+                    help="pooled_sample_ancestry.tsv in genotype (array-id) "
+                         "space; labels post-intersection BED columns")
     ap.add_argument("--cohort-qc-glob", default=None,
                     help="glob matching per-cohort post-imputation QC dirs "
                          "(containing {COHORT}.rsq_pass.pvar/.psam)")
@@ -985,6 +1024,7 @@ def main():
                                pooled_bed_dir=args.pooled_bed_dir,
                                ancestry_map_path=args.ancestry_map,
                                cohort_labels_dir=args.cohort_labels_dir,
+                               geno_map_path=args.geno_ancestry_map,
                                n_values=args.n_violin_values,
                                n_features=args.n_pca_features)
         qc_genotype_stage_counts(out_dir,
@@ -992,7 +1032,8 @@ def main():
                                  geno_pooled_dir=args.geno_pooled_dir,
                                  ancestries=args.ancestries)
         if args.picard_glob:
-            qc_picard_metrics(args.picard_glob, out_dir)
+            qc_picard_metrics(args.picard_glob, out_dir,
+                              ancestry_map_path=args.ancestry_map)
     print("\nDone.")
 
 

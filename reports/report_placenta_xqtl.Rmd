@@ -156,6 +156,89 @@ qc_geno_stages <- read_extra("qc_genotype_stage_counts.tsv") %>%
                                               as.numeric))}
 qc_picard <- read_extra("qc_picard_metrics.tsv")
 qc_geno_dir <- file.path(params$qc_dir, "genotype_qc")
+# --- Repair cohort labels in QC phenotype tables ----------------------------
+# Archives extracted before script 35 learned the genotype-space map carry two
+# label artifacts: (i) before-stage namespaced ids ("cohort2_J1002") were
+# labeled by their namespace prefix (cohort1-4) instead of the true cohort;
+# (ii) after-stage array ids missed the RNAseq-space ancestry map, leaving
+# per-sample prefixes (GUSTO-style ids) or "unknown" (underscore-less ids).
+# Both are repaired deterministically: cohortN via bare-id co-occurrence
+# within the PCA table; after-stage via the staged genotype-space map.
+# Idempotent — clean tables pass through unchanged.
+qc_geno_map <- local({
+  f <- file.path(qc_geno_dir, "pooled_sample_ancestry.tsv")
+  if (file.exists(f)) read_tsv(f, show_col_types = FALSE) else NULL
+})
+cn <- NULL
+if (!is.null(qc_pheno_pca) &&
+    any(grepl("^cohort\\d+$", qc_pheno_pca$cohort))) {
+  bare <- qc_pheno_pca %>%
+    filter(!grepl("^cohort\\d+$", cohort)) %>%
+    distinct(sample_id, cohort) %>%
+    rename(bare_cohort = cohort)
+  cn <- qc_pheno_pca %>%
+    filter(grepl("^cohort\\d+$", cohort)) %>%
+    mutate(bare = sub("^cohort\\d+_", "", sample_id)) %>%
+    distinct(cohort, bare) %>%
+    left_join(bare, by = c("bare" = "sample_id")) %>%
+    filter(!is.na(bare_cohort)) %>%
+    distinct(cohort, bare_cohort) %>%
+    group_by(cohort) %>%
+    summarise(new = dplyr::first(bare_cohort), .groups = "drop") %>%
+    {setNames(.$new, .$cohort)}
+  fix_cn <- function(d) d %>%
+    mutate(cohort = ifelse(cohort %in% names(cn),
+                           unname(cn[cohort]), cohort))
+  qc_pheno_pca <- fix_cn(qc_pheno_pca)
+  if (!is.null(qc_pheno_values)) qc_pheno_values <- fix_cn(qc_pheno_values)
+}
+# module 19a names its per-cohort Picard outputs with the same cohortN
+# working labels — remap them with the same verified correspondence
+if (!is.null(cn) && !is.null(qc_picard) && "cohort" %in% names(qc_picard))
+  qc_picard <- qc_picard %>%
+    mutate(cohort = ifelse(cohort %in% names(cn),
+                           unname(cn[cohort]), cohort))
+if (!is.null(qc_geno_map)) {
+  s2c <- setNames(qc_geno_map$cohort, qc_geno_map$sample_id)
+  p2c <- qc_geno_map %>%
+    filter(grepl("_", sample_id)) %>%
+    mutate(p = sub("_.*", "", sample_id)) %>%
+    distinct(p, cohort) %>%
+    {setNames(.$cohort, .$p)}
+  known_cohorts <- unique(qc_geno_map$cohort)
+  if (!is.null(qc_pheno_pca))
+    qc_pheno_pca <- qc_pheno_pca %>%
+      mutate(cohort = ifelse(stage == "after" & sample_id %in% names(s2c),
+                             unname(s2c[sample_id]), cohort))
+  if (!is.null(qc_pheno_values)) {
+    qc_pheno_values <- qc_pheno_values %>%
+      mutate(cohort = ifelse(stage == "after" & !(cohort %in% known_cohorts) &
+                               cohort %in% names(p2c),
+                             unname(p2c[cohort]), cohort))
+    # Remaining "unknown" after-stage cells pool the underscore-less-id
+    # cohorts (lumped at extraction; sample identity is not recoverable from
+    # the values table). Label them with their exact composition, recovered
+    # from the PCA table, which carries per-sample ids.
+    if ("unknown" %in% qc_pheno_values$cohort[qc_pheno_values$stage == "after"] &&
+        !is.null(qc_pheno_pca)) {
+      val_lbl <- qc_pheno_values %>%
+        filter(stage == "after", cohort != "unknown") %>%
+        distinct(ancestry, cohort)
+      lump <- qc_pheno_pca %>%
+        filter(stage == "after") %>%
+        distinct(ancestry, cohort) %>%
+        anti_join(val_lbl, by = c("ancestry", "cohort")) %>%
+        group_by(ancestry) %>%
+        summarise(lumped = paste0(paste(sort(cohort), collapse = "+"),
+                                  " (lumped)"), .groups = "drop") %>%
+        {setNames(.$lumped, .$ancestry)}
+      qc_pheno_values <- qc_pheno_values %>%
+        mutate(cohort = ifelse(stage == "after" & cohort == "unknown" &
+                                 ancestry %in% names(lump),
+                               unname(lump[ancestry]), cohort))
+    }
+  }
+}
 finemap_loci <- read_extra("finemap_locus_summary.tsv") %>%
   {if (is.null(.)) NULL else
     mutate(., across(c(n_cs_out, max_pip), ~ suppressWarnings(as.numeric(.))))}
@@ -708,7 +791,7 @@ ggsave(file.path(params$fig_dir, "fig_genotype_pca_cohort.png"), p_pcc,
        width = 5 * length(pc_panels), height = 4.6, dpi = 150)
 ```
 
-`r if (!is.null(pcair_pcs) || has_geno_pcs) "Genotype PCs colored by cohort: on the shared PC-AiR axes (left) cohorts of the same assigned ancestry overlap, and on the pooled within-stratum axes (right) no cohort forms a separate cluster — no cohort batch structure to absorb in the genotype covariate space." else "*Skipped: neither the PC-AiR table nor the per-ancestry genotype PC tables are in this archive.*"`
+`r if (!is.null(pcair_pcs) || has_geno_pcs) "Genotype PCs colored by cohort. On both the shared PC-AiR axes (left) and the pooled within-stratum axes (right), cohorts of the same assigned ancestry occupy distinct but adjacent regions — GUSTO and SNUH resolve within EAS, NIEHS_RICHS and NIGMS within EUR — reflecting fine-scale ancestry composition and platform differences between cohorts. This structure is absorbed by the within-stratum genotype PCs (PC1-5) carried as covariates in every QTL model; the spread of NIEHS_RICHS along pooled EUR PC1 is continuous within-cohort ancestry variation, not a discrete batch." else "*Skipped: neither the PC-AiR table nor the per-ancestry genotype PC tables are in this archive.*"`
 
 ## Covariate QC
 
@@ -828,9 +911,18 @@ knitr::kable(fc, caption = "Features and samples per modality at each saved proc
 write_tsv(fc, file.path(params$table_dir, "phenotype_feature_counts.tsv"))
 fc_prose <- fc %>%
   group_by(ancestry, modality) %>%
-  summarise(dfeat = diff(n_features), .groups = "drop") %>%
-  summarise(lo = min(dfeat), hi = max(dfeat)) %>%
-  with(sprintf("Feature-count changes between stages range from %s to %s features per ancestry x modality (per-stratum detection filters at normalization); sample counts are unchanged within a stratum.", fmt(lo), fmt(hi)))
+  summarise(dfeat = if (n() == 2) diff(n_features) else NA_real_,
+            dsamp = if (n() == 2) diff(n_samples) else NA_real_,
+            .groups = "drop") %>%
+  filter(!is.na(dfeat)) %>%
+  summarise(lo = min(dfeat), hi = max(dfeat),
+            slo = min(dsamp), shi = max(dsamp)) %>%
+  with(sprintf(paste0("Feature-count changes between stages range from %s to ",
+                      "%s features per ancestry x modality (per-stratum ",
+                      "detection filters at normalization); sample counts ",
+                      "change by %s to %s (genotype intersection and outlier ",
+                      "exclusion between the pooled and final BEDs)."),
+               fmt(lo), fmt(hi), fmt(slo), fmt(shi)))
 ```
 
 `r if (is.null(qc_pheno_counts)) "*Skipped: qc_pheno_feature_counts.tsv is not in this archive — run 35_extract_report_extras.py --only qc on seadragon and re-archive.*" else fc_prose`
@@ -854,9 +946,32 @@ for (m in intersect(MODALITY_LEVELS, unique(qc_pheno_values$modality))) {
   ggsave(file.path(params$fig_dir, sprintf("fig_qc_violin_%s.png", m)),
          p_v, width = 9, height = 4.8, dpi = 150)
 }
+violin_prose <- paste0(
+  "Per-cohort value distributions before (left column) and after (right ",
+  "column) QN + INT + ComBat. Cohort-specific location/scale shifts visible ",
+  "in the pooled unnormalized stage collapse onto a common ",
+  "standard-normal-like distribution after processing; quantile ",
+  "normalization aligns the distributions by construction, and ComBat ",
+  "removes the residual cohort mean shifts.")
+if (any(grepl(" \\(lumped\\)$", qc_pheno_values$cohort)))
+  violin_prose <- paste0(
+    violin_prose,
+    " After-stage labels marked '(lumped)' pool cohorts whose array ids ",
+    "carry no cohort namespace — they were lumped at extraction time and ",
+    "cannot be split from the aggregated values (composition shown in the ",
+    "axis label); the PCA panels below resolve the same samples per cohort ",
+    "exactly. Re-running extraction with --geno-ancestry-map labels them ",
+    "per cohort upstream.")
+if ("expression" %in% qc_pheno_values$modality &&
+    !"before" %in% qc_pheno_values$stage[qc_pheno_values$modality == "expression"])
+  violin_prose <- paste0(
+    violin_prose,
+    " Expression has no pooled-unnormalized stage (pooling + ComBat is run ",
+    "for the non-expression modalities), so its panel shows the final ",
+    "stage only.")
 ```
 
-`r if (is.null(qc_pheno_values)) "*Skipped: qc_pheno_values.tsv.gz is not in this archive — run 35_extract_report_extras.py --only qc with --pooled-bed-dir on seadragon and re-archive.*" else "Per-cohort value distributions before (left column) and after (right column) QN + INT + ComBat. Cohort-specific location/scale shifts visible in the pooled unnormalized stage collapse onto a common standard-normal-like distribution after processing; quantile normalization aligns the distributions by construction, and ComBat removes the residual cohort mean shifts."`
+`r if (is.null(qc_pheno_values)) "*Skipped: qc_pheno_values.tsv.gz is not in this archive — run 35_extract_report_extras.py --only qc with --pooled-bed-dir on seadragon and re-archive.*" else violin_prose`
 
 ```{r fig-qc-pca, fig.width=9, fig.height=8, eval=!is.null(qc_pheno_pca)}
 stage_lbl <- c(before = "pooled unnormalized", after = "QN+INT+ComBat")
@@ -901,9 +1016,14 @@ if (length(bias_cols) > 0) {
   ggsave(file.path(params$fig_dir, "fig_picard_bias.png"), p_pic,
          width = 9, height = 4.6, dpi = 150)
 }
-key_metrics <- intersect(c("PCT_PF_READS_ALIGNED", "PCT_RIBOSOMAL_BASES",
-                           "PCT_CODING_BASES", "PCT_UTR_BASES",
-                           "MEDIAN_CV_COVERAGE", "PCT_READS_DUPLICATION"),
+key_metrics <- intersect(c("AlignMetrics.PCT_READS_ALIGNED",
+                           "RnaMetrics.PCT_RIBOSOMAL_BASES",
+                           "RnaMetrics.PCT_CODING_BASES",
+                           "RnaMetrics.PCT_UTR_BASES",
+                           "RnaMetrics.PCT_INTRONIC_BASES",
+                           "DupMetrics.PERCENT_DUPLICATION",
+                           "InsertSize.MEDIAN_INSERT_SIZE",
+                           "GcBias.AT_DROPOUT", "GcBias.GC_DROPOUT"),
                          names(qc_picard))
 if (length(key_metrics) > 0) {
   pic_tab <- qc_picard %>%

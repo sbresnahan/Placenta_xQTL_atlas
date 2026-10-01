@@ -249,6 +249,40 @@ def test_qc_phenotype_summaries_missing_before(tmp_path):
     assert set(cnt["stage"]) == {"after"}
 
 
+def test_qc_cohort_labels_geno_space(tmp_path):
+    """After-stage array ids resolve via the genotype-space map; namespaced
+    before-stage ids ({label}_{sample}) resolve via prefix stripping + the
+    RNAseq-space map."""
+    qtl_dir = tmp_path / "qtl_inputs"
+    qtl_dir.mkdir()
+    pooled_dir = tmp_path / "pooled"
+    pooled_dir.mkdir()
+    feats = [f"PHENO_{i}" for i in range(50)]
+    rna_ids = [f"J{1000 + i}" for i in range(10)]
+    arr_ids = [f"010-000{i:02d}_B010-000{i:02d}" for i in range(10)]
+    X = pd.DataFrame(RNG.normal(0, 1, size=(50, 10)), index=feats)
+    _write_bed(X.set_axis([f"cohort2_{s}" for s in rna_ids], axis=1),
+               pooled_dir / "EAS_expression_pooled.bed")
+    _write_bed(X.set_axis(arr_ids, axis=1), qtl_dir / "EAS_expression.bed.gz")
+    amap_path = tmp_path / "rna_map.tsv"
+    pd.DataFrame({"sample_id": rna_ids, "assigned_ancestry": "EAS",
+                  "cohort": "GUSTO"}).to_csv(amap_path, sep="\t", index=False)
+    gmap_path = tmp_path / "geno_map.tsv"
+    pd.DataFrame({"sample_id": arr_ids, "assigned_ancestry": "EAS",
+                  "cohort": "GUSTO"}).to_csv(gmap_path, sep="\t", index=False)
+    out_dir = tmp_path / "extras"
+    mod35.qc_phenotype_summaries(str(qtl_dir), ["EAS"], str(out_dir),
+                                 pooled_bed_dir=str(pooled_dir),
+                                 ancestry_map_path=str(amap_path),
+                                 geno_map_path=str(gmap_path),
+                                 n_values=50, n_features=50)
+    pca = pd.read_csv(out_dir / "qc_pheno_pca.tsv.gz", sep="\t")
+    assert set(pca["stage"]) == {"before", "after"}
+    assert set(pca["cohort"]) == {"GUSTO"}  # both id spaces resolved
+    vals = pd.read_csv(out_dir / "qc_pheno_values.tsv.gz", sep="\t")
+    assert set(vals["cohort"]) == {"GUSTO"}
+
+
 def test_qc_genotype_stage_counts(tmp_path):
     d = tmp_path / "cohortqc"
     d.mkdir()
@@ -281,3 +315,24 @@ def test_qc_picard_metrics(tmp_path):
     t = pd.read_csv(out_dir / "qc_picard_metrics.tsv", sep="\t")
     assert set(t["cohort"]) == {"COH1", "COH2"}
     assert len(t) == 2
+
+
+def test_qc_picard_metrics_relabel(tmp_path):
+    """cohortN file labels are relabeled to the modal ancestry-map cohort."""
+    d = tmp_path / "picard"
+    d.mkdir()
+    for c in ["cohort1", "cohort2"]:
+        pd.DataFrame({"sample": [f"S{i:03d}" for i in range(10)],
+                      "SubjectBias.GC": [0.05] * 10}).to_csv(
+            d / f"{c}_qc_metrics.tsv", sep="\t", index=False)
+    amap = tmp_path / "amap.tsv"
+    pd.DataFrame({"sample_id": [f"S{i:03d}" for i in range(10)],
+                  "assigned_ancestry": ["EAS"] * 10,
+                  "cohort": ["GUSTO"] * 10}).to_csv(amap, sep="\t",
+                                                    index=False)
+    out_dir = tmp_path / "extras"
+    mod35.qc_picard_metrics(str(d / "*_qc_metrics.tsv"), str(out_dir),
+                            ancestry_map_path=str(amap))
+    t = pd.read_csv(out_dir / "qc_picard_metrics.tsv", sep="\t")
+    assert set(t["cohort"]) == {"GUSTO"}  # both files' samples are GUSTO
+    assert len(t) == 20
