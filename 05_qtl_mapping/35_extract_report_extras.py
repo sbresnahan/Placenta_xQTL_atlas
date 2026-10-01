@@ -36,6 +36,7 @@ Requires: pandas, numpy, scipy, tensorqtl (genotypeio) — the mapping env.
 import argparse
 import gzip
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -44,6 +45,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy import stats as sstats
+
+
+def _strip_ver(ids):
+    """Strip Ensembl version suffixes ('.13') from an id Series."""
+    return ids.astype(str).str.replace(r"\.\d+$", "", regex=True)
+
+
+def _unver(gid):
+    """Strip the Ensembl version suffix from a single id."""
+    return re.sub(r"\.\d+$", "", str(gid))
 
 MODALITIES = ["expression", "isoforms", "isoform_expression", "splicing",
               "intron_retention", "alt_TSS", "alt_polyA", "RNA_editing",
@@ -412,18 +423,21 @@ def pick_showcase_loci(results_dir, ancestries, q_max, extra_gene=None):
         c0, c1 = comb
         hits0 = c0[c0["qval"] <= q_max]
         hits1 = c1[c1["qval"] <= q_max]
-        shared = set(hits0["group_id"]) & set(hits1["group_id"])
+        # group_ids may carry Ensembl version suffixes; match unversioned
+        shared = set(_strip_ver(hits0["group_id"])) & \
+            set(_strip_ver(hits1["group_id"]))
         cand = pd.concat([hits0, hits1])
-        cand = cand[cand["group_id"].isin(shared)]
-        cand = cand[~cand["group_id"].isin(
+        cand = cand[_strip_ver(cand["group_id"]).isin(shared)]
+        cand = cand[~_strip_ver(cand["group_id"]).isin(
             ["ENSG00000164308", "ENSG00000164307"])]  # not ERAP2/ERAP1
         if "modality" in cand.columns:
             cand = cand[cand["modality"] != "expression"]
         if not cand.empty:
             best = cand.nsmallest(1, "qval").iloc[0]
-            loci[str(best.get("symbol", best["group_id"]))] = best["group_id"]
+            gid = _unver(best["group_id"])
+            loci[str(best.get("symbol", gid))] = gid
     if extra_gene:
-        loci["extra"] = extra_gene
+        loci["extra"] = _unver(extra_gene)
     return loci
 
 
@@ -439,14 +453,20 @@ def locus_scans(results_dir, qtl_dir, ancestries, q_max, out_dir,
             if not os.path.exists(comb_p):
                 continue
             comb = pd.read_csv(comb_p, sep="\t")
-            row = comb[comb["group_id"] == gene_id]
+            if "group_id" in comb.columns:
+                row = comb[_strip_ver(comb["group_id"]) == gene_id]
+            else:
+                row = comb.iloc[0:0]
             if row.empty:
-                # fall back: any grouped modality hit for this gene
+                # fall back: any modality hit for this gene (grouped tables
+                # key on group_id; ungrouped tables key on phenotype_id)
                 for mod in MODALITIES:
                     p = os.path.join(results_dir, f"{anc}_{mod}_cisqtl_top.tsv")
                     if os.path.exists(p):
                         t = pd.read_csv(p, sep="\t")
-                        r = t[t.get("group_id", pd.Series(dtype=str)) == gene_id]
+                        idcol = ("group_id" if "group_id" in t.columns
+                                 else "phenotype_id")
+                        r = t[_strip_ver(t[idcol]) == gene_id]
                         if not r.empty:
                             row = r.assign(modality=mod)
                             break
@@ -587,14 +607,23 @@ def constraint_table(results_dir, qtl_dir, ancestries, out_dir,
     con = pd.read_csv(gnomad_path, sep="\t", compression="gzip",
                       usecols=lambda c: c in keep, low_memory=False)
     con["gene_id_base"] = con["gene_id"].str.split(".").str[0]
-    # tested genes: union of group_ids across grouped top tables
+    # tested genes: union of gene ids across top tables (grouped tables key
+    # on group_id; ungrouped gene-level tables on phenotype_id). Ungrouped
+    # tables lack group_id, so select columns by predicate; keep only
+    # Ensembl gene ids (skips junction/peak ids) and strip versions to
+    # match gnomAD's gene_id_base.
     tested = set()
     for anc in ancestries:
         for mod in MODALITIES:
             p = os.path.join(results_dir, f"{anc}_{mod}_cisqtl_top.tsv")
             if os.path.exists(p):
-                t = pd.read_csv(p, sep="\t", usecols=["group_id"])
-                tested |= set(t["group_id"].dropna().unique())
+                t = pd.read_csv(p, sep="\t",
+                                usecols=lambda c: c in ("group_id",
+                                                        "phenotype_id"))
+                col = "group_id" if "group_id" in t.columns else "phenotype_id"
+                ids = t[col].dropna().astype(str)
+                ids = ids[ids.str.startswith("ENSG")]
+                tested |= set(ids.str.split(".").str[0])
     con["tested"] = con["gene_id_base"].isin(tested)
     out = con.drop(columns=["gene_id"]).rename(columns={"gene_id_base": "gene_id"})
     path = os.path.join(out_dir, "gene_constraint.tsv")

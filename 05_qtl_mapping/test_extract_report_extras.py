@@ -126,3 +126,33 @@ def test_pick_showcase_loci(tmp_path):
     # auto pick: shared, non-expression driver, not ERAP1/2 -> GENE_X
     assert "GENE_X" in loci.values()
     assert "ENSG00000164307" not in loci.values()
+
+
+def test_pick_showcase_loci_versioned_ids(tmp_path):
+    """Real combined tables carry Ensembl version suffixes: ERAP1/ERAP2
+    exclusion and cross-ancestry intersection must be version-insensitive,
+    and the returned id must be unversioned."""
+    res_dir = tmp_path / "qtl_results"
+    res_dir.mkdir()
+    comb = pd.DataFrame({
+        "group_id": ["ENSG00000164308.10", "ENSG00000164307.13",
+                     "ENSG0000099999.5"],
+        "phenotype_id": ["p1", "p2", "px"],
+        "variant_id": ["5:1:A:T"] * 3,
+        "modality": ["expression", "splicing", "splicing"],
+        "qval": [1e-20, 1e-30, 1e-8]})
+    for anc in ["EAS", "EUR"]:
+        comb.to_csv(res_dir / f"{anc}_combined_cisqtl_top.tsv",
+                    sep="\t", index=False)
+    loci = mod35.pick_showcase_loci(str(res_dir), ["EAS", "EUR"], 0.05)
+    assert loci["ERAP2"] == "ENSG00000164308"
+    # versioned ERAP1 must be excluded; auto pick is the unversioned GENE
+    assert "ENSG0000099999" in loci.values()
+    assert all("." not in v for v in loci.values())
+
+
+def test_strip_ver():
+    s = pd.Series(["ENSG00000164307.13", "ENSG00000164308", "HPLRG_0001"])
+    out = mod35._strip_ver(s)
+    assert list(out) == ["ENSG00000164307", "ENSG00000164308", "HPLRG_0001"]
+    assert mod35._unver("ENSG00000164307.13") == "ENSG00000164307"
