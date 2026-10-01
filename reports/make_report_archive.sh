@@ -3,8 +3,8 @@
 # into a single tarball, in the exact relative layout the Rmd expects
 # (data/results, data/qc/..., gene_map.tsv at the root).
 #
-# Run on seadragon AFTER modules 28 (all three layers) and 29 have completed
-# for every ancestry:
+# Run on seadragon AFTER modules 28 (grouped, ungrouped, grouped-independent,
+# ungrouped-independent) and 29 have completed for every ancestry:
 #
 #   export CONFIG=/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/config.yml
 #   bash reports/make_report_archive.sh
@@ -89,8 +89,9 @@ copy_req() { # copy_req <src> <dst_dir> <core|other> <label>
 }
 
 # ---- 1. Result top tables (27/29 outputs) -------------------------------
-# Grouped (9 modalities), ungrouped (8), combined, and independent top TSVs
-# per ancestry — glob covers every layer 29 writes.
+# Grouped (9 modalities), ungrouped (8), grouped-independent (9),
+# ungrouped-independent (8), and combined top TSVs per ancestry — the glob
+# copies every top table present; the audit below verifies expected layers.
 n_top=0
 for f in "$RESULTS_DIR"/*_top.tsv; do
     [ -f "$f" ] || continue
@@ -107,7 +108,8 @@ for ANC in $ANCESTRIES; do
 done
 
 # Expected-completeness audit (non-core): grouped 9 + ungrouped 8 +
-# combined 1 + independent 10 = 28 top tables per ancestry.
+# grouped-independent 9 + ungrouped-independent 8 + combined 1 +
+# combined-independent 1 = 36 top tables per ancestry.
 # modality file stems as written by 27/28/29 (display-case: alt_TSS, alt_polyA, RNA_editing)
 MODS_GROUPED="expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability"
 MODS_UNGROUPED="isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability"
@@ -121,6 +123,8 @@ for ANC in $ANCESTRIES; do
     for M in $MODS_UNGROUPED; do
         copy_req "$RESULTS_DIR/${ANC}_${M}_ungrouped_cisqtl_top.tsv" \
                  "$STAGING/data/results" other "ungrouped:${ANC}_${M}"
+        copy_req "$RESULTS_DIR/${ANC}_${M}_ungrouped_cisqtl_independent_top.tsv" \
+                 "$STAGING/data/results" other "ungrouped-independent:${ANC}_${M}"
     done
     copy_req "$RESULTS_DIR/${ANC}_combined_cisqtl_top.tsv" \
              "$STAGING/data/results" other "combined:${ANC}"
