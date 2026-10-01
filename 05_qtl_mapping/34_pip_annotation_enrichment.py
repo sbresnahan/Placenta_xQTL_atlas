@@ -158,7 +158,7 @@ def overlap_flags(chroms, positions, intervals):
         if str(chrom) not in intervals:
             continue
         starts, ends = intervals[str(chrom)]
-        pos = df.loc[idx, "pos"].to_numpy()
+        pos = df.loc[idx, "pos"].to_numpy() - 1
         # rightmost interval with start <= pos; overlap if its end > pos
         j = np.searchsorted(starts, pos, side="right") - 1
         hit = (j >= 0) & (ends[np.clip(j, 0, None)] > pos)
