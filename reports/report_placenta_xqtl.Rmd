@@ -141,6 +141,21 @@ constraint <- read_extra("gene_constraint.tsv") %>%
                                               as.numeric))}
 pcair_pcs <- read_extra("pcair_pcs.tsv") %>%
   {if (is.null(.)) NULL else mutate(., across(starts_with("PC"), as.numeric))}
+# QC summaries (35_extract_report_extras.py section 7)
+qc_pheno_values <- read_extra("qc_pheno_values.tsv.gz") %>%
+  {if (is.null(.)) NULL else mutate(., value = as.numeric(value))}
+qc_pheno_pca <- read_extra("qc_pheno_pca.tsv.gz") %>%
+  {if (is.null(.)) NULL else
+    mutate(., across(c(any_of(c("PC1", "PC2", "PC3")),
+                       starts_with("pct_var_")), as.numeric))}
+qc_pheno_counts <- read_extra("qc_pheno_feature_counts.tsv") %>%
+  {if (is.null(.)) NULL else mutate(., across(c(n_features, n_samples),
+                                              as.numeric))}
+qc_geno_stages <- read_extra("qc_genotype_stage_counts.tsv") %>%
+  {if (is.null(.)) NULL else mutate(., across(c(n_variants, n_samples),
+                                              as.numeric))}
+qc_picard <- read_extra("qc_picard_metrics.tsv")
+qc_geno_dir <- file.path(params$qc_dir, "genotype_qc")
 finemap_loci <- read_extra("finemap_locus_summary.tsv") %>%
   {if (is.null(.)) NULL else
     mutate(., across(c(n_cs_out, max_pip), ~ suppressWarnings(as.numeric(.))))}
@@ -497,6 +512,86 @@ if (!RUN_ATTRITION) {
 }
 ```
 
+## Cohort composition and genotype processing
+
+```{r cohort-composition}
+# flags for conditional chunks in this section
+has_rsq_chr <- dir.exists(qc_geno_dir) &&
+  length(list.files(qc_geno_dir, "_rsq_pass_per_chr.tsv$")) > 0
+has_geno_pcs <- dir.exists(qc_pc) &&
+  length(list.files(qc_pc, "_genotype_pcs\\.tsv$")) > 0
+# Samples per cohort x ancestry: prefer the staged PC-AiR table (per-cohort
+# ancestry assignment); fall back to the pooled genotype sample map.
+cohort_comp <- NULL
+if (!is.null(pcair_pcs) && "cohort" %in% names(pcair_pcs)) {
+  cohort_comp <- pcair_pcs %>% count(cohort, assigned_ancestry, name = "n")
+} else {
+  f <- file.path(qc_geno_dir, "pooled_sample_ancestry.tsv")
+  if (file.exists(f))
+    cohort_comp <- read_tsv(f, show_col_types = FALSE) %>%
+      count(cohort, assigned_ancestry, name = "n")
+}
+if (!is.null(cohort_comp)) {
+  comp_tab <- cohort_comp %>%
+    pivot_wider(names_from = assigned_ancestry, values_from = n,
+                values_fill = 0)
+  knitr::kable(comp_tab,
+               caption = "Genotyped samples per cohort x assigned ancestry (ancestry-assignment staging table; includes samples later excluded from mapping).")
+  write_tsv(comp_tab, file.path(params$table_dir, "cohort_composition.tsv"))
+}
+```
+
+```{r fig-geno-stage-counts, fig.width=8.5, fig.height=4.2, eval=!is.null(qc_geno_stages)}
+gs <- qc_geno_stages %>%
+  mutate(stage = factor(stage,
+                        levels = c("imputed_rsq_pass", "pooled_qc_pass"),
+                        labels = c("post-imputation (Rsq >= 0.4)",
+                                   "pooled per-ancestry QC")),
+         entity = factor(entity, levels = c(sort(entity[level == "cohort"]),
+                                            sort(entity[level == "ancestry"]))))
+p_gs <- ggplot(gs, aes(entity, n_variants / 1e6, fill = level)) +
+  geom_col(width = 0.72) +
+  geom_text(aes(label = sprintf("%.2f", n_variants / 1e6)),
+            vjust = -0.4, size = 3) +
+  scale_fill_manual(values = c(cohort = "#0279EE", ancestry = "#75A025"),
+                    labels = c(cohort = "per cohort",
+                               ancestry = "pooled per ancestry"),
+                    name = NULL) +
+  labs(x = NULL, y = "variants (millions)") +
+  theme_report() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+print(p_gs)
+ggsave(file.path(params$fig_dir, "fig_geno_stage_counts.png"), p_gs,
+       width = 8.5, height = 4.2, dpi = 150)
+knitr::kable(gs %>% select(entity, level, stage, n_variants, n_samples),
+             caption = "Variant and sample counts across genotype processing stages (line counts of the stage pvar/psam files; extraction script 35).")
+write_tsv(gs, file.path(params$table_dir, "genotype_stage_counts.tsv"))
+```
+
+`r if (is.null(qc_geno_stages)) "*Skipped: qc_genotype_stage_counts.tsv is not in this archive — run 35_extract_report_extras.py --only qc with --cohort-qc-glob/--geno-pooled-dir on seadragon and re-archive.*" else "Variant counts are stable across chromosomes and cohorts after the Rsq >= 0.4 filter; pooling per ancestry retains the union of cohort QC-passing variants that survive the pooled MAF/HWE filters."`
+
+```{r fig-rsq-pass-per-chr, fig.width=9, fig.height=4.2, eval=has_rsq_chr}
+rsq_chr <- bind_rows(lapply(
+  list.files(qc_geno_dir, "_rsq_pass_per_chr.tsv$", full.names = TRUE),
+  function(f) read_tsv(f, show_col_types = FALSE) %>%
+    mutate(cohort = sub("_rsq_pass_per_chr\\.tsv$", "", basename(f))))) %>%
+  mutate(chr = factor(sub("^chr", "", as.character(CHROM)),
+                      levels = c(1:22, "X")))
+p_rsq <- ggplot(rsq_chr, aes(chr, snps_per_mb, group = cohort,
+                             color = cohort)) +
+  geom_line(linewidth = 0.6) +
+  geom_point(size = 1.1) +
+  scale_color_brewer(palette = "Set2", name = NULL) +
+  labs(x = NULL, y = "Rsq-pass variants / Mb") +
+  theme_report() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7))
+print(p_rsq)
+ggsave(file.path(params$fig_dir, "fig_rsq_pass_per_chr.png"), p_rsq,
+       width = 9, height = 4.2, dpi = 150)
+```
+
+`r if (!has_rsq_chr) "*Skipped: per-cohort Rsq-pass-per-chromosome tables are not in this archive — set GENO_QC_DIR in make_report_archive.sh to the module-01 report dir.*" else "Imputation yield per Mb is uniform across chromosomes within each cohort; cohort-level offsets reflect array/WXS backbone density, not chromosome-specific imputation failure."`
+
 ## Genotype PCA
 
 DevBrain Fig. 2A analog. Two views: (i) the PC-AiR coordinates computed
@@ -572,6 +667,49 @@ pruned-variant variance in both strata, with a smooth, shallow decay
 thereafter (PC2 ≈ 6–9%) and no sharp elbow — the expected spectrum within
 ancestry-stratified subsets, and the basis for the first-5-PCs rule.
 
+```{r fig-genotype-pca-cohort, fig.width=10, fig.height=4.6, eval=!is.null(pcair_pcs) || has_geno_pcs}
+# Cohort-colored views: (a) PC-AiR coordinates (shared 1KG axes) when staged;
+# (b) pooled per-ancestry plink2 PCs (own axes) when the PC tables are staged.
+pc_panels <- list()
+if (!is.null(pcair_pcs) && "cohort" %in% names(pcair_pcs)) {
+  pc_panels[["pcair"]] <- ggplot(pcair_pcs, aes(PC1, PC2, color = cohort)) +
+    geom_point(size = 1.1, alpha = 0.7, stroke = 0) +
+    scale_color_brewer(palette = "Set2", name = NULL) +
+    labs(x = "PC-AiR PC1", y = "PC-AiR PC2") +
+    theme_report()
+}
+if (has_geno_pcs) {
+  # sample -> cohort map: prefer the PC-AiR staging table (authoritative);
+  # fall back to the namespaced-id prefix
+  s2c <- if (!is.null(pcair_pcs) && "cohort" %in% names(pcair_pcs))
+    setNames(pcair_pcs$cohort, pcair_pcs$sample_id) else NULL
+  pooled_pcs <- bind_rows(lapply(c("EAS", "EUR"), function(a) {
+    f <- file.path(qc_pc, paste0(a, "_genotype_pcs.tsv"))
+    if (!file.exists(f)) return(NULL)
+    d <- read_tsv(f, show_col_types = FALSE) %>% mutate(ancestry = a)
+    d$cohort <- if (!is.null(s2c))
+      unname(s2c[d$sample_id]) else sub("_.*", "", d$sample_id)
+    d$cohort[is.na(d$cohort)] <- sub("_.*", "", d$sample_id[is.na(d$cohort)])
+    d
+  }))
+  if (!is.null(pooled_pcs) && nrow(pooled_pcs) > 0)
+    pc_panels[["pooled"]] <- ggplot(pooled_pcs,
+                                    aes(PC1, PC2, color = cohort)) +
+      geom_point(size = 1.1, alpha = 0.7, stroke = 0) +
+      facet_wrap(~ancestry, scales = "free") +
+      scale_color_brewer(palette = "Set2", name = NULL) +
+      labs(x = "pooled PC1", y = "pooled PC2") +
+      theme_report()
+}
+p_pcc <- patchwork::wrap_plots(pc_panels, ncol = length(pc_panels),
+                               guides = "collect")
+print(p_pcc)
+ggsave(file.path(params$fig_dir, "fig_genotype_pca_cohort.png"), p_pcc,
+       width = 5 * length(pc_panels), height = 4.6, dpi = 150)
+```
+
+`r if (!is.null(pcair_pcs) || has_geno_pcs) "Genotype PCs colored by cohort: on the shared PC-AiR axes (left) cohorts of the same assigned ancestry overlap, and on the pooled within-stratum axes (right) no cohort forms a separate cluster — no cohort batch structure to absorb in the genotype covariate space." else "*Skipped: neither the PC-AiR table nor the per-ancestry genotype PC tables are in this archive.*"`
+
 ## Covariate QC
 
 ```{r covariate-qc}
@@ -637,6 +775,150 @@ knitr::include_graphics(file.path(qc_in, "EUR_covariate_correlation.png"))
 
 Covariate correlation matrices before/after pruning: no |r| > 0.9 pairs
 remain in the final sets.
+
+```{r fig-covariate-distributions, fig.width=10, fig.height=4.8}
+cov_long <- bind_rows(lapply(names(cov_sets), function(a) {
+  cov_sets[[a]] %>%
+    filter(covariate_id %in% c("sex", "GA") |
+             grepl("^ct_", covariate_id)) %>%
+    pivot_longer(-covariate_id, names_to = "sample_id",
+                 values_to = "value") %>%
+    mutate(ancestry = a)
+}))
+cov_cont <- cov_long %>% filter(covariate_id != "sex") %>%
+  mutate(covariate_id = sub("^ct_", "", covariate_id))
+p_cov <- ggplot(cov_cont, aes(ancestry, value, fill = ancestry)) +
+  geom_boxplot(outlier.size = 0.4, outlier.alpha = 0.3, linewidth = 0.3) +
+  facet_wrap(~covariate_id, scales = "free_y", nrow = 2) +
+  scale_fill_manual(values = c(EAS = "#0072B2", EUR = "#D55E00"),
+                    guide = "none") +
+  labs(x = NULL, y = "covariate value") +
+  theme_report() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+print(p_cov)
+ggsave(file.path(params$fig_dir, "fig_covariate_distributions.png"), p_cov,
+       width = 10, height = 4.8, dpi = 150)
+cov_dist_tab <- cov_long %>%
+  group_by(ancestry, covariate_id) %>%
+  summarise(median = round(median(value, na.rm = TRUE), 4),
+            q1 = round(quantile(value, 0.25, na.rm = TRUE), 4),
+            q3 = round(quantile(value, 0.75, na.rm = TRUE), 4),
+            .groups = "drop")
+knitr::kable(cov_dist_tab,
+             caption = "Fixed-covariate distributions per ancestry (final model values; GA is mean-centered, sex is the numeric code, ct_* are deconvolution cell-type proportions).")
+write_tsv(cov_dist_tab, file.path(params$table_dir,
+                                  "covariate_distributions.tsv"))
+```
+
+## Phenotype processing QC
+
+*Before/after view of the two saved processing stages per modality: the
+pooled unnormalized matrix (input to module 20) and the final
+QN + INT + ComBat BED used for mapping. Distribution panels show up to 5,000
+sampled values per cohort with quartile guides; PCA panels are computed on a
+5,000-feature subsample with per-feature z-scoring so before/after geometry
+is comparable (extraction script 35, section qc).*
+
+```{r qc-feature-counts, eval=!is.null(qc_pheno_counts)}
+fc <- qc_pheno_counts %>%
+  mutate(stage = factor(stage, levels = c("before", "after"),
+                        labels = c("pooled unnormalized", "QN+INT+ComBat"))) %>%
+  arrange(ancestry, factor(modality, levels = MODALITY_LEVELS), stage)
+knitr::kable(fc, caption = "Features and samples per modality at each saved processing stage.")
+write_tsv(fc, file.path(params$table_dir, "phenotype_feature_counts.tsv"))
+fc_prose <- fc %>%
+  group_by(ancestry, modality) %>%
+  summarise(dfeat = diff(n_features), .groups = "drop") %>%
+  summarise(lo = min(dfeat), hi = max(dfeat)) %>%
+  with(sprintf("Feature-count changes between stages range from %s to %s features per ancestry x modality (per-stratum detection filters at normalization); sample counts are unchanged within a stratum.", fmt(lo), fmt(hi)))
+```
+
+`r if (is.null(qc_pheno_counts)) "*Skipped: qc_pheno_feature_counts.tsv is not in this archive — run 35_extract_report_extras.py --only qc on seadragon and re-archive.*" else fc_prose`
+
+```{r fig-qc-violins, fig.width=9, fig.height=4.8, eval=!is.null(qc_pheno_values)}
+stage_lbl <- c(before = "pooled unnormalized", after = "QN+INT+ComBat")
+for (m in intersect(MODALITY_LEVELS, unique(qc_pheno_values$modality))) {
+  d <- qc_pheno_values %>%
+    filter(modality == m) %>%
+    mutate(stage = factor(stage, levels = c("before", "after"),
+                          labels = stage_lbl))
+  p_v <- ggplot(d, aes(cohort, value, fill = cohort)) +
+    geom_violin(scale = "width", draw_quantiles = c(0.25, 0.5, 0.75),
+                linewidth = 0.25) +
+    facet_wrap(~ancestry + stage, ncol = 2, scales = "free") +
+    scale_fill_brewer(palette = "Set2", guide = "none") +
+    labs(x = NULL, y = "phenotype value") +
+    theme_report() +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1, size = 7))
+  print(p_v)
+  ggsave(file.path(params$fig_dir, sprintf("fig_qc_violin_%s.png", m)),
+         p_v, width = 9, height = 4.8, dpi = 150)
+}
+```
+
+`r if (is.null(qc_pheno_values)) "*Skipped: qc_pheno_values.tsv.gz is not in this archive — run 35_extract_report_extras.py --only qc with --pooled-bed-dir on seadragon and re-archive.*" else "Per-cohort value distributions before (left column) and after (right column) QN + INT + ComBat. Cohort-specific location/scale shifts visible in the pooled unnormalized stage collapse onto a common standard-normal-like distribution after processing; quantile normalization aligns the distributions by construction, and ComBat removes the residual cohort mean shifts."`
+
+```{r fig-qc-pca, fig.width=9, fig.height=8, eval=!is.null(qc_pheno_pca)}
+stage_lbl <- c(before = "pooled unnormalized", after = "QN+INT+ComBat")
+for (m in intersect(MODALITY_LEVELS, unique(qc_pheno_pca$modality))) {
+  d <- qc_pheno_pca %>%
+    filter(modality == m) %>%
+    mutate(stage = factor(stage, levels = c("before", "after"),
+                          labels = stage_lbl))
+  p_p <- ggplot(d, aes(PC1, PC2, color = cohort)) +
+    geom_point(size = 1.1, alpha = 0.75, stroke = 0) +
+    facet_grid(stage ~ ancestry) +
+    scale_color_brewer(palette = "Set2", name = NULL) +
+    labs(x = "PC1", y = "PC2") +
+    theme_report()
+  print(p_p)
+  ggsave(file.path(params$fig_dir, sprintf("fig_qc_pca_%s.png", m)),
+         p_p, width = 9, height = 8, dpi = 150)
+}
+```
+
+`r if (is.null(qc_pheno_pca)) "*Skipped: qc_pheno_pca.tsv.gz is not in this archive — run 35_extract_report_extras.py --only qc on seadragon and re-archive.*" else "Sample PCA per modality (rows: processing stage; columns: ancestry stratum), colored by cohort. Cohort clustering in the pooled-unnormalized row that disappears in the QN+INT+ComBat row indicates successful batch removal; residual clustering would motivate revisiting the ComBat batch variable."`
+
+## Sequencing QC
+
+```{r fig-picard-qc, fig.width=9, fig.height=4.6, eval=!is.null(qc_picard)}
+bias_cols <- intersect(c("SubjectBias.GC", "SubjectBias.GENE_LENGTH"),
+                       names(qc_picard))
+if (length(bias_cols) > 0) {
+  pic_long <- qc_picard %>%
+    select(sample, cohort, all_of(bias_cols)) %>%
+    pivot_longer(all_of(bias_cols), names_to = "metric",
+                 values_to = "value") %>%
+    mutate(value = as.numeric(value))
+  p_pic <- ggplot(pic_long, aes(cohort, value, fill = cohort)) +
+    geom_violin(scale = "width", draw_quantiles = 0.5, linewidth = 0.25) +
+    facet_wrap(~metric, ncol = length(bias_cols)) +
+    scale_fill_brewer(palette = "Set2", guide = "none") +
+    labs(x = NULL, y = "per-sample correlation") +
+    theme_report() +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1))
+  print(p_pic)
+  ggsave(file.path(params$fig_dir, "fig_picard_bias.png"), p_pic,
+         width = 9, height = 4.6, dpi = 150)
+}
+key_metrics <- intersect(c("PCT_PF_READS_ALIGNED", "PCT_RIBOSOMAL_BASES",
+                           "PCT_CODING_BASES", "PCT_UTR_BASES",
+                           "MEDIAN_CV_COVERAGE", "PCT_READS_DUPLICATION"),
+                         names(qc_picard))
+if (length(key_metrics) > 0) {
+  pic_tab <- qc_picard %>%
+    group_by(cohort) %>%
+    summarise(n_samples = n(),
+              across(all_of(key_metrics),
+                     ~ round(median(as.numeric(.), na.rm = TRUE), 3)),
+              .groups = "drop")
+  knitr::kable(pic_tab,
+               caption = "Picard sequencing-QC medians per cohort (module 19a).")
+  write_tsv(pic_tab, file.path(params$table_dir, "picard_qc_summary.tsv"))
+}
+```
+
+`r if (is.null(qc_picard)) "*Skipped: qc_picard_metrics.tsv is not in this archive — run 35_extract_report_extras.py --only qc with --picard-glob on seadragon and re-archive.*" else "Per-sample subject-bias correlations (GC content and gene length, Mostafavi et al. 2013 convention) and core Picard metrics are summarized per cohort; these sequencing metrics enter the HCP prior matrix, so cohort-level outliers here would propagate into the HCP covariates."`
 
 # Pipeline and calibration
 

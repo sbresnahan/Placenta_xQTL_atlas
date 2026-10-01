@@ -23,6 +23,10 @@
 #   ANCESTRY_MAP — default: ${OUTPUT_BASE%/*}/pooled/pooled_sample_ancestry_RNAseq.tsv
 #   METADATA_TSV — default: ${OUTPUT_BASE%/*}/pooled/placenta_QTL_cohort_metadata.tsv
 #   COMBAT_DIR   — default: ${OUTPUT_BASE}/combat_modalities/combat_int
+#   GENO_QC_DIR  — module-01 report dir with *_rsq_pass_per_chr.tsv and
+#                  pooled_{sample_counts,variant_summary,variants_per_chr}.tsv
+#                  (default: unset — genotype-QC tables not staged)
+#   POOLED_ANCESTRY_TSV — pooled_sample_ancestry.tsv (genotypes; optional)
 #   OUT          — output tarball path (default: ./placenta_xqtl_report_inputs_<date>.tar.gz)
 #   KEEP_STAGING — 1 to keep the staging directory after archiving (default: 0)
 #
@@ -175,12 +179,10 @@ for ANC in $ANCESTRIES; do
              "$STAGING/data/qc/qtl_inputs" other "${ANC}_outliers.tsv"
     copy_req "$QTL_DIR/${ANC}_covariate_correlation.png" \
              "$STAGING/data/qc/qtl_inputs" other "${ANC}_covariate_correlation.png"
-    copy_req "$QTL_DIR/hcp_optimization/${ANC}_optimal_hcp.tsv" \
-             "$STAGING/data/qc/hcp_optimization" other "${ANC}_optimal_hcp.tsv"
-    copy_req "$QTL_DIR/hcp_optimization/${ANC}_optimal_hcp.png" \
-             "$STAGING/data/qc/hcp_optimization" other "${ANC}_optimal_hcp.png"
     # Per-modality HCP optimization (module 25b): one table + curve per
-    # ancestry x modality group (9 modalities + combined)
+    # ancestry x modality group (9 modalities + combined). The older
+    # per-ancestry hcp_optimization/{ANC}_optimal_hcp.{tsv,png} outputs are
+    # superseded by these and are no longer staged.
     for f in "$QTL_DIR/hcp_optimization_modalities/${ANC}_"*"_optimal_hcp.tsv"; do
         [ -f "$f" ] || continue
         copy_req "$f" "$STAGING/data/qc/hcp_optimization_modalities" other \
@@ -193,6 +195,8 @@ for ANC in $ANCESTRIES; do
     done
     copy_req "$PC_DIR/${ANC}_genotype_pcs_scree.png" \
              "$STAGING/data/qc/genotype_pcs" other "${ANC}_genotype_pcs_scree.png"
+    copy_req "$PC_DIR/${ANC}_genotype_pcs.tsv" \
+             "$STAGING/data/qc/genotype_pcs" other "${ANC}_genotype_pcs.tsv"
 done
 
 # ---- 3. Gene map + gene bodies from the normalized GTF --------------------
@@ -648,6 +652,33 @@ then
     MISSING_OTHER+=("attrition log (python section failed — see warnings)")
 else
     :
+fi
+
+# ---- 3.6 Genotype QC summaries (module 01 outputs) -------------------------
+# Per-cohort Rsq-pass-per-chromosome tables (cohort_imputationQC.R) and
+# pooled sample/variant summaries (mega_imputationQC.R), plus the long-form
+# pooled sample->ancestry/cohort map. All non-core: absence only blanks the
+# report's genotype-QC panels.
+GENO_QC_DIR="${GENO_QC_DIR:-}"
+POOLED_ANCESTRY_TSV="${POOLED_ANCESTRY_TSV:-}"
+mkdir -p "$STAGING/data/qc/genotype_qc"
+echo "  GENO_QC_DIR:  ${GENO_QC_DIR:-(not set)}"
+if [ -n "$GENO_QC_DIR" ] && [ -d "$GENO_QC_DIR" ]; then
+    for f in "$GENO_QC_DIR"/*_rsq_pass_per_chr.tsv \
+             "$GENO_QC_DIR"/pooled_sample_counts.tsv \
+             "$GENO_QC_DIR"/pooled_variant_summary.tsv \
+             "$GENO_QC_DIR"/pooled_variants_per_chr.tsv; do
+        [ -f "$f" ] || continue
+        copy_req "$f" "$STAGING/data/qc/genotype_qc" other \
+                 "genotype_qc/$(basename "$f")"
+    done
+else
+    echo "  genotype_qc: GENO_QC_DIR not set/found — module-01 QC tables not staged"
+    MISSING_OTHER+=("genotype_qc/ (set GENO_QC_DIR to the module-01 report dir)")
+fi
+if [ -n "$POOLED_ANCESTRY_TSV" ]; then
+    copy_req "$POOLED_ANCESTRY_TSV" "$STAGING/data/qc/genotype_qc" other \
+             "genotype_qc/pooled_sample_ancestry.tsv"
 fi
 
 # ---- 4. Manifest -----------------------------------------------------------

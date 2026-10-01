@@ -346,8 +346,25 @@ python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
 #   python3 "$SCRIPTS_DIR/35_extract_report_extras.py" --results-dir "$RESULTS_DIR" \
 #     --qtl-dir "$QTL_DIR" --only annotate --fastvep-output "$RESULTS_DIR/report_extras/lead_variants_fastvep.txt" ...
 
+# QC summaries for the report's processing-QC section (before/after
+# phenotype violins + PCAs per modality, genotype stage counts, Picard
+# metrics). Single node, < 30 min. All inputs optional (graceful skips);
+# see reports/runbook_report_extras_seadragon.md step 5 for details.
+python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
+  --results-dir "$RESULTS_DIR" --qtl-dir "$QTL_DIR" --only qc \
+  --pooled-bed-dir "$OUTPUT_BASE/combat_modalities/pooled" \
+  --ancestry-map "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/pooled_sample_ancestry_RNAseq.tsv" \
+  --cohort-qc-glob "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/*/genotypes/imputed/qc" \
+  --geno-pooled-dir "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/genotypes" \
+  --picard-glob "$OUTPUT_BASE/hcp/qc_metrics/*_qc_metrics.tsv"
+
 cd "$REPO_DIR"
-CONFIG="$CONFIG" bash ../reports/make_report_archive.sh
+# Optional: GENO_QC_DIR stages module-01 genotype-QC tables (symlink the
+# pooled/genotypes/report pooled_* tables and the per-cohort
+# genotypes/imputed/qc/report/*_rsq_pass_per_chr.tsv into one dir first);
+# POOLED_ANCESTRY_TSV stages the genotype sample->ancestry map.
+CONFIG="$CONFIG" GENO_QC_DIR="$OUTPUT_BASE/geno_qc_stage" \
+  bash ../reports/make_report_archive.sh
 ```
 
 The archive (`placenta_xqtl_report_inputs_<date>.tar.gz`, written to the

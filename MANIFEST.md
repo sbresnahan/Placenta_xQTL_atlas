@@ -173,7 +173,7 @@ fine-mapping, and annotation enrichment.
 | 32a_run_sushie_shard.sh | Per-shard SuSHiE job |
 | 33_aggregate_finemap.py | Aggregate per-locus SuSHiE outputs (PIPs, credible sets, locus summary) |
 | 34_pip_annotation_enrichment.py | fastVEP consequence + cCRE/OCR enrichment of high-PIP variants |
-| 35_extract_report_extras.py | Targeted extractions for DevBrain-style report panels (cross-ancestry/cross-modality lead lookups, showcase-locus scans, lead-variant annotations, gnomAD constraint, PC-AiR staging) |
+| 35_extract_report_extras.py | Targeted extractions for DevBrain-style report panels (cross-ancestry/cross-modality lead lookups, showcase-locus scans, lead-variant annotations, gnomAD constraint, PC-AiR staging) and QC summaries (before/after phenotype values/PCAs, genotype stage counts, Picard metrics) |
 | test_build_covariates.py, test_collapse_replicates.py, test_combat_modalities.py, test_hcp.py, test_optimize_hcp.py, test_optimize_hcp_modalities.py, test_extract_report_extras.py | Unit tests |
 | test_sushie_finemap.py | End-to-end fine-mapping fixture (locus prep, SuSHiE recovery, aggregation, enrichment, report render) |
 
@@ -187,3 +187,4 @@ fine-mapping, and annotation enrichment.
 | gene_map.tsv | gene_id -> symbol/biotype/description map |
 | report_finemap.Rmd | Fine-mapping diagnostic report source |
 | make_report_archive.sh | Build the report-input tarball from mapping outputs |
+| runbook_report_extras_seadragon.md | Step-by-step seadragon runbook for the report-extras extraction (incl. QC section) and re-archiving |

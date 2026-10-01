@@ -171,3 +171,113 @@ def test_bed_pheno_id():
     # bare BED ids (per-modality tables) pass through unchanged
     assert f("ENST00000437043.8", "isoform_expression") == "ENST00000437043.8"
     assert f("chr5:100:200:clu_1", "splicing") == "chr5:100:200:clu_1"
+
+
+# ---------------------------------------------------------------------------
+# QC section fixtures
+# ---------------------------------------------------------------------------
+
+def _write_bed(df, path):
+    """df: features x samples -> BED with dummy coordinates."""
+    bed = pd.DataFrame({"#chr": "chr1", "start": 1000, "end": 2000,
+                        "phenotype_id": df.index})
+    bed = pd.concat([bed, df.reset_index(drop=True)], axis=1)
+    if str(path).endswith(".gz"):
+        with gzip.open(path, "wt") as f:
+            bed.to_csv(f, sep="\t", index=False)
+    else:
+        bed.to_csv(path, sep="\t", index=False)
+
+
+def _write_qc_fixture(tmp_path, n_feat=200, n_per_cohort=40, shift=3.0):
+    """Pooled (unnorm) + final BEDs for EAS/expression with a planted cohort
+    shift that the final BED removes. Returns (qtl_dir, pooled_dir)."""
+    qtl_dir = tmp_path / "qtl_inputs"
+    qtl_dir.mkdir(exist_ok=True)
+    pooled_dir = tmp_path / "pooled"
+    pooled_dir.mkdir(exist_ok=True)
+    feats = [f"PHENO_{i}" for i in range(n_feat)]
+    s1 = [f"COH1_S{i:03d}" for i in range(n_per_cohort)]
+    s2 = [f"COH2_S{i:03d}" for i in range(n_per_cohort)]
+    X1 = RNG.normal(0, 1, size=(n_feat, n_per_cohort))
+    X2_shift = RNG.normal(shift, 1, size=(n_feat, n_per_cohort))
+    X2_clean = RNG.normal(0, 1, size=(n_feat, n_per_cohort))
+    _write_bed(pd.DataFrame(np.hstack([X1, X2_shift]),
+                            index=feats, columns=s1 + s2),
+               pooled_dir / "EAS_expression_pooled.bed")
+    _write_bed(pd.DataFrame(np.hstack([X1, X2_clean]),
+                            index=feats, columns=s1 + s2),
+               qtl_dir / "EAS_expression.bed.gz")
+    return qtl_dir, pooled_dir
+
+
+def test_qc_phenotype_summaries(tmp_path):
+    qtl_dir, pooled_dir = _write_qc_fixture(tmp_path)
+    out_dir = tmp_path / "extras"
+    mod35.qc_phenotype_summaries(str(qtl_dir), ["EAS"], str(out_dir),
+                                 pooled_bed_dir=str(pooled_dir),
+                                 n_values=500, n_features=100)
+    vals = pd.read_csv(out_dir / "qc_pheno_values.tsv.gz", sep="\t")
+    assert set(vals["stage"]) == {"before", "after"}
+    # cohort labels parsed from namespaced sample ids
+    assert set(vals["cohort"]) == {"COH1", "COH2"}
+    assert (vals.groupby(["stage", "cohort"]).size() <= 500).all()
+    qs = pd.read_csv(out_dir / "qc_pheno_quantiles.tsv", sep="\t")
+    assert (qs.groupby(["stage", "cohort"]).size() == 99).all()
+    # planted shift visible in before-stage quantiles, gone after
+    med = qs[qs["quantile"] == 50].set_index(["stage", "cohort"])["value"]
+    assert abs(med[("before", "COH2")] - med[("before", "COH1")]) > 2
+    assert abs(med[("after", "COH2")] - med[("after", "COH1")]) < 0.5
+    pca = pd.read_csv(out_dir / "qc_pheno_pca.tsv.gz", sep="\t")
+    assert set(pca["stage"]) == {"before", "after"}
+    assert len(pca[pca["stage"] == "before"]) == 80
+    b = pca[pca["stage"] == "before"].groupby("cohort")["PC1"].mean()
+    a = pca[pca["stage"] == "after"].groupby("cohort")["PC1"].mean()
+    assert abs(b["COH2"] - b["COH1"]) > 2 * abs(a["COH2"] - a["COH1"])
+    cnt = pd.read_csv(out_dir / "qc_pheno_feature_counts.tsv", sep="\t")
+    assert set(cnt["n_features"]) == {200}
+    assert set(cnt["n_samples"]) == {80}
+
+
+def test_qc_phenotype_summaries_missing_before(tmp_path):
+    """Without --pooled-bed-dir only the after stage is produced."""
+    qtl_dir, _ = _write_qc_fixture(tmp_path)
+    out_dir = tmp_path / "extras"
+    mod35.qc_phenotype_summaries(str(qtl_dir), ["EAS"], str(out_dir),
+                                 n_values=100, n_features=50)
+    cnt = pd.read_csv(out_dir / "qc_pheno_feature_counts.tsv", sep="\t")
+    assert set(cnt["stage"]) == {"after"}
+
+
+def test_qc_genotype_stage_counts(tmp_path):
+    d = tmp_path / "cohortqc"
+    d.mkdir()
+    (d / "COHX.rsq_pass.pvar").write_text("#CHROM\tPOS\n1\t100\n1\t200\n")
+    (d / "COHX.rsq_pass.psam").write_text("#IID\nS1\nS2\nS3\n")
+    pooled = tmp_path / "pooled_geno"
+    pooled.mkdir()
+    (pooled / "EAS_pooled.pvar").write_text("#CHROM\tPOS\n1\t1\n")
+    (pooled / "EAS_pooled.psam").write_text("#IID\nS1\n")
+    out_dir = tmp_path / "extras"
+    mod35.qc_genotype_stage_counts(str(out_dir), cohort_qc_glob=str(d),
+                                   geno_pooled_dir=str(pooled),
+                                   ancestries=["EAS"])
+    t = pd.read_csv(out_dir / "qc_genotype_stage_counts.tsv", sep="\t")
+    assert set(t["stage"]) == {"imputed_rsq_pass", "pooled_qc_pass"}
+    assert t.loc[t["entity"] == "COHX", "n_variants"].iloc[0] == 2
+    assert t.loc[t["entity"] == "COHX", "n_samples"].iloc[0] == 3
+    assert t.loc[t["entity"] == "EAS", "n_variants"].iloc[0] == 1
+
+
+def test_qc_picard_metrics(tmp_path):
+    d = tmp_path / "picard"
+    d.mkdir()
+    for c in ["COH1", "COH2"]:
+        pd.DataFrame({"sample": [f"{c}_S1"], "PCT_PF_READS_ALIGNED": [0.9],
+                      "SubjectBias.GC": [0.05]}).to_csv(
+            d / f"{c}_qc_metrics.tsv", sep="\t", index=False)
+    out_dir = tmp_path / "extras"
+    mod35.qc_picard_metrics(str(d / "*_qc_metrics.tsv"), str(out_dir))
+    t = pd.read_csv(out_dir / "qc_picard_metrics.tsv", sep="\t")
+    assert set(t["cohort"]) == {"COH1", "COH2"}
+    assert len(t) == 2

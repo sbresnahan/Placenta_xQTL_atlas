@@ -34,6 +34,7 @@ Requires: pandas, numpy, scipy, tensorqtl (genotypeio) — the mapping env.
 """
 
 import argparse
+import glob
 import gzip
 import os
 import re
@@ -672,6 +673,228 @@ def stage_pcair(pcair_dir, out_dir):
 
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Section 7: QC summaries — phenotype before/after processing, genotype
+# stage counts, Picard sequencing metrics
+# ---------------------------------------------------------------------------
+
+def _cohort_labels(samples, ancestry_map, sidecar_dir, anc, mod):
+    """Series sample_id -> cohort. Priority: per-modality sidecar
+    ({anc}_{mod}_cohort_labels.tsv under sidecar_dir), then the ancestry map
+    (sample_id, assigned_ancestry, cohort), then the namespaced-id prefix
+    ({cohort}_{sample}; pool_modalities_within_ancestry.py convention)."""
+    m = None
+    if sidecar_dir:
+        p = os.path.join(sidecar_dir, f"{anc}_{mod}_cohort_labels.tsv")
+        if os.path.exists(p):
+            d = pd.read_csv(p, sep="\t")
+            m = dict(zip(d["sample_id"].astype(str), d["cohort"].astype(str)))
+    if m is None and ancestry_map is not None:
+        d = ancestry_map
+        if "assigned_ancestry" in d.columns:
+            d = d[d["assigned_ancestry"] == anc]
+        m = dict(zip(d["sample_id"].astype(str), d["cohort"].astype(str)))
+    out = {}
+    for s in samples:
+        s = str(s)
+        if m and s in m:
+            out[s] = m[s]
+        elif "_" in s:
+            out[s] = s.partition("_")[0]
+        else:
+            out[s] = "unknown"
+    return pd.Series(out)
+
+
+def _qc_pca(pheno, n_features, rng):
+    """PCA scores (PC1-3) + per-PC variance explained for a phenotype matrix
+    (features x samples). Features are subsampled to n_features,
+    zero-variance dropped, per-feature mean-imputed and z-scored so the
+    geometry is comparable across processing stages. Returns
+    (DataFrame samples x PC1..PCk, array pct_var)."""
+    X = pheno
+    if len(X) > n_features:
+        idx = np.sort(rng.choice(len(X), n_features, replace=False))
+        X = X.iloc[idx]
+    X = X.astype(float)
+    sd = X.std(axis=1)
+    X = X[sd > 0]
+    X = X.sub(X.mean(axis=1), axis=0)
+    X = X.fillna(0.0)  # NA -> feature mean (0 after centering)
+    X = X.div(X.std(axis=1).replace(0, 1), axis=0)
+    M = X.to_numpy().T  # samples x features
+    k = min(3, min(M.shape))
+    U, S, _ = np.linalg.svd(M, full_matrices=False)
+    scores = pd.DataFrame(U[:, :k] * S[:k], index=X.columns,
+                          columns=[f"PC{i + 1}" for i in range(k)])
+    ev = S ** 2
+    pct = ev / ev.sum()
+    return scores, pct[:k]
+
+
+def qc_phenotype_summaries(qtl_dir, ancestries, out_dir,
+                           pooled_bed_dir=None, ancestry_map_path=None,
+                           cohort_labels_dir=None, n_values=5000,
+                           n_features=5000, seed=42):
+    """Before/after processing summaries per ancestry x modality.
+
+    Stages: 'before' = pooled unnormalized BED
+    ({pooled_bed_dir}/{ANC}_{MOD}_pooled.bed, input to
+    20_combat_modalities.sh), 'after' = final mapping BED
+    ({qtl_dir}/{ANC}_{MOD}.bed.gz, post QN+INT+ComBat). Writes:
+      qc_pheno_values.tsv.gz    — up to n_values sampled values per
+                                  anc x mod x stage x cohort cell
+      qc_pheno_quantiles.tsv    — exact 1..99% quantiles per cell
+      qc_pheno_pca.tsv.gz       — sample PC1-3 scores + pct variance explained
+      qc_pheno_feature_counts.tsv — n_features, n_samples per cell
+    Missing stage files are skipped (cell simply absent from outputs)."""
+    os.makedirs(out_dir, exist_ok=True)
+    rng = np.random.default_rng(seed)
+    amap = None
+    if ancestry_map_path and os.path.exists(ancestry_map_path):
+        amap = pd.read_csv(ancestry_map_path, sep="\t")
+    val_rows, qtl_rows, pca_rows, cnt_rows = [], [], [], []
+    for anc in ancestries:
+        for mod in MODALITIES:
+            stages = {
+                "before": (os.path.join(pooled_bed_dir,
+                                        f"{anc}_{mod}_pooled.bed")
+                           if pooled_bed_dir else None),
+                "after": os.path.join(qtl_dir, f"{anc}_{mod}.bed.gz"),
+            }
+            for stage, path in stages.items():
+                if not path or not os.path.exists(path):
+                    continue
+                print(f"  {anc}/{mod}/{stage}: {os.path.basename(path)}")
+                pheno, _ = read_bed(path)
+                pheno = pheno.loc[:, pheno.notna().any(axis=0)]
+                cohorts = _cohort_labels(pheno.columns, amap,
+                                         cohort_labels_dir, anc, mod)
+                cnt_rows.append({"ancestry": anc, "modality": mod,
+                                 "stage": stage, "n_features": len(pheno),
+                                 "n_samples": pheno.shape[1]})
+                for cohort, grp in cohorts.groupby(cohorts):
+                    V = pheno[grp.index].to_numpy(dtype=float).ravel()
+                    V = V[~np.isnan(V)]
+                    if V.size == 0:
+                        continue
+                    vs = (V[rng.choice(V.size, n_values, replace=False)]
+                          if V.size > n_values else V)
+                    val_rows.append(pd.DataFrame({
+                        "ancestry": anc, "modality": mod, "stage": stage,
+                        "cohort": cohort, "value": vs}))
+                    qtl_rows.append(pd.DataFrame({
+                        "ancestry": anc, "modality": mod, "stage": stage,
+                        "cohort": cohort, "quantile": np.arange(1, 100),
+                        "value": np.percentile(V, np.arange(1, 100))}))
+                try:
+                    scores, pct = _qc_pca(pheno, n_features, rng)
+                    sdf = scores.rename_axis("sample_id").reset_index()
+                    sdf["ancestry"], sdf["modality"], sdf["stage"] = \
+                        anc, mod, stage
+                    sdf["cohort"] = \
+                        cohorts.reindex(sdf["sample_id"]).to_numpy()
+                    for i, c in enumerate(scores.columns):
+                        sdf[f"pct_var_{c}"] = pct[i]
+                    pca_rows.append(sdf)
+                except Exception as e:
+                    print(f"  WARN: PCA failed for {anc}/{mod}/{stage}: {e}")
+                del pheno
+    paths = {}
+    if val_rows:
+        p = os.path.join(out_dir, "qc_pheno_values.tsv.gz")
+        pd.concat(val_rows).to_csv(p, sep="\t", index=False,
+                                   compression="gzip")
+        paths["values"] = p
+        p = os.path.join(out_dir, "qc_pheno_quantiles.tsv")
+        pd.concat(qtl_rows).to_csv(p, sep="\t", index=False)
+        paths["quantiles"] = p
+    if pca_rows:
+        p = os.path.join(out_dir, "qc_pheno_pca.tsv.gz")
+        pd.concat(pca_rows).to_csv(p, sep="\t", index=False,
+                                   compression="gzip")
+        paths["pca"] = p
+    if cnt_rows:
+        p = os.path.join(out_dir, "qc_pheno_feature_counts.tsv")
+        pd.DataFrame(cnt_rows).to_csv(p, sep="\t", index=False)
+        paths["counts"] = p
+    for k, p in paths.items():
+        print(f"  wrote {k} -> {p}")
+    if not paths:
+        print("  WARN: no phenotype matrices found — QC outputs empty")
+    return paths
+
+
+def _count_data_lines(path):
+    """Non-comment (non-'#') line count of a plink2 pvar/psam."""
+    try:
+        out = subprocess.check_output(["grep", "-c", "-v", "^#", path])
+        return int(out.strip())
+    except Exception:
+        with open(path) as f:
+            return sum(1 for line in f if not line.startswith("#"))
+
+
+def qc_genotype_stage_counts(out_dir, cohort_qc_glob=None,
+                             geno_pooled_dir=None, ancestries=("EAS", "EUR")):
+    """Variant/sample counts per genotype processing stage. Per-cohort
+    post-imputation counts from {cohort_qc_glob}/*.rsq_pass.pvar/.psam;
+    pooled per-ancestry counts from {geno_pooled_dir}/{ANC}_pooled.pvar/.psam.
+    Writes qc_genotype_stage_counts.tsv (entity, level, stage, n_variants,
+    n_samples)."""
+    os.makedirs(out_dir, exist_ok=True)
+    rows = []
+    if cohort_qc_glob:
+        pat = os.path.join(cohort_qc_glob, "*.rsq_pass.pvar")
+        for pvar in sorted(glob.glob(pat)):
+            cohort = os.path.basename(pvar).replace(".rsq_pass.pvar", "")
+            psam = pvar[:-len(".pvar")] + ".psam"
+            rows.append({"entity": cohort, "level": "cohort",
+                         "stage": "imputed_rsq_pass",
+                         "n_variants": _count_data_lines(pvar),
+                         "n_samples": (_count_data_lines(psam)
+                                       if os.path.exists(psam) else None)})
+    if geno_pooled_dir:
+        for anc in ancestries:
+            pvar = os.path.join(geno_pooled_dir, f"{anc}_pooled.pvar")
+            psam = os.path.join(geno_pooled_dir, f"{anc}_pooled.psam")
+            if os.path.exists(pvar):
+                rows.append({"entity": anc, "level": "ancestry",
+                             "stage": "pooled_qc_pass",
+                             "n_variants": _count_data_lines(pvar),
+                             "n_samples": (_count_data_lines(psam)
+                                           if os.path.exists(psam)
+                                           else None)})
+    if not rows:
+        print("  WARN: no genotype stage inputs found — skipped")
+        return None
+    out = pd.DataFrame(rows)
+    p = os.path.join(out_dir, "qc_genotype_stage_counts.tsv")
+    out.to_csv(p, sep="\t", index=False)
+    print(f"  wrote {len(out)} stage rows -> {p}")
+    return p
+
+
+def qc_picard_metrics(picard_glob, out_dir):
+    """Concatenate per-cohort *_qc_metrics.tsv (module 19a outputs), cohort
+    parsed from the filename prefix. Writes qc_picard_metrics.tsv."""
+    os.makedirs(out_dir, exist_ok=True)
+    files = sorted(glob.glob(picard_glob)) if picard_glob else []
+    frames = []
+    for f in files:
+        d = pd.read_csv(f, sep="\t")
+        d["cohort"] = os.path.basename(f).replace("_qc_metrics.tsv", "")
+        frames.append(d)
+    if not frames:
+        print("  WARN: no Picard qc_metrics files matched — skipped")
+        return None
+    out = pd.concat(frames, ignore_index=True)
+    p = os.path.join(out_dir, "qc_picard_metrics.tsv")
+    out.to_csv(p, sep="\t", index=False)
+    print(f"  wrote {len(out)} samples x {len(frames)} cohorts -> {p}")
+    return p
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -683,10 +906,10 @@ def main():
     ap.add_argument("--qvalue", type=float, default=0.05)
     ap.add_argument("--only", nargs="+", default=None,
                     choices=["ancestry", "modality", "locus", "annotate",
-                             "constraint", "pcair"])
+                             "constraint", "pcair", "qc"])
     ap.add_argument("--skip", nargs="+", default=[],
                     choices=["ancestry", "modality", "locus", "annotate",
-                             "constraint", "pcair"])
+                             "constraint", "pcair", "qc"])
     ap.add_argument("--locus-gene", default=None,
                     help="extra showcase locus gene_id")
     ap.add_argument("--fastvep-output", default=None)
@@ -698,13 +921,33 @@ def main():
                          "(downloaded if absent)")
     ap.add_argument("--pcair-dir", default=None,
                     help="dir holding per-cohort *_pcair_pcs.tsv")
+    ap.add_argument("--pooled-bed-dir", default=None,
+                    help="dir with {ANC}_{MOD}_pooled.bed (unnormalized; "
+                         "combat_modalities/pooled) for before-stage QC")
+    ap.add_argument("--ancestry-map", default=None,
+                    help="pooled_sample_ancestry_RNAseq.tsv (sample_id, "
+                         "assigned_ancestry, cohort) for cohort labels")
+    ap.add_argument("--cohort-labels-dir", default=None,
+                    help="dir with {ANC}_{MOD}_cohort_labels.tsv sidecars")
+    ap.add_argument("--cohort-qc-glob", default=None,
+                    help="glob matching per-cohort post-imputation QC dirs "
+                         "(containing {COHORT}.rsq_pass.pvar/.psam)")
+    ap.add_argument("--geno-pooled-dir", default=None,
+                    help="dir with {ANC}_pooled.pvar/.psam")
+    ap.add_argument("--picard-glob", default=None,
+                    help="glob matching per-cohort *_qc_metrics.tsv "
+                         "(module 19a outputs)")
+    ap.add_argument("--n-violin-values", type=int, default=5000,
+                    help="sampled values per anc x mod x stage x cohort")
+    ap.add_argument("--n-pca-features", type=int, default=5000,
+                    help="feature subsample size for QC PCA")
     args = ap.parse_args()
 
     out_dir = args.out_dir or os.path.join(args.results_dir, "report_extras")
     os.makedirs(out_dir, exist_ok=True)
 
     sections = args.only or ["ancestry", "modality", "locus", "annotate",
-                             "constraint", "pcair"]
+                             "constraint", "pcair", "qc"]
     sections = [s for s in sections if s not in args.skip]
     print(f"== 35_extract_report_extras == sections: {sections}")
 
@@ -736,6 +979,20 @@ def main():
             stage_pcair(args.pcair_dir, out_dir)
         else:
             print("  --pcair-dir not given — skipped")
+    if "qc" in sections:
+        print("\n[7] QC summaries")
+        qc_phenotype_summaries(args.qtl_dir, args.ancestries, out_dir,
+                               pooled_bed_dir=args.pooled_bed_dir,
+                               ancestry_map_path=args.ancestry_map,
+                               cohort_labels_dir=args.cohort_labels_dir,
+                               n_values=args.n_violin_values,
+                               n_features=args.n_pca_features)
+        qc_genotype_stage_counts(out_dir,
+                                 cohort_qc_glob=args.cohort_qc_glob,
+                                 geno_pooled_dir=args.geno_pooled_dir,
+                                 ancestries=args.ancestries)
+        if args.picard_glob:
+            qc_picard_metrics(args.picard_glob, out_dir)
     print("\nDone.")
 
 
