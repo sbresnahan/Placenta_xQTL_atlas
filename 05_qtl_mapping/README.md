@@ -324,7 +324,14 @@ python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
   --ccre $CRE_DIR/GRCh38-cCREs.PLS.bed:PLS $CRE_DIR/GRCh38-cCREs.pELS.bed:pELS \
          $CRE_DIR/GRCh38-cCREs.dELS.bed:dELS $CRE_DIR/GRCh38-cCREs.CTCF-bound.bed:CTCF_bound \
   --placenta-ocr $ENCODE_DIR/placenta_dnase_merged_bothstrands.bed \
-  --pcair-dir "$OUTPUT_BASE/genotype_qc"   # dir holding *_pcair_pcs.tsv
+  --pcair-dir "$OUTPUT_BASE/pcair_pcs"   # staging dir of symlinked
+  # *_pcair_pcs.tsv — PC_AiR.R writes per-cohort under
+  # $PCAIR_SRC/{COHORT}/genotypes/imputed/qc/; symlink them into one dir:
+  #   mkdir -p "$OUTPUT_BASE/pcair_pcs"
+  #   for c in NIEHS_RICHS GUSTO SNUH NIGMS; do
+  #     ln -sf "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/$c/genotypes/imputed/qc/${c}_pcair_pcs.tsv" \
+  #       "$OUTPUT_BASE/pcair_pcs/"
+  #   done
 # then annotate the emitted VCF with fastVEP and re-run section 4:
 #   fastvep annotate -i "$RESULTS_DIR/report_extras/lead_variants_fastvep_input.vcf" \
 #     -o "$RESULTS_DIR/report_extras/lead_variants_fastvep.txt" --output-format tab \
