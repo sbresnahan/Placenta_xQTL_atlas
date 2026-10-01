@@ -42,7 +42,6 @@ sym <- function(ids) gene_map$symbol[match(ids, gene_map$gene_id)]
 # display symbol: fall back to the gene ID when the GTF has no gene_name
 symd <- function(ids) ifelse(is.na(sym(ids)) | sym(ids) == "", ids, sym(ids))
 fmt <- function(x) format(x, big.mark = ",", scientific = FALSE, trim = TRUE)
-
 ```
 
 ```{css, echo=FALSE}
@@ -119,6 +118,51 @@ dedup_best <- function(df) df %>% group_by(gene_id) %>%
 conc_comb <- cross_ancestry_concordance(
   combined %>% filter(ancestry == "EAS") %>% dedup_best(),
   combined %>% filter(ancestry == "EUR") %>% dedup_best())
+
+# ---- DevBrain-style panel inputs (35_extract_report_extras.py) ------------
+# All optional: each downstream panel renders only when its file is present.
+extras_dir <- file.path(dirname(params$data_dir), "extras")
+read_extra <- function(fname, ...) {
+  f <- file.path(extras_dir, fname)
+  if (!file.exists(f)) return(NULL)
+  read_tsv(f, col_types = cols(.default = col_character()), progress = FALSE, ...)
+}
+xanc_lookup <- read_extra("cross_ancestry_lookup.tsv.gz") %>%
+  {if (is.null(.)) NULL else mutate(., across(c(repl_slope, repl_se, repl_pval,
+                                                discovery_slope, discovery_qval),
+                                              as.numeric))}
+xmod_lookup <- read_extra("cross_modality_lookup.tsv.gz") %>%
+  {if (is.null(.)) NULL else mutate(., across(c(repl_slope, repl_se, repl_pval),
+                                              as.numeric))}
+lead_annot <- read_extra("lead_variant_annotations.tsv.gz") %>%
+  {if (is.null(.)) NULL else mutate(., pos = as.numeric(pos))}
+constraint <- read_extra("gene_constraint.tsv") %>%
+  {if (is.null(.)) NULL else mutate(., across(c(pLI, oe_lof, oe_lof_upper, lof_z),
+                                              as.numeric))}
+pcair_pcs <- read_extra("pcair_pcs.tsv") %>%
+  {if (is.null(.)) NULL else mutate(., across(starts_with("PC"), as.numeric))}
+finemap_loci <- read_extra("finemap_locus_summary.tsv") %>%
+  {if (is.null(.)) NULL else
+    mutate(., across(c(n_cs_out, max_pip), ~ suppressWarnings(as.numeric(.))))}
+finemap_cs <- read_extra("finemap_credible_sets.tsv.gz") %>%
+  {if (is.null(.)) NULL else
+    mutate(., across(c(n_variants, lead_pip, mean_pip, min_pip, cs_start,
+                       cs_end), ~ suppressWarnings(as.numeric(.)))) %>%
+      mutate(across(ends_with("_est_corr"), ~ suppressWarnings(as.numeric(.))))}
+locus_files <- if (dir.exists(extras_dir))
+  list.files(extras_dir, pattern = "^locus_.*_(EAS|EUR)\\.tsv\\.gz$",
+             full.names = TRUE) else character(0)
+locus_scans <- if (length(locus_files) > 0)
+  bind_rows(lapply(locus_files, function(f)
+    read_tsv(f, col_types = cols(.default = col_character()), progress = FALSE) %>%
+      mutate(across(c(pos, repl_slope, repl_se, repl_pval, r2_lead), as.numeric)))) else NULL
+# gene bodies for the locus-track gene-model panels (archive data/)
+gene_bodies <- if (file.exists(params$gene_bodies_path))
+  read_tsv(params$gene_bodies_path,
+           col_types = cols(gene_id = col_character(), chr = col_character(),
+                            start = col_double(), end = col_double(),
+                            strand = col_double()),
+           progress = FALSE) else NULL
 ```
 
 # Executive summary
@@ -208,13 +252,13 @@ lambda_eas_splicing <- (grouped %>%
               qchisq(0.5, 1), .groups = "drop"))$l
 ```
 
-**Headline result: `r fmt(sum(n_xp))` phenotype-level associations reach FDR ≤ 5%**
+**Headline result: `r sum(n_xp)` phenotype-level associations reach FDR ≤ 5%**
 in the discovery layer (ungrouped scan for the 8 multi-phenotype modalities +
-the per-gene expression scan): `r fmt(n_xp["EAS"])` in EAS and `r fmt(n_xp["EUR"])` in
+the per-gene expression scan): `r n_xp["EAS"]` in EAS and `r n_xp["EUR"]` in
 EUR, implicating `r n_xp_genes["EAS"]` / `r n_xp_genes["EUR"]` unique genes
 respectively. This phenotype-level set is the input to cross-ancestry SuSHiE
 fine-mapping (Methods). At gene level, the combined cross-modality catalog
-contains **`r fmt(n_eg["EAS"])` EAS and `r fmt(n_eg["EUR"])` EUR eGenes** at FDR ≤ 5%,
+contains **`r n_eg["EAS"]` EAS and `r n_eg["EUR"]` EUR eGenes** at FDR ≤ 5%,
 with per-modality grouped eGenes as the breakdown. Strongest association per
 ancestry:
 `r paste(sprintf("%s: %s", top_by_anc$ancestry, apply(top_by_anc, 1, function(r) sprintf("%s (%s, %s layer, q = %s)", symd(r[["gene_id"]]), r[["modality"]], r[["layer"]], signif(as.numeric(r[["qval"]]), 2)))), collapse = "; ")`.
@@ -326,6 +370,10 @@ FDR-significant lead phenotypes (q of at most 0.05) were pooled across ancestrie
 ## Functional enrichment of fine-mapped variants
 
 High-confidence variants (PIP of at least 0.9) were compared against all fine-mapped variants for enrichment in functional annotations. Variant consequences were annotated with fastVEP (GRCh38) and grouped into splice, loss-of-function, missense, synonymous, UTR, intron, regulatory, flanking, and intergenic classes. Regulatory annotations comprised ENCODE SCREEN candidate cis-regulatory element classes and placenta open-chromatin regions. Enrichment was tested with Fisher exact tests as the primary analysis, logistic regression adjusting for log10 distance to the transcription start site as a sensitivity analysis, and PIP-weighted enrichment; Benjamini-Hochberg FDR was applied within each test family.
+
+## Report-integration targeted lookups
+
+To support cross-ancestry and cross-modality report panels without shipping genome-wide summary statistics, targeted association lookups were performed (script 35): for each FDR-significant lead (variant, phenotype) pair, the same pair's slope, standard error, and nominal P value were recomputed in the other ancestry stratum and, for grouped-layer leads, across the gene's phenotypes in every other modality within the same ancestry, by ordinary least squares on covariate-residualized genotypes and phenotypes. All unique lead variants were annotated with fastVEP consequence classes and intersected with ENCODE cCRE classes and placenta open-chromatin regions, and per-gene loss-of-function constraint metrics (pLI, LOEUF) were taken from gnomAD v2.1.1. Regional association scans (plus-minus 1 Mb) with linkage disequilibrium (r^2) to the lead variant were computed for two showcase loci (ERAP2 and the top shared non-expression-driver locus).
 
 ## Software and computing
 
@@ -451,10 +499,36 @@ if (!RUN_ATTRITION) {
 
 ## Genotype PCA
 
-DevBrain Fig. 2A analog. Each stratum's PCA is computed separately
-(cohort-only, LD-pruned variants; Methods), so the two panels show
-**within-stratum** coordinates — a merged cross-ancestry PCA against a 1000
-Genomes reference is not part of the archived inputs.
+DevBrain Fig. 2A analog. Two views: (i) the PC-AiR coordinates computed
+against the 1000 Genomes reference during ancestry assignment (module
+01_genotype_imputation; shared axes across cohorts), shown when the staged
+PC-AiR table is present in the archive; (ii) each stratum's cohort-only PCA
+(LD-pruned variants; Methods) — **within-stratum** coordinates, faceted
+with free scales.
+
+```{r fig-pcair-pca, fig.width=7.5, fig.height=5.5, eval=!is.null(pcair_pcs)}
+pcair_mapped <- pcair_pcs %>%
+  filter(sample_id %in% unlist(lapply(c("EAS", "EUR"), function(a) {
+    f <- file.path(qc_in, paste0(a, "_covariates.tsv"))
+    if (!file.exists(f)) return(character(0))
+    names(read_tsv(f, col_types = cols(.default = col_double(),
+                                       covariate_id = col_character()),
+                   progress = FALSE, n_max = 1))[-1]
+  })))
+p_pcair <- ggplot(pcair_mapped,
+                  aes(PC1, PC2, color = assigned_ancestry)) +
+  geom_point(size = 1.4, alpha = 0.7) +
+  stat_ellipse(aes(group = assigned_ancestry), level = 0.95,
+               linewidth = 0.7, show.legend = FALSE) +
+  scale_color_brewer(palette = "Set2", name = "assigned\nancestry") +
+  labs(x = "PC-AiR PC1 (vs 1000 Genomes)", y = "PC-AiR PC2") +
+  theme_report()
+print(p_pcair)
+ggsave(file.path(params$fig_dir, "fig_pcair_pca.png"), p_pcair,
+       width = 7.5, height = 5.5, dpi = 150)
+```
+
+`r if (!is.null(pcair_pcs)) paste0("PC-AiR coordinates (computed against the 1000 Genomes reference during ancestry assignment) for the ", nrow(pcair_mapped), " mapped individuals, colored by assigned superpopulation with 95% ellipses. The two mapping strata separate cleanly along the ancestry-informative axes.") else "PC-AiR coordinates are not in this archive (run 35_extract_report_extras.py --only pcair); the within-stratum view below is shown instead."`
 
 ```{r fig-genotype-pca, fig.width=9, fig.height=4.8}
 pca_pts <- bind_rows(lapply(c("EAS", "EUR"), function(a) {
@@ -549,9 +623,9 @@ knitr::kable(outl %>% select(ancestry, sample_id, pc, sd_distance) %>%
 Outlier exclusion on the cohort-only PCs (6-SD rule on PC1–PC5) removed
 `r n_outl$samples_removed[n_outl$ancestry == "EAS"]` EAS and
 `r n_outl$samples_removed[n_outl$ancestry == "EUR"]` EUR samples. Pruning
-dropped `r fmt(sum(prune_by_reason$n[prune_by_reason$ancestry == "EAS"]))`
+dropped `r sum(prune_by_reason$n[prune_by_reason$ancestry == "EAS"])`
 covariates in EAS (`r prune_fmt("EAS")`) and
-`r fmt(sum(prune_by_reason$n[prune_by_reason$ancestry == "EUR"]))` in EUR
+`r sum(prune_by_reason$n[prune_by_reason$ancestry == "EUR"])` in EUR
 (`r prune_fmt("EUR")`); both ancestries retained all of PC1–PC5:
 `r pcs_retained`. Correlated-HCP drops (if any) reduce effective k below the
 nominal per-modality k\* — see the HCP-optimization section.
@@ -808,7 +882,7 @@ variance are detectable at genome-wide thresholds; the larger EAS stratum
 n = 445. For reference, PANTRY (n = 445) reported 6,798 eGenes and a 66%
 discovery gain from non-expression modalities; GTEx tissues at n ≈ 150
 typically report hundreds to ~2,000 eGenes. The yield
-(`r fmt(sum(n_xp))` FDR ≤ 5% phenotype-level associations; `r fmt(sum(n_eg))`
+(`r sum(n_xp)` FDR ≤ 5% phenotype-level associations; `r sum(n_eg)`
 combined-layer eGenes) sits
 `r if (sum(n_eg) < 100) "at the pessimistic end of" else "within"` that
 range.
@@ -830,14 +904,14 @@ The MAC ≥ 5 floor is applied at the genotype intersection in module 23
 
 # The landscape of placental xQTL regulation
 
-*Modality-wise discovery landscape, following DevBrain Fig. 1. Panels that
-manuscript draws from external datasets — discovery-vs-sample-size against
-published brain studies (1A), eGene overlap and effect-size correlation
-against GTEx/PsychENCODE adult brain (1B/1C), and pLI constraint of eGenes
-(1G) — have no external placenta xQTL resource or constraint scores in this
-archive and are omitted; the corresponding placenta-external comparisons are
-a manuscript-stage analysis. Inversion QTLs (1J) are not assayed by this
-pipeline.*
+*Modality-wise discovery landscape, following DevBrain Fig. 1. Two panels
+that manuscript draws from external datasets are adapted or omitted:
+eGene overlap and effect-size correlation against GTEx/PsychENCODE adult
+brain (1B/1C) have no external placenta xQTL resource — GTEx lacks placenta
+and the largest published placenta eQTL set (Peng 2017) is the RICHS
+cohort, already inside this atlas — and are omitted; discovery context is
+instead given against the published placenta eQTL literature (1A analog,
+below). Inversion QTLs (1J) are not assayed by this pipeline.*
 
 ## Phenotypes and genes tested per modality
 
@@ -884,6 +958,51 @@ across layers, inferred from allele-count/frequency denominators) because
 each modality's phenotype matrix harmonizes to a slightly different sample
 set.
 
+## Discovery in the context of published placenta eQTL studies
+
+*DevBrain Fig. 1A analog: eGene discovery versus sample size. Published
+values are hardcoded from the papers (captions/abstracts); note that Peng
+2017 (RICHS) and Choi 2024 (SNUH) cohorts contribute to this atlas, so
+their points mark the ancestry-stratified predecessors of the present
+analysis rather than independent references.*
+
+```{r fig-literature-discovery, fig.width=8, fig.height=5.5}
+lit <- tribble(
+  ~study, ~n, ~egenes, ~label,
+  "Kikas 2019",        40,   63, "Kikas 2019 (EST)",
+  "Apicella 2023",     66,   43, "Apicella 2023 (EUR, microarray)",
+  "Choi 2024",        102, 2703, "Choi 2024 (EAS; SNUH)",
+  "Peng 2017",        159, 3218, "Peng 2017 (RICHS, FDR 10%)",
+  "Dieckmann 2024",   447, 1074, "Dieckmann 2024 (EUR, term)",
+  "This study (EUR)", n_samp[["EUR"]], n_eg_mod$n[n_eg_mod$ancestry == "EUR" & n_eg_mod$modality == "expression"], "This study (EUR)",
+  "This study (EAS)", n_samp[["EAS"]], n_eg_mod$n[n_eg_mod$ancestry == "EAS" & n_eg_mod$modality == "expression"], "This study (EAS)"
+) %>% mutate(this_study = grepl("This study", study))
+p_lit <- ggplot(lit, aes(n, egenes)) +
+  geom_point(aes(color = this_study), size = 3.5) +
+  ggrepel::geom_text_repel(aes(label = label, color = this_study),
+                           size = 3.4, fontface = "bold",
+                           box.padding = 0.5, point.padding = 0.35,
+                           min.segment.length = 0, seed = 7) +
+  scale_color_manual(values = c(`TRUE` = "#D55E00", `FALSE` = "#0072B2"),
+                     guide = "none") +
+  scale_x_continuous(breaks = seq(0, 500, 100)) +
+  scale_y_continuous(labels = scales::comma,
+                     expand = expansion(mult = c(0, 0.08))) +
+  labs(x = "sample size", y = "eGenes discovered (expression layer)") +
+  theme_report()
+print(p_lit)
+ggsave(file.path(params$fig_dir, "fig1a_literature_discovery.png"), p_lit,
+       width = 8, height = 5.5, dpi = 150)
+```
+
+This study's per-stratum expression-layer eGene counts
+(`r fmt(n_eg_mod$n[n_eg_mod$ancestry == "EAS" & n_eg_mod$modality == "expression"])`
+EAS at n = `r n_samp[["EAS"]]`;
+`r fmt(n_eg_mod$n[n_eg_mod$ancestry == "EUR" & n_eg_mod$modality == "expression"])`
+EUR at n = `r n_samp[["EUR"]]`) sit on the literature
+discovery-versus-size trend; the atlas additionally contributes the eight
+non-expression modalities that none of the published studies assay.
+
 ## xQTL associations per modality — q-value tiers
 
 *Discovery panel on the ungrouped (phenotype-level) layer — the fine-mapping
@@ -891,9 +1010,9 @@ input set — with expression contributed by its per-gene primary scan.
 DevBrain reports the analogous discovery counts per modality at FDR ≤ 5%.*
 
 At FDR ≤ 5% the phenotype-level discovery layer contains
-**`r fmt(sum(n_xp))` associations** (`r fmt(n_xp["EAS"])` EAS, `r fmt(n_xp["EUR"])` EUR)
+**`r sum(n_xp)` associations** (`r n_xp["EAS"]` EAS, `r n_xp["EUR"]` EUR)
 across `r n_xp_genes["EAS"]` / `r n_xp_genes["EUR"]` unique genes; the
-combined cross-modality layer adds `r fmt(sum(n_eg))` gene-level eGenes. The
+combined cross-modality layer adds `r sum(n_eg)` gene-level eGenes. The
 figure shows the full q-value landscape: phenotypes binned by q-value per
 ancestry × modality. Splicing splits by ancestry: EUR splicing reaches the
 q ≤ 0.05 tier, while EAS splicing remains near-null — best q-value
@@ -968,6 +1087,33 @@ phenotypes in the ungrouped layer; only FDR ≤ 5% entrants undergo the
 stepwise scan. The design-level view below shows how many phenotypes each
 gene contributes to its group (the multiple-testing unit).
 
+```{r fig-tss-by-rank, fig.width=9, fig.height=4.5, eval=n_secondary > 0}
+# DevBrain fig. S3M/N analog: primary signals sit closer to the TSS than
+# secondary+ signals (allelic heterogeneity is more distal)
+rank_dist <- independent %>%
+  filter(!is.na(rank), !is.na(start_distance)) %>%
+  mutate(rank_c = factor(pmin(rank, 4L), levels = 1:4,
+                         labels = c("1st", "2nd", "3rd", "4th+")),
+         abs_kb = abs(start_distance) / 1000)
+wil <- tryCatch(
+  wilcox.test(abs_kb ~ (rank_c == "1st"), data = rank_dist),
+  error = function(e) NULL)
+p_rank <- ggplot(rank_dist, aes(rank_c, abs_kb, fill = ancestry)) +
+  geom_boxplot(outlier.size = 0.4, outlier.alpha = 0.4, width = 0.6,
+               position = position_dodge(width = 0.75)) +
+  facet_wrap(~ancestry) +
+  scale_fill_manual(values = c(EAS = "#0072B2", EUR = "#D55E00"),
+                    guide = "none") +
+  scale_y_log10(labels = scales::comma) +
+  labs(x = "conditional rank", y = "|distance to phenotype start| (kb)") +
+  theme_report()
+print(p_rank)
+ggsave(file.path(params$fig_dir, "fig_tss_distance_by_rank.png"), p_rank,
+       width = 9, height = 4.5, dpi = 150)
+```
+
+`r if (n_secondary > 0 && exists("wil") && !is.null(wil)) sprintf("Primary (rank-1) signals are closer to the phenotype start than secondary signals (median %.2f vs %.2f kb; Wilcoxon p = %s) — the allelic-heterogeneity pattern DevBrain reports (their fig. S3M/N).", median(rank_dist$abs_kb[rank_dist$rank_c == "1st"]), median(rank_dist$abs_kb[rank_dist$rank_c != "1st"]), signif(wil$p.value, 2)) else ""`
+
 ```{r fig-group-size, fig.width=9, fig.height=4.5}
 gs <- bind_rows(
   grouped %>% filter(modality != "expression") %>%
@@ -990,45 +1136,47 @@ Combined groups integrate a median of ~4–5 phenotypes per gene (max > 100) —
 the cross-modality burden-sharing the PANTRY design exploits. (Stability
 shows a flat box at 1 by design: one phenotype per gene.)
 
-## Driver-variant position relative to the gene body
+## Lead-variant distance from the TSS
 
-*DevBrain Fig. 1E analog (distance of xQTL lead variants from the target
-transcription start site), computed on gene-body-relative coordinates.*
+*DevBrain Fig. 1E analog: signed distance of each lead variant from its
+target's start versus association strength, every tested gene shown —
+significant xQTLs cluster sharply at the TSS.*
 
-```{r fig-variant-position, fig.width=9, fig.height=5}
-# regenerated from the normalized GTF by make_report_archive.sh:
-# gene_id, chr, start, end, strand (±1)
-gene_bodies <- read_tsv(params$gene_bodies_path, col_types = "cciii",
-                        progress = FALSE)
-top200 <- bind_rows(
-  grouped %>% filter(modality != "expression") %>%
-    group_by(ancestry, modality) %>% slice_min(pval_beta, n = 200, with_ties = FALSE),
-  combined %>% group_by(ancestry) %>% slice_min(pval_beta, n = 200, with_ties = FALSE) %>%
-    mutate(modality = factor("combined", levels = c(MODALITY_LEVELS, "combined")))
-) %>% ungroup() %>% add_gene_relative_position(gene_bodies) %>%
-  filter(!is.na(rel_pos), abs(rel_pos - 0.5) <= 1.5)
-
-p4 <- ggplot() +
-  geom_density(data = top200 %>% filter(modality != "combined"),
-               aes(rel_pos, fill = modality), alpha = 0.55, color = NA, adjust = 1.2) +
-  geom_density(data = top200 %>% filter(modality == "combined"),
-               aes(rel_pos), color = "#333333", linewidth = 1.1, linetype = 2,
-               fill = NA, adjust = 1.2) +
+```{r fig-variant-position, fig.width=9, fig.height=5.5}
+tss_pts <- grouped %>%
+  mutate(tss_kb = start_distance / 1000,
+         modality = factor(modality, levels = MODALITY_LEVELS)) %>%
+  filter(!is.na(qval), qval > 0)
+# thin the non-significant bulk for plotting; keep all FDR <= 5% points
+tss_plot <- bind_rows(
+  tss_pts %>% filter(qval <= 0.05),
+  tss_pts %>% filter(qval > 0.05) %>%
+    group_by(ancestry, modality) %>%
+    slice_sample(n = 1500) %>% ungroup())
+p4 <- ggplot(tss_plot, aes(tss_kb, -log10(qval), color = modality)) +
+  geom_hline(yintercept = -log10(0.05), linetype = 3, color = "grey50",
+             linewidth = 0.4) +
+  geom_point(size = 0.35, alpha = 0.45, stroke = 0) +
+  geom_vline(xintercept = 0, linetype = 2, color = "grey40",
+             linewidth = 0.4) +
   facet_wrap(~ancestry) +
-  scale_fill_manual(values = MODALITY_COLORS, name = NULL) +
-  geom_vline(xintercept = c(0, 1), linetype = 2, color = "grey40") +
-  coord_cartesian(xlim = c(-0.6, 1.6)) +
-  labs(x = "driver-variant position relative to gene body (0 = 5' end, 1 = 3' end)",
-       y = "density (top 200 genes per layer)",
-       caption = "Dashed line: combined cross-modality layer.") +
-  theme_report()
+  scale_color_manual(values = MODALITY_COLORS, name = NULL,
+                     guide = guide_legend(override.aes = list(size = 2.5,
+                                                              alpha = 1))) +
+  coord_cartesian(xlim = c(-1000, 1000)) +
+  labs(x = "distance of lead variant from phenotype start (kb)",
+       y = expression(-log[10](q))) +
+  theme_report() +
+  theme(legend.position = "bottom")
 print(p4)
-ggsave(file.path(params$fig_dir, "fig2d_variant_position_top200.png"), p4,
-       width = 10, height = 5, dpi = 150)
+ggsave(file.path(params$fig_dir, "fig2d_tss_distance_scatter.png"), p4,
+       width = 9, height = 5.5, dpi = 150)
 ```
 
-Densities are computed over the top 200 genes per layer (FDR-significant
-plus sub-threshold); read as a positional summary of the strongest signals.
+Every tested gene's lead variant (grouped layers; non-significant bulk
+thinned to 1,500 points per modality for plotting). The vertical
+enrichment of points above the FDR ≤ 5% line near 0 kb is the expected
+TSS-proximal concentration of causal cis-regulatory variants.
 
 ## Cross-modality overlap of xGenes
 
@@ -1058,13 +1206,228 @@ for (a in c("EAS", "EUR")) {
 }
 ```
 
+## Functional annotation enrichment of lead variants
+
+*DevBrain Fig. 1F analog: enrichment of fastVEP consequence classes and
+regulatory-element overlaps (ENCODE cCRE classes, placenta OCRs) among
+FDR ≤ 5% lead variants versus all tested lead variants — Fisher exact
+log2 odds ratios per ancestry × modality. Rendered only when
+lead_variant_annotations.tsv.gz is present in the archive (extraction
+script 35, with the fastVEP two-pass).*
+
+```{r fig-functional-enrichment, fig.width=10, fig.height=6, eval=!is.null(lead_annot)}
+cons_classes <- c("splice_site", "coding_lof", "coding_nonsynonymous",
+                  "synonymous", "utr", "intron", "regulatory_region",
+                  "flanking", "intergenic", "other")
+flag_cols <- setdiff(names(lead_annot),
+                     c("variant_id", "chrom", "pos", "foreground_in",
+                       "consequence"))
+la <- lead_annot
+for (cl in cons_classes)
+  la[[paste0("cons_", cl)]] <- !is.na(la$consequence) & la$consequence == cl
+for (cl in flag_cols)
+  la[[cl]] <- tolower(as.character(la[[cl]])) %in% c("true", "1")
+annot_cols <- c(paste0("cons_", cons_classes), flag_cols)
+annot_labels <- c(setNames(paste0("VEP: ", cons_classes),
+                           paste0("cons_", cons_classes)),
+                  setNames(flag_cols, flag_cols))
+
+fg <- bind_rows(grouped, ungrouped) %>%
+  filter(qval <= fdr) %>% distinct(ancestry, modality, variant_id)
+fg_cells <- fg %>% count(ancestry, modality, name = "n_fg") %>%
+  filter(n_fg >= 20)
+fg_f <- fg %>% inner_join(fg_cells, by = c("ancestry", "modality"))
+
+enrich <- fg_f %>%
+  group_by(ancestry, modality) %>%
+  group_modify(~{
+    is_fg <- la$variant_id %in% .x$variant_id
+    bind_rows(lapply(annot_cols, function(ac) {
+      flag <- la[[ac]]
+      a <- sum(is_fg & flag); b <- sum(is_fg & !flag)
+      cc <- sum(!is_fg & flag); d <- sum(!is_fg & !flag)
+      if (a < 3) return(NULL)
+      if (min(a, b, cc, d) == 0) {
+        a <- a + 0.5; b <- b + 0.5; cc <- cc + 0.5; d <- d + 0.5
+      }
+      or <- (a * d) / (b * cc)
+      se <- sqrt(1 / a + 1 / b + 1 / cc + 1 / d)
+      pv <- fisher.test(matrix(c(a, b, cc, d), nrow = 2))$p.value
+      tibble(annotation = annot_labels[[ac]], log2or = log2(or),
+             lo = log2(or) - 1.96 * se, hi = log2(or) + 1.96 * se,
+             p = pv, n_fg_annot = a)
+    }))
+  }) %>% ungroup() %>%
+  mutate(modality = factor(modality, levels = MODALITY_LEVELS))
+
+if (nrow(enrich) == 0) {
+  cat("Annotation table present but no annotation class passed the minimum
+      foreground counts — panel skipped.\n")
+} else {
+  annot_order <- enrich %>% group_by(annotation) %>%
+    summarise(m = mean(log2or), .groups = "drop") %>%
+    arrange(m) %>% pull(annotation)
+  enrich <- enrich %>% mutate(annotation = factor(annotation,
+                                                  levels = annot_order))
+  p_enr <- ggplot(enrich, aes(log2or, annotation, color = modality)) +
+    geom_vline(xintercept = 0, linetype = 2, color = "grey60",
+               linewidth = 0.4) +
+    geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0,
+                   position = position_dodge(width = 0.75),
+                   linewidth = 0.4, alpha = 0.8) +
+    geom_point(position = position_dodge(width = 0.75), size = 1.6) +
+    facet_wrap(~ancestry) +
+    scale_color_manual(values = MODALITY_COLORS, name = NULL) +
+    labs(x = "log2 odds ratio (FDR ≤ 5% leads vs all tested leads)",
+         y = NULL) +
+    theme_report() + theme(legend.position = "bottom")
+  print(p_enr)
+  ggsave(file.path(params$fig_dir, "fig_functional_enrichment.png"), p_enr,
+         width = 10, height = 6, dpi = 150)
+  write_tsv(enrich, file.path(params$table_dir, "lead_variant_enrichment.tsv"))
+}
+```
+
+`r if (is.null(lead_annot)) "*Skipped: lead_variant_annotations.tsv.gz is not in this archive — run 35_extract_report_extras.py (with the fastVEP two-pass) on seadragon and re-archive.*" else "Positive log2OR = over-representation among significant leads; bars are Wald 95% CIs on the log odds ratio (cells with fewer than 3 annotated foreground variants, or fewer than 20 foreground variants per ancestry × modality cell, are omitted; p-values unadjusted). The expected cis-regulatory signature is enrichment of regulatory-region/cCRE/OCR classes and depletion of intergenic sequence."`
+
+## Cross-modality sharing of xQTL effects
+
+*DevBrain Fig. 1H analog: Storey π1 replication rate of each modality's
+FDR ≤ 5% lead (variant, gene) pairs against the nominal association of the
+same variant across the gene's phenotypes in every other grouped modality,
+per ancestry. Rendered only when cross_modality_lookup.tsv.gz is present.*
+
+```{r fig-pi1-heatmap, fig.width=10, fig.height=5, eval=!is.null(xmod_lookup)}
+pi1_mat <- xmod_lookup %>%
+  group_by(ancestry, discovery_modality, replication_modality) %>%
+  summarise(pi1 = storey_pi1(repl_pval),
+            n = sum(!is.na(repl_pval)), .groups = "drop") %>%
+  mutate(discovery_modality = factor(discovery_modality,
+                                     levels = MODALITY_LEVELS),
+         replication_modality = factor(replication_modality,
+                                       levels = MODALITY_LEVELS)) %>%
+  tidyr::complete(ancestry, discovery_modality, replication_modality)
+p_pi1 <- ggplot(pi1_mat, aes(replication_modality, discovery_modality)) +
+  geom_tile(aes(fill = pi1), color = "white", linewidth = 0.4) +
+  geom_text(aes(label = ifelse(is.na(pi1) | n < 20, "",
+                               sprintf("%.2f", pi1))), size = 2.5) +
+  facet_wrap(~ancestry) +
+  scale_fill_viridis_c(limits = c(0, 1), na.value = "grey88",
+                       name = expression(pi[1])) +
+  scale_x_discrete(limits = MODALITY_LEVELS) +
+  scale_y_discrete(limits = rev(MODALITY_LEVELS)) +
+  labs(x = "replication modality", y = "discovery modality") +
+  theme_report() + theme(axis.text.x = element_text(angle = 35, hjust = 1))
+print(p_pi1)
+ggsave(file.path(params$fig_dir, "fig_cross_modality_pi1.png"), p_pi1,
+       width = 10, height = 5, dpi = 150)
+write_tsv(pi1_mat, file.path(params$table_dir, "cross_modality_pi1.tsv"))
+```
+
+`r if (is.null(xmod_lookup)) "*Skipped: cross_modality_lookup.tsv.gz is not in this archive — run 35_extract_report_extras.py on seadragon and re-archive.*" else "π1 = 1 − π0 (Storey, λ = 0.5) on replication-modality nominal p-values of each discovery modality's FDR ≤ 5% leads; the diagonal (self-replication) is not computed and cells with fewer than 20 tested pairs are left blank. High off-diagonal π1 indicates that one modality's regulatory variants recur as nominal associations in another — the cross-phenotype sharing the combined layer exploits."`
+
+## Constraint of xGenes
+
+*DevBrain Fig. 1G analog: gnomAD v2.1.1 loss-of-function constraint
+(LOEUF) of combined-layer eGenes, split by driver modality, versus tested
+non-eGenes. Rendered only when gene_constraint.tsv is present.*
+
+```{r fig-constraint, fig.width=10, fig.height=4.8, eval=!is.null(constraint)}
+eg_driver <- egenes_combined %>% distinct(ancestry, gene_id, driver_modality)
+con_df <- combined %>%
+  distinct(ancestry, gene_id) %>%
+  left_join(eg_driver, by = c("ancestry", "gene_id")) %>%
+  mutate(group = if_else(is.na(driver_modality), "non-eGene",
+                         as.character(driver_modality)),
+         group = factor(group, levels = c(MODALITY_LEVELS, "non-eGene"))) %>%
+  left_join(constraint %>% select(gene_id, pLI, oe_lof), by = "gene_id")
+con_loeuf <- con_df %>% filter(!is.na(oe_lof), !is.na(group))
+wil_con <- lapply(c("EAS", "EUR"), function(a) {
+  d <- con_loeuf %>% filter(ancestry == a)
+  tryCatch(wilcox.test(oe_lof ~ (group == "non-eGene"), data = d),
+           error = function(e) NULL)
+}) %>% setNames(c("EAS", "EUR"))
+p_con <- ggplot(con_loeuf, aes(group, oe_lof)) +
+  geom_violin(aes(fill = group == "non-eGene"), scale = "width", trim = TRUE,
+              color = NA, alpha = 0.75) +
+  geom_boxplot(width = 0.12, outlier.size = 0.3, outlier.alpha = 0.3,
+               fill = "white", alpha = 0.85) +
+  facet_wrap(~ancestry) +
+  scale_fill_manual(values = c(`TRUE` = "grey70", `FALSE` = "#0279EE"),
+                    guide = "none") +
+  labs(x = NULL, y = "LOEUF (gnomAD oe/lof)") +
+  theme_report() + theme(axis.text.x = element_text(angle = 35, hjust = 1))
+print(p_con)
+ggsave(file.path(params$fig_dir, "fig_constraint_loeuf.png"), p_con,
+       width = 10, height = 4.8, dpi = 150)
+if (!is.null(wil_con$EAS) && !is.null(wil_con$EUR)) {
+  med_con <- function(a, eg)
+    median(con_loeuf$oe_lof[con_loeuf$ancestry == a &
+                              (con_loeuf$group != "non-eGene") == eg])
+  constraint_prose <- sprintf(
+    paste0("Lower LOEUF = stronger constraint. eGenes are %s constrained ",
+           "than tested non-eGenes (median LOEUF %.2f vs %.2f in EAS, ",
+           "Wilcoxon p = %s; %.2f vs %.2f in EUR, p = %s) — the ",
+           "dosage-sensitivity enrichment DevBrain reports for brain eGenes."),
+    if (med_con("EAS", TRUE) < med_con("EAS", FALSE)) "more" else "less",
+    med_con("EAS", TRUE), med_con("EAS", FALSE), signif(wil_con$EAS$p.value, 2),
+    med_con("EUR", TRUE), med_con("EUR", FALSE), signif(wil_con$EUR$p.value, 2))
+} else {
+  constraint_prose <- paste0(
+    "Lower LOEUF = stronger constraint; distributions shown per driver ",
+    "modality versus tested non-eGenes (Wilcoxon test not computable).")
+}
+```
+
+`r if (is.null(constraint)) "*Skipped: gene_constraint.tsv is not in this archive — run 35_extract_report_extras.py on seadragon and re-archive.*" else constraint_prose`
+
+## Fine-mapped credible sets versus conditional signals
+
+*DevBrain Fig. 1I analog: the number of SuSHiE credible sets per locus
+versus the number of conditionally independent signals at the same
+phenotype (maximum rank across ancestries in the stepwise scans). Rendered
+only when the aggregated SuSHiE locus summary is present.*
+
+```{r fig-cs-vs-conditional, fig.width=7.5, fig.height=5.5, eval=!is.null(finemap_loci) && any(!is.na(finemap_loci$n_cs_out))}
+cond_counts <- independent %>%
+  filter(layer == "ungrouped" | (layer == "grouped" & modality == "expression")) %>%
+  group_by(phenotype_id) %>%
+  summarise(n_cond = max(rank), .groups = "drop")
+cs_join <- finemap_loci %>%
+  filter(!is.na(n_cs_out)) %>%
+  inner_join(cond_counts, by = "phenotype_id")
+cs_pts <- cs_join %>% count(n_cond, n_cs_out, name = "n_loci")
+rho_cs <- if (nrow(cs_join) > 5)
+  cor(cs_join$n_cond, cs_join$n_cs_out, method = "spearman") else NA_real_
+p_cs <- ggplot(cs_pts, aes(n_cond, n_cs_out)) +
+  geom_point(aes(size = n_loci), alpha = 0.55, color = "#0279EE") +
+  scale_size_area(max_size = 12, name = "loci") +
+  scale_x_continuous(breaks = scales::breaks_width(1)) +
+  scale_y_continuous(breaks = scales::breaks_width(1)) +
+  annotate("label", x = Inf, y = -Inf, hjust = 1.05, vjust = -0.8,
+           fill = "white", alpha = 0.85, label.size = 0, size = 3.5,
+           label = sprintf("Spearman rho = %.2f\n(n = %s loci)", rho_cs,
+                           fmt(nrow(cs_join)))) +
+  labs(x = "conditionally independent signals (max across ancestries)",
+       y = "SuSHiE credible sets per locus") +
+  theme_report()
+print(p_cs)
+ggsave(file.path(params$fig_dir, "fig_cs_vs_conditional.png"), p_cs,
+       width = 7.5, height = 5.5, dpi = 150)
+```
+
+`r if (is.null(finemap_loci) || all(is.na(finemap_loci$n_cs_out))) "*Skipped: aggregated SuSHiE locus summary (finemap_locus_summary.tsv) is not in this archive — it is staged by make_report_archive.sh once 33_aggregate_finemap.py has run.*" else sprintf("%s of %s fine-mapped loci with credible sets matched a stepwise-conditional scan; the credible-set count tracks the conditional-signal count (Spearman rho = %.2f), cross-validating the two independence estimates.", fmt(nrow(cs_join)), fmt(sum(!is.na(finemap_loci$n_cs_out))), rho_cs)`
+
 # Cross-ancestry regulation
 
 *Following DevBrain Fig. 2: per-ancestry discovery (2B analog) and
-cross-ancestry effect-size concordance (2C analog). The fine-mapping panels
-(2D credible-set sizes, 2E example locus) are reported separately once the
-SuSHiE runs complete — see `report_finemap`. Cross-ancestry analysis here is
-comparative only (no pooled p-value combination).*
+cross-ancestry effect-size concordance (2C analog). When the enriched
+archive is present (extraction script 35 + aggregated SuSHiE outputs), this
+section additionally renders the lead-slope replication scatter (2C),
+showcase-locus tracks (2E), and credible-set summaries (2D analog); without
+it those panels skip with a note and the gene-level hexbin is the fallback
+concordance view. Cross-ancestry analysis here is comparative only (no
+pooled p-value combination).*
 
 ## Per-ancestry discovery comparison
 
@@ -1126,12 +1489,86 @@ The larger EUR discovery counts track its larger phenotype universe
 (ancestry-specific filtering; Landscape) rather than a larger mapping
 sample — EAS is the bigger stratum.
 
+## Ancestry-specific versus shared eGenes
+
+*DevBrain fig. S4 analog (adapted): composition of the EAS-only, shared,
+and EUR-only combined-layer eGene sets — gene biotype (panel a) and, when
+the constraint table is present, gnomAD LOEUF (panel b).*
+
+```{r fig-ancestry-egene-sets, fig.width=10, fig.height=4.6}
+eg_sets <- bind_rows(
+  tibble(gene_id = setdiff(eg_eas, eg_eur), set = "EAS only"),
+  tibble(gene_id = shared_eg, set = "shared"),
+  tibble(gene_id = setdiff(eg_eur, eg_eas), set = "EUR only")) %>%
+  mutate(set = factor(set, levels = c("EAS only", "shared", "EUR only")))
+# (a) biotype composition
+bt <- eg_sets %>%
+  left_join(gene_map %>% select(gene_id, biotype), by = "gene_id") %>%
+  mutate(biotype = ifelse(is.na(biotype) | biotype == "", "unknown", biotype))
+top_bt <- bt %>% count(biotype, sort = TRUE) %>% slice_head(n = 6) %>%
+  pull(biotype)
+bt_levels <- c(setdiff(top_bt, c("other", "unknown")), "other", "unknown")
+bt <- bt %>% mutate(biotype_c = factor(
+  ifelse(biotype %in% top_bt, biotype, ifelse(biotype == "unknown", "unknown", "other")),
+  levels = intersect(bt_levels, c(unique(biotype), "other", "unknown"))))
+bt_pal <- setNames(c("#0072B2", "#D55E00", "#75A025", "#7B3294", "#FF9400",
+                     "#0279EE", "#8C8C8C", "#ECE9E2")[seq_along(levels(bt$biotype_c))],
+                   levels(bt$biotype_c))
+p_bt <- ggplot(bt, aes(set, fill = biotype_c)) +
+  geom_bar(position = "fill", width = 0.65) +
+  scale_fill_manual(values = bt_pal, name = "biotype") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = NULL, y = "fraction of eGenes") +
+  theme_report()
+# (b) LOEUF by set (needs the constraint table)
+p_loeuf <- NULL
+wil_sets <- NULL
+if (!is.null(constraint)) {
+  d_loeuf <- eg_sets %>%
+    inner_join(constraint %>% select(gene_id, oe_lof), by = "gene_id") %>%
+    filter(!is.na(oe_lof))
+  wil_sets <- tryCatch(
+    wilcox.test(oe_lof ~ (set == "shared"), data = d_loeuf),
+    error = function(e) NULL)
+  p_loeuf <- ggplot(d_loeuf, aes(set, oe_lof, fill = set)) +
+    geom_violin(scale = "width", color = NA, alpha = 0.8) +
+    geom_boxplot(width = 0.12, outlier.size = 0.3, outlier.alpha = 0.3,
+                 fill = "white", alpha = 0.85) +
+    scale_fill_manual(values = c("EAS only" = "#0072B2", "shared" = "#75A025",
+                                 "EUR only" = "#D55E00"), guide = "none") +
+    labs(x = NULL, y = "LOEUF (gnomAD oe/lof)") +
+    theme_report()
+}
+p_sets <- if (is.null(p_loeuf)) p_bt else
+  p_bt + p_loeuf + patchwork::plot_annotation(tag_levels = "a")
+print(p_sets)
+ggsave(file.path(params$fig_dir, "fig_ancestry_egene_sets.png"), p_sets,
+       width = if (is.null(p_loeuf)) 6 else 10, height = 4.6, dpi = 150)
+if (!is.null(constraint) && !is.null(wil_sets)) {
+  med_shared <- median(d_loeuf$oe_lof[d_loeuf$set == "shared"])
+  med_spec <- median(d_loeuf$oe_lof[d_loeuf$set != "shared"])
+  eg_sets_prose <- sprintf(
+    paste0("Shared eGenes are %s constrained than ancestry-specific ones ",
+           "(median LOEUF %.2f shared vs %.2f specific; Wilcoxon p = %s) — ",
+           "genes with cross-ancestry regulatory signal trend toward dosage ",
+           "sensitivity."),
+    if (med_shared < med_spec) "more" else "less",
+    med_shared, med_spec, signif(wil_sets$p.value, 2))
+} else {
+  eg_sets_prose <- "*LOEUF panel skipped: gene_constraint.tsv is not in this archive.*"
+}
+```
+
+`r eg_sets_prose`
+
 ## Cross-ancestry effect-size concordance
 
-*DevBrain Fig. 2C analog: consistency of gene-level signal between the two
-ancestry strata.*
+*DevBrain Fig. 2C analog: consistency of xQTL effects between the two
+ancestry strata. When the cross-ancestry lookup table is present this is
+shown as the DevBrain discovery-vs-replication lead-slope scatter;
+otherwise the gene-level −log10(p) hexbin below is the fallback view.*
 
-```{r fig-concordance, fig.width=8, fig.height=5.5}
+```{r fig-concordance, fig.width=8, fig.height=5.5, eval=is.null(xanc_lookup)}
 ea <- combined %>% filter(ancestry == "EAS") %>% dedup_best() %>%
   select(gene_id, pval_beta_a = pval_beta)
 eu <- combined %>% filter(ancestry == "EUR") %>% dedup_best() %>%
@@ -1157,6 +1594,62 @@ ggsave(file.path(params$fig_dir, "fig_cross_ancestry_concordance.png"), p7,
        width = 7.5, height = 5.5, dpi = 150)
 ```
 
+```{r fig-cross-ancestry-slopes, fig.width=10, fig.height=5.4, eval=!is.null(xanc_lookup)}
+# DevBrain Fig. 2C analog: discovery-ancestry lead slope vs the same
+# (variant, phenotype) pair's slope in the other ancestry (targeted OLS
+# lookup, extraction script 35). Discovery layer = ungrouped phenotypes +
+# the expression primary scan (the fine-mapping input set).
+xa <- xanc_lookup %>%
+  filter(layer == "ungrouped" |
+           (layer == "grouped" & modality == "expression")) %>%
+  filter(!is.na(repl_slope), !is.na(discovery_slope), !is.na(repl_se)) %>%
+  mutate(replicated = !is.na(repl_pval) & repl_pval < 0.05,
+         panel = sprintf("%s-discovered, replicated in %s",
+                         discovery_ancestry, replication_ancestry))
+rho_xa <- xa %>% group_by(panel) %>%
+  summarise(rho = cor(discovery_slope, repl_slope, method = "spearman"),
+            n = n(), .groups = "drop")
+p_xa <- ggplot(xa, aes(discovery_slope, repl_slope)) +
+  geom_abline(slope = 1, intercept = 0, linetype = 3, color = "grey55") +
+  geom_hline(yintercept = 0, linetype = 2, color = "grey75",
+             linewidth = 0.3) +
+  geom_vline(xintercept = 0, linetype = 2, color = "grey75",
+             linewidth = 0.3) +
+  geom_errorbar(aes(ymin = repl_slope - 1.96 * repl_se,
+                    ymax = repl_slope + 1.96 * repl_se, color = replicated),
+                width = 0, alpha = 0.12) +
+  geom_point(aes(color = replicated), size = 1.0, alpha = 0.65, stroke = 0) +
+  geom_smooth(aes(color = replicated), method = "lm", se = FALSE,
+              linewidth = 0.7, formula = y ~ x) +
+  geom_label(data = rho_xa,
+             aes(label = sprintf("Spearman rho = %.2f\nn = %s", rho,
+                                 fmt(n))),
+             x = -Inf, y = Inf, hjust = -0.05, vjust = 1.1, size = 3.4,
+             fill = "white", alpha = 0.85, label.size = 0, color = "black") +
+  facet_wrap(~panel) +
+  scale_color_manual(values = c(`TRUE` = "#D55E00", `FALSE` = "grey65"),
+                     name = "nominal replication\n(p < 0.05)") +
+  labs(x = "discovery-ancestry slope (lead variant)",
+       y = "replication-ancestry slope") +
+  theme_report() + theme(legend.position = "top")
+print(p_xa)
+ggsave(file.path(params$fig_dir, "fig_cross_ancestry_slopes.png"), p_xa,
+       width = 10, height = 5.4, dpi = 150)
+xa_prose <- sprintf(
+  paste0("Each point is an FDR ≤ 5%% discovery-layer lead (variant, ",
+         "phenotype) pair; the y-axis is the same pair's slope in the ",
+         "other ancestry from a targeted lookup (bars: ±1.96·SE). Slopes ",
+         "are on inverse-normal-transformed phenotypes — both strata ",
+         "share the transform, so slopes (not aFC) are the comparable ",
+         "effect scale here, a deliberate deviation from DevBrain's aFC ",
+         "panel. Of %s looked-up pairs, %s (%.1f%%) replicate at nominal ",
+         "p < 0.05 and direction agrees in %.1f%%."),
+  fmt(nrow(xa)), fmt(sum(xa$replicated)), 100 * mean(xa$replicated),
+  100 * mean(sign(xa$discovery_slope) == sign(xa$repl_slope)))
+```
+
+`r if (is.null(xanc_lookup)) "*Slope scatter skipped: cross_ancestry_lookup.tsv.gz is not in this archive — the hexbin above is the fallback view. Run 35_extract_report_extras.py on seadragon and re-archive.*" else xa_prose`
+
 ```{r concordance-tables}
 conc_combined <- cross_ancestry_concordance(
   combined %>% filter(ancestry == "EAS") %>% dedup_best(),
@@ -1178,6 +1671,131 @@ Rank concordance ranges from `r round(min(conc_all$rank_spearman, na.rm = TRUE),
 `r round(max(conc_all$rank_spearman, na.rm = TRUE), 3)` across layers
 (top-100 overlap at or below chance).
 `r if (max(abs(conc_all$rank_spearman), na.rm = TRUE) < 0.1) "The two ancestries' sub-threshold tails do **not** point at the same genes — consistent with sub-threshold ranks being dominated by noise rather than shared weak signal, and arguing against combining the strata for discovery at these sample sizes." else "Layers with non-trivial rank concordance indicate shared sub-threshold signal; see the table."`
+
+## Showcase loci
+
+*DevBrain Fig. 2E analog: regional association tracks for two showcase
+loci — ERAP2 (the literature-recurrent placenta eQTL) and the top shared
+non-expression-driver locus — per ancestry, points colored by LD (r²) to
+the lead variant (diamond), gene models below. Rendered only when the
+per-locus regional scans (locus_*.tsv.gz, extraction script 35) are in the
+archive.*
+
+```{r fig-locus-tracks, fig.width=9, fig.height=7, eval=!is.null(locus_scans)}
+for (loc in unique(locus_scans$locus)) {
+  d <- locus_scans %>% filter(locus == loc)
+  gid <- d$gene_id[1]
+  lead <- d$lead_variant[1]
+  mod <- d$modality[1]
+  chrom <- sub("^chr", "", as.character(d$chrom[1]))
+  win <- range(d$pos, na.rm = TRUE)
+  tracks <- list()
+  for (a in c("EAS", "EUR")) {
+    da <- d %>% filter(ancestry == a)
+    if (nrow(da) == 0) next
+    tracks[[a]] <- ggplot(da, aes(pos / 1e6, -log10(repl_pval))) +
+      geom_point(aes(color = r2_lead), size = 0.7, alpha = 0.8, stroke = 0) +
+      geom_point(data = da %>% filter(variant_id == lead),
+                 shape = 23, fill = "#7B3294", color = "black", size = 2.6,
+                 stroke = 0.4) +
+      scale_color_viridis_c(limits = c(0, 1), na.value = "grey70",
+                            name = expression(r^2 ~ "to lead")) +
+      coord_cartesian(xlim = win / 1e6) +
+      labs(x = NULL, y = sprintf("%s -log10(p)", a)) +
+      theme_report()
+  }
+  # gene-model track (skipped if gene_bodies is unavailable); novel-annotation
+  # IDs without a symbol (HPLRG_*) are dropped from the track for readability
+  p_gene <- NULL
+  if (!is.null(gene_bodies)) {
+    gb <- gene_bodies %>%
+      mutate(chr_bare = sub("^chr", "", chr)) %>%
+      filter(chr_bare == chrom, end >= win[1], start <= win[2]) %>%
+      mutate(label = symd(gene_id)) %>%
+      filter(gene_id == gid | label != gene_id) %>%
+      arrange(desc(gene_id == gid), start) %>%
+      mutate(lane = (row_number() - 1) %% 2)
+    if (nrow(gb) > 0) {
+      if (nrow(gb) > 24) gb$label[gb$gene_id != gid & gb$lane == 1] <- ""
+      p_gene <- ggplot(gb) +
+        geom_rect(aes(xmin = pmax(start, win[1]) / 1e6,
+                      xmax = pmin(end, win[2]) / 1e6,
+                      ymin = lane - 0.28, ymax = lane + 0.28,
+                      fill = gene_id == gid), color = NA) +
+        geom_text(aes(x = (pmax(start, win[1]) + pmin(end, win[2])) / 2e6,
+                      y = lane + 0.42, label = label,
+                      fontface = ifelse(gene_id == gid, "bold", "plain")),
+                  size = 2.3, vjust = 0, check_overlap = TRUE) +
+        scale_fill_manual(values = c(`TRUE` = "#D55E00", `FALSE` = "grey70"),
+                          guide = "none") +
+        coord_cartesian(xlim = win / 1e6, ylim = c(-0.5, 2.1)) +
+        labs(x = sprintf("chr%s position (Mb)", chrom), y = NULL) +
+        theme_report() +
+        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+    }
+  }
+  panels <- c(tracks, list(p_gene))
+  panels <- panels[!sapply(panels, is.null)]
+  p_loc <- patchwork::wrap_plots(panels, ncol = 1, guides = "collect",
+                                 heights = c(rep(2, length(tracks)),
+                                             if (is.null(p_gene)) NULL else 1.2)) +
+    patchwork::plot_annotation(title = sprintf("%s locus (%s)", symd(gid), mod))
+  print(p_loc)
+  ggsave(file.path(params$fig_dir, sprintf("fig_locus_%s.png", loc)), p_loc,
+         width = 9, height = 2.2 * length(panels) + 1, dpi = 150)
+}
+```
+
+`r if (is.null(locus_scans)) "*Skipped: no locus_*.tsv.gz regional scans in this archive — run 35_extract_report_extras.py on seadragon (default loci: ERAP2 plus the top shared non-expression-driver locus) and re-archive.*" else "The lead variant (purple diamond) sits in a TSS-proximal LD block; ancestry differences in the tracks reflect both LD structure and true effect heterogeneity, which the joint SuSHiE fine-mapping quantifies formally."`
+
+## SuSHiE credible-set summary
+
+*DevBrain Fig. 2D analog (conditional): size distribution of purity-pruned
+credible sets and the cross-ancestry effect-correlation estimates, from the
+aggregated SuSHiE outputs. Rendered only when
+finemap_credible_sets.tsv.gz is present; per-locus detail remains in
+report_finemap.*
+
+```{r fig-cs-sizes, fig.width=10, fig.height=4.4, eval=!is.null(finemap_cs)}
+cs <- finemap_cs
+p_size <- ggplot(cs, aes(n_variants)) +
+  geom_histogram(bins = 40, fill = "#0279EE", color = "white",
+                 linewidth = 0.2) +
+  scale_x_log10(labels = scales::comma) +
+  labs(x = "credible-set size (variants, log10)", y = "credible sets") +
+  theme_report()
+corr_cols <- grep("_est_corr$", names(cs), value = TRUE)
+p_corr <- NULL
+if (length(corr_cols) > 0) {
+  cd <- cs %>% select(all_of(corr_cols)) %>%
+    pivot_longer(everything(), names_to = "pair", values_to = "corr",
+                 values_drop_na = TRUE)
+  p_corr <- ggplot(cd, aes(corr)) +
+    geom_histogram(bins = 40, fill = "#75A025", color = "white",
+                   linewidth = 0.2) +
+    geom_vline(xintercept = 1, linetype = 3, color = "grey50",
+               linewidth = 0.4) +
+    labs(x = "SuSHiE cross-ancestry effect correlation", y = "credible sets") +
+    theme_report()
+}
+p_fm <- if (is.null(p_corr)) p_size else
+  p_size + p_corr + patchwork::plot_annotation(tag_levels = "a")
+print(p_fm)
+ggsave(file.path(params$fig_dir, "fig_finemap_cs_summary.png"), p_fm,
+       width = if (is.null(p_corr)) 6 else 10, height = 4.4, dpi = 150)
+cs_prose <- sprintf(
+  paste0("Median credible-set size is %s variants (n = %s credible sets ",
+         "across %s loci)%s."),
+  fmt(median(finemap_cs$n_variants, na.rm = TRUE)), fmt(nrow(finemap_cs)),
+  fmt(length(unique(finemap_cs$phenotype_id))),
+  if (length(corr_cols) > 0)
+    sprintf(paste0("; the cross-ancestry effect-correlation distribution ",
+                   "centers at %.2f, quantifying how shared the causal ",
+                   "effects are between strata"),
+            median(unlist(finemap_cs[, corr_cols]), na.rm = TRUE)) else "")
+```
+
+`r if (is.null(finemap_cs)) "*Skipped: finemap_credible_sets.tsv.gz is not in this archive — it is staged by make_report_archive.sh once 33_aggregate_finemap.py has run.*" else cs_prose`
 
 # Discovery catalog
 
@@ -1304,7 +1922,7 @@ if (nrow(catalog) > 0) {
 ```
 
 The gene-level catalog is the **combined cross-modality layer**
-(`r fmt(n_eg["EAS"])` EAS / `r fmt(n_eg["EUR"])` EUR eGenes; full table in
+(`r n_eg["EAS"]` EAS / `r n_eg["EUR"]` EUR eGenes; full table in
 `tables/egene_catalog_combined.tsv`); the per-modality grouped breakdown is
 in `tables/egene_catalog_by_modality.tsv`, and the phenotype-level discovery
 set (ungrouped + expression; the SuSHiE fine-mapping input) is in
@@ -1520,11 +2138,11 @@ enrich_highlight <- if (exists("enrich_results") && length(enrich_results) > 0) 
 } else NA_character_
 ```
 
-**The discovery landscape: `r fmt(sum(n_xp))` FDR ≤ 5% phenotype-level
-associations** (`r fmt(n_xp["EAS"])` EAS / `r fmt(n_xp["EUR"])` EUR, ungrouped +
+**The discovery landscape: `r sum(n_xp)` FDR ≤ 5% phenotype-level
+associations** (`r n_xp["EAS"]` EAS / `r n_xp["EUR"]` EUR, ungrouped +
 expression layers) implicating `r n_xp_genes["EAS"]` / `r n_xp_genes["EUR"]`
 unique genes, with the gene-level combined-layer catalog at
-**`r fmt(n_eg["EAS"])` EAS and `r fmt(n_eg["EUR"])` EUR eGenes**
+**`r n_eg["EAS"]` EAS and `r n_eg["EUR"]` EUR eGenes**
 (n ≈ `r n_samp["EAS"]`/`r n_samp["EUR"]`, MAF ≥
 0.01 + MAC ≥ 5, genome-wide permutation calibration). Strongest per
 ancestry:
@@ -1728,8 +2346,13 @@ only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should
   FDR-significant phenotype-level discovery set (ungrouped layer; expression
   from the primary scan), with fastVEP/cCRE/open-chromatin enrichment of
   high-PIP variants (scripts 31–34).
-- Pipeline scripts: this repository (`05_qtl_mapping/`, scripts 19–34 +
+- Pipeline scripts: this repository (`05_qtl_mapping/`, scripts 19–35 +
   `compute_qvalues.R`; genotype pooling in `01_genotype_imputation/`).
+- Report extras: targeted cross-ancestry/cross-modality lookups, showcase
+  locus scans, lead-variant annotations, and gnomAD constraint tables
+  (`05_qtl_mapping/35_extract_report_extras.py`), staged into the archive
+  under `data/extras/` by `make_report_archive.sh`; report panels that use
+  them render only when the corresponding file is present.
 - Report code: `report_placenta_xqtl.Rmd` + `xqtl_report_functions.R`;
   figures in `figures/`, tables in `tables/`.
 - Gene symbols: `gene_map.tsv` regenerated in full from the normalized GTF

@@ -309,10 +309,28 @@ and are reused by `27_run_tensorqtl.sh`:
   echo "Done." )
 ```
 
-## Step 5: top tables + report-input archive
+## Step 5: top tables + report extras + report-input archive
 
 ```bash
 python3 "$SCRIPTS_DIR/29_make_top_tables.py" --results-dir "$RESULTS_DIR"
+
+# Targeted extractions for the DevBrain-style report panels (cross-ancestry
+# and cross-modality lead-pair lookups, showcase-locus scans, lead-variant
+# annotations, gnomAD constraint, PC-AiR PC staging). Single node, < 1 h.
+# The mapping parquets are lead-only (cis.map_cis), so these panels need
+# targeted re-computation rather than file copies.
+python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
+  --results-dir "$RESULTS_DIR" --qtl-dir "$QTL_DIR" \
+  --ccre $CRE_DIR/GRCh38-cCREs.PLS.bed:PLS $CRE_DIR/GRCh38-cCREs.pELS.bed:pELS \
+         $CRE_DIR/GRCh38-cCREs.dELS.bed:dELS $CRE_DIR/GRCh38-cCREs.CTCF-bound.bed:CTCF_bound \
+  --placenta-ocr $ENCODE_DIR/placenta_dnase_merged_bothstrands.bed \
+  --pcair-dir "$OUTPUT_BASE/genotype_qc"   # dir holding *_pcair_pcs.tsv
+# then annotate the emitted VCF with fastVEP and re-run section 4:
+#   fastvep annotate -i "$RESULTS_DIR/report_extras/lead_variants_fastvep_input.vcf" \
+#     -o "$RESULTS_DIR/report_extras/lead_variants_fastvep.txt" --output-format tab \
+#     --gff3 "$REF_DIR/Homo_sapiens.GRCh38.115.gff3" --fasta "$GENOME_DIR/Homo_sapiens.GRCh38.dna.primary_assembly.fa"
+#   python3 "$SCRIPTS_DIR/35_extract_report_extras.py" --results-dir "$RESULTS_DIR" \
+#     --qtl-dir "$QTL_DIR" --only annotate --fastvep-output "$RESULTS_DIR/report_extras/lead_variants_fastvep.txt" ...
 
 cd "$REPO_DIR"
 CONFIG="$CONFIG" bash ../reports/make_report_archive.sh

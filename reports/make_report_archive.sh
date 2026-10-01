@@ -72,7 +72,7 @@ rm -rf "$STAGING"
 mkdir -p "$STAGING/data/results" "$STAGING/data/qc/qtl_inputs" \
          "$STAGING/data/qc/hcp_optimization" \
          "$STAGING/data/qc/hcp_optimization_modalities" \
-         "$STAGING/data/qc/genotype_pcs"
+         "$STAGING/data/qc/genotype_pcs" "$STAGING/data/extras"
 
 MISSING_CORE=()
 MISSING_OTHER=()
@@ -131,6 +131,39 @@ for ANC in $ANCESTRIES; do
     copy_req "$RESULTS_DIR/${ANC}_combined_cisqtl_independent_top.tsv" \
              "$STAGING/data/results" other "independent:${ANC}_combined"
 done
+
+# ---- 1.5 Report extras (35_extract_report_extras.py outputs) --------------
+# Targeted extractions powering the DevBrain-style figure panels: cross-
+# ancestry and cross-modality lead-pair lookups, showcase-locus regional
+# scans, lead-variant annotations, gnomAD constraint, PC-AiR PCs. All
+# non-core: the report renders without them (panels skip with a note).
+EXTRAS_DIR="$RESULTS_DIR/report_extras"
+if [ -d "$EXTRAS_DIR" ]; then
+    n_extras=0
+    for f in "$EXTRAS_DIR"/*.tsv "$EXTRAS_DIR"/*.tsv.gz; do
+        [ -f "$f" ] || continue
+        cp "$f" "$STAGING/data/extras/"
+        n_extras=$((n_extras + 1))
+    done
+    echo "  extras: staged $n_extras files from report_extras/"
+    for label in cross_ancestry_lookup.tsv.gz cross_modality_lookup.tsv.gz \
+                 lead_variant_annotations.tsv.gz gene_constraint.tsv; do
+        copy_req "$EXTRAS_DIR/$label" "$STAGING/data/extras" other \
+                 "extras/$label (run 35_extract_report_extras.py)"
+    done
+    # SuSHiE aggregation summaries (module 33) — power the conditional
+    # fine-mapping panels; present only after the fine-mapping run completes.
+    copy_req "$RESULTS_DIR/finemap/aggregated/finemap_locus_summary.tsv" \
+             "$STAGING/data/extras" other \
+             "extras/finemap_locus_summary.tsv (run 33_aggregate_finemap.py)"
+    copy_req "$RESULTS_DIR/finemap/aggregated/finemap_credible_sets.tsv.gz" \
+             "$STAGING/data/extras" other \
+             "extras/finemap_credible_sets.tsv.gz (run 33_aggregate_finemap.py)"
+else
+    echo "  extras: $EXTRAS_DIR not found — run 35_extract_report_extras.py"
+    echo "          (DevBrain-style panels will be skipped in the report)"
+    MISSING_OTHER+=("extras/ (35_extract_report_extras.py not run)")
+fi
 
 # ---- 2. QC inputs ---------------------------------------------------------
 for ANC in $ANCESTRIES; do
