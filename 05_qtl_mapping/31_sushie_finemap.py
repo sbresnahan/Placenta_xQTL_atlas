@@ -9,11 +9,12 @@ covariates, and intersected genotypes used in the tensorQTL mapping.
 Subcommands
 -----------
 prepare-loci
-    Build the per-modality locus list: union of significant phenotypes
-    across ancestries (from {ANC}_{MOD}_cisqtl_top.tsv), the exact tested
-    variant window per phenotype (from {ANC}_{MOD}_cisqtl.parquet), and a
-    per-locus L (max causal signals) derived from the conditionally
-    independent signal counts ({ANC}_{MOD}_cisqtl_independent_top.tsv).
+    Build the per-modality locus list from phenotype-level TensorQTL
+    discoveries: expression uses {ANC}_expression_cisqtl_top.tsv; all other
+    modalities use {ANC}_{MOD}_ungrouped_cisqtl_top.tsv. The exact tested
+    cis window is reconstructed from the phenotype BED, and per-locus L
+    (max causal signals) is derived from the matching conditionally
+    independent result set.
 
 run
     Fine-map a shard of loci. For each locus, writes per-ancestry
@@ -66,12 +67,18 @@ def _parse_variant_positions(variant_ids: pd.Series):
 def prepare_loci(args):
     mod = args.modality
     anc_list = args.ancestries
-    print(f"[prepare-loci] modality={mod} ancestries={anc_list}")
+    # Expression already has one phenotype per gene in the primary scan.
+    # For all multi-phenotype modalities, fine-map every phenotype that passes
+    # phenotype-level FDR in the ungrouped TensorQTL analysis rather than only
+    # the single phenotype selected to represent each grouped gene-level test.
+    result_label = mod if mod == "expression" else f"{mod}_ungrouped"
+    print(f"[prepare-loci] modality={mod} ancestries={anc_list} "
+          f"discovery={result_label}")
 
     # --- union of significant phenotypes ---
     sig = {}
     for anc in anc_list:
-        top_path = Path(args.results_dir) / f"{anc}_{mod}_cisqtl_top.tsv"
+        top_path = Path(args.results_dir) / f"{anc}_{result_label}_cisqtl_top.tsv"
         if not top_path.exists():
             print(f"  WARNING: missing {top_path.name}; skipping {anc}")
             continue
@@ -87,7 +94,7 @@ def prepare_loci(args):
     # --- independent signal counts -> per-locus L ---
     n_signals = {}
     for anc in anc_list:
-        ind_path = Path(args.results_dir) / f"{anc}_{mod}_cisqtl_independent_top.tsv"
+        ind_path = Path(args.results_dir) / f"{anc}_{result_label}_cisqtl_independent_top.tsv"
         if not ind_path.exists():
             continue
         ind = pd.read_csv(ind_path, sep="\t", usecols=["phenotype_id", "rank"])
