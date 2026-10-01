@@ -321,8 +321,11 @@ python3 "$SCRIPTS_DIR/29_make_top_tables.py" --results-dir "$RESULTS_DIR"
 # targeted re-computation rather than file copies.
 python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
   --results-dir "$RESULTS_DIR" --qtl-dir "$QTL_DIR" \
-  --ccre $CRE_DIR/GRCh38-cCREs.PLS.bed:PLS $CRE_DIR/GRCh38-cCREs.pELS.bed:pELS \
-         $CRE_DIR/GRCh38-cCREs.dELS.bed:dELS $CRE_DIR/GRCh38-cCREs.CTCF-bound.bed:CTCF_bound \
+  --ccre $CRE_DIR/GRCh38-cCREs.CA.bed:CA $CRE_DIR/GRCh38-cCREs.CA-CTCF.bed:CA_CTCF \
+         $CRE_DIR/GRCh38-cCREs.CA-H3K4me3.bed:CA_H3K4me3 $CRE_DIR/GRCh38-cCREs.CA-TF.bed:CA_TF \
+         $CRE_DIR/GRCh38-cCREs.CTCF-bound.bed:CTCF_bound $CRE_DIR/GRCh38-cCREs.dELS.bed:dELS \
+         $CRE_DIR/GRCh38-cCREs.pELS.bed:pELS $CRE_DIR/GRCh38-cCREs.PLS.bed:PLS \
+         $CRE_DIR/GRCh38-cCREs.TF.bed:TF \
   --placenta-ocr $ENCODE_DIR/placenta_dnase_merged_bothstrands.bed \
   --pcair-dir "$OUTPUT_BASE/pcair_pcs"   # staging dir of symlinked
   # *_pcair_pcs.tsv — PC_AiR.R writes per-cohort under
