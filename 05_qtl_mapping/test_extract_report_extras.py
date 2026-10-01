@@ -156,3 +156,18 @@ def test_strip_ver():
     out = mod35._strip_ver(s)
     assert list(out) == ["ENSG00000164307", "ENSG00000164308", "HPLRG_0001"]
     assert mod35._unver("ENSG00000164307.13") == "ENSG00000164307"
+
+
+def test_bed_pheno_id():
+    """Combined-layer compound ids must resolve to per-modality BED ids."""
+    f = mod35._bed_pheno_id
+    # ungrouped: '{modality}__{gene_id}'
+    assert f("expression__ENSG00000164308.17", "expression",
+             "ENSG00000164308.17") == "ENSG00000164308.17"
+    # grouped: '{modality}__{group_id}__{phenotype_id}'
+    assert f("isoform_expression__ENSG00000164308.17__ENST00000437043.8",
+             "isoform_expression",
+             "ENSG00000164308.17") == "ENST00000437043.8"
+    # bare BED ids (per-modality tables) pass through unchanged
+    assert f("ENST00000437043.8", "isoform_expression") == "ENST00000437043.8"
+    assert f("chr5:100:200:clu_1", "splicing") == "chr5:100:200:clu_1"

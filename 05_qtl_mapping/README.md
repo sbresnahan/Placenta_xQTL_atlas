@@ -319,6 +319,10 @@ python3 "$SCRIPTS_DIR/29_make_top_tables.py" --results-dir "$RESULTS_DIR"
 # annotations, gnomAD constraint, PC-AiR PC staging). Single node, < 1 h.
 # The mapping parquets are lead-only (cis.map_cis), so these panels need
 # targeted re-computation rather than file copies.
+# Compute nodes have no internet access: pre-download the gnomAD constraint
+# file (~30 MB) on a login node into the script's cache path first:
+#   wget -q https://storage.googleapis.com/gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz \
+#     -O "$RESULTS_DIR/report_extras/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz"
 python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
   --results-dir "$RESULTS_DIR" --qtl-dir "$QTL_DIR" \
   --ccre $CRE_DIR/GRCh38-cCREs.CA.bed:CA $CRE_DIR/GRCh38-cCREs.CA-CTCF.bed:CA_CTCF \

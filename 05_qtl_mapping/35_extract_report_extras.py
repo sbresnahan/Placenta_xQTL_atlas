@@ -56,6 +56,20 @@ def _unver(gid):
     """Strip the Ensembl version suffix from a single id."""
     return re.sub(r"\.\d+$", "", str(gid))
 
+
+def _bed_pheno_id(pheno_id, mod, group_id=None):
+    """Map a combined-layer compound phenotype id to the id used in the
+    per-modality BED. Combined tables encode phenotype_id as
+    '{modality}__{phenotype_id}' (ungrouped) or
+    '{modality}__{group_id}__{phenotype_id}' (grouped); per-modality top
+    tables already carry the bare BED id and pass through unchanged."""
+    pid = str(pheno_id)
+    if pid.startswith(f"{mod}__"):
+        pid = pid[len(mod) + 2:]
+        if group_id is not None and pid.startswith(f"{group_id}__"):
+            pid = pid[len(str(group_id)) + 2:]
+    return pid
+
 MODALITIES = ["expression", "isoforms", "isoform_expression", "splicing",
               "intron_retention", "alt_TSS", "alt_polyA", "RNA_editing",
               "stability"]
@@ -475,7 +489,8 @@ def locus_scans(results_dir, qtl_dir, ancestries, q_max, out_dir,
                 continue
             row = row.sort_values("qval").iloc[0]
             mod = row["modality"] if "modality" in row.index else "expression"
-            pheno_id = row["phenotype_id"]
+            pheno_id = _bed_pheno_id(row["phenotype_id"], mod,
+                                     row.get("group_id"))
             lead_var = row["variant_id"]
             geno, variant_df = load_ancestry_genotypes(qtl_dir, anc)
             sc = TargetScanner(qtl_dir, anc, mod, geno)
