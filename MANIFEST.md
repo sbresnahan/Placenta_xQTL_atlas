@@ -164,11 +164,11 @@ fine-mapping, and annotation enrichment.
 | 26_harmonize_modalities.py | Harmonize modality BEDs to the final array_id sample set |
 | 27_run_tensorqtl.py | tensorQTL cis mapping for one ancestry x modality |
 | 27_run_tensorqtl.sh | Job wrapper for 27 |
-| 28_submit_modalities.sh | Submit all ancestry x modality tensorQTL jobs |
+| 28_submit_modalities.sh | Submit all ancestry x modality tensorQTL jobs (grouped / ungrouped / combined layers; stepwise independent scans via INDEPENDENT=1) |
 | compute_qvalues.R | Storey q-values via the R qvalue package (file bridge) |
-| 29_make_top_tables.py | Top-association tables from parquet outputs |
+| 29_make_top_tables.py | Top-association tables from parquet outputs (all layers: grouped, ungrouped, combined, plus independent scans) |
 | 30_combine_modalities.py | Combined cross-modality BED (namespaced phenotype IDs, gene groups) |
-| 31_sushie_finemap.py | SuSHiE locus preparation and per-shard fine-mapping |
+| 31_sushie_finemap.py | SuSHiE locus preparation (ungrouped phenotype-level discovery layer; cis windows reconstructed from phenotype BEDs) and per-shard fine-mapping |
 | 32_submit_sushie.sh | SuSHiE LSF driver (locus prep, sharding, array submission) |
 | 32a_run_sushie_shard.sh | Per-shard SuSHiE job |
 | 33_aggregate_finemap.py | Aggregate per-locus SuSHiE outputs (PIPs, credible sets, locus summary) |

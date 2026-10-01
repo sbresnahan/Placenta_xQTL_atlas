@@ -133,8 +133,11 @@ load_layer <- function(data_dir, layer,
                  ancestry = factor(ancestry, levels = ancestries))
 }
 
-# Load independent (stepwise) outputs; empty-aware. Returns 0-row tibble if
-# all are empty.
+# Load independent (stepwise) outputs; empty-aware. Loads both the grouped
+# layer ({ANC}_{MOD}_cisqtl_independent_top.tsv, incl. expression and
+# combined) and the ungrouped phenotype-level layer
+# ({ANC}_{MOD}_ungrouped_cisqtl_independent_top.tsv, 8 non-expression
+# modalities); rows carry a `layer` tag. Returns 0-row tibble if all empty.
 load_independent <- function(data_dir,
                              ancestries = c("EAS", "EUR"),
                              modalities = c("expression", setdiff(MODALITY_LEVELS, "expression"), "combined")) {
@@ -145,7 +148,17 @@ load_independent <- function(data_dir,
     df <- read_result_tsv(path)
     if (nrow(df) == 0) next
     df$ancestry <- anc; df$modality <- mod
-    out[[paste(anc, mod)]] <- df
+    df$layer <- if (mod == "combined") "combined" else "grouped"
+    out[[paste(anc, mod, "grouped")]] <- df
+  }
+  for (anc in ancestries) for (mod in setdiff(MODALITY_LEVELS, "expression")) {
+    path <- file.path(data_dir, sprintf("%s_%s_ungrouped_cisqtl_independent_top.tsv", anc, mod))
+    if (!file.exists(path)) next
+    df <- read_result_tsv(path)
+    if (nrow(df) == 0) next
+    df$ancestry <- anc; df$modality <- mod
+    df$layer <- "ungrouped"
+    out[[paste(anc, mod, "ungrouped")]] <- df
   }
   bind_rows(out)
 }
@@ -180,7 +193,7 @@ driver_modality <- function(combined_df) {
     mutate(driver_modality = factor(modality_from_id, levels = MODALITY_LEVELS))
 }
 
-# ---- Gene-body-relative variant position (PANTRY Fig 2d style) --------------
+# ---- Gene-body-relative variant position (DevBrain Fig 1E analog) -----------
 # Requires gene bodies (Ensembl: chrom/start/end/strand). Strand-aware:
 # 0 = gene start (5' end), 1 = gene end (3' end); <0 upstream, >1 downstream.
 # NOTE: phenotype BED coordinates are NOT usable for this (expression uses TSS

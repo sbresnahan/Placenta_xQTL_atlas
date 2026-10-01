@@ -267,17 +267,18 @@ MAF_THRESHOLD=0.01 INDEPENDENT=1 \
   MODALITIES="expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability" \
   bash 28_submit_modalities.sh
 
-# Pass 2: ungrouped layer (per-phenotype lead variants), 8 non-expression modalities
-MAF_THRESHOLD=0.01 GROUPED=0 bash 28_submit_modalities.sh
+# Pass 2: ungrouped layer (per-phenotype lead variants) + stepwise
+# (independent) scan, 8 non-expression modalities
+MAF_THRESHOLD=0.01 GROUPED=0 INDEPENDENT=1 bash 28_submit_modalities.sh
 
 # Pass 3: combined cross-modality arm (long queue)
 MAF_THRESHOLD=0.01 INDEPENDENT=1 MODALITIES=combined \
   QUEUE=long WALLTIME=48:00 bash 28_submit_modalities.sh
 ```
 
-Completion check (expect 36 primary + 20 independent parquets: per
-ancestry, 9 grouped + 8 ungrouped + 1 combined primary, 9
-grouped-independent + 1 combined-independent):
+Completion check (expect 36 primary + 36 independent parquets: per
+ancestry, 9 grouped + 8 ungrouped + 1 combined primary, and 9 grouped +
+8 ungrouped + 1 combined independent):
 
 ```bash
 ls "$RESULTS_DIR"/*_cisqtl.parquet | wc -l
@@ -324,11 +325,16 @@ Review the MANIFEST.txt it prints: no core inputs may be missing.
 
 ## Step 6: cross-ancestry fine-mapping (SuSHiE)
 
-SuSHiE joint multi-ancestry fine-mapping of every grouped-layer lead
-phenotype at FDR <= 5%, using in-sample LD from the intersected pgens
+SuSHiE joint multi-ancestry fine-mapping of every FDR <= 5% lead
+phenotype from the **phenotype-level discovery layer** — the ungrouped
+scan for the 8 non-expression modalities, and the primary (per-gene)
+scan for expression — using in-sample LD from the intersected pgens
 (individual-level mode — LD and genotypes are guaranteed consistent).
-Each locus is fine-mapped jointly across all ancestries in `ANCESTRIES`,
-regardless of which ancestry reached significance. Outputs: 95% credible
+cis windows are reconstructed from the phenotype BEDs (ungrouped
+parquets do not carry window bounds), and contig names are stripped of
+any `chr` prefix for SuSHiE `--chrom`. Each locus is fine-mapped jointly
+across all ancestries in `ANCESTRIES`, regardless of which ancestry
+reached significance. Outputs: 95% credible
 sets, per-variant PIPs, per-ancestry effect weights, and cross-ancestry
 effect-size correlations (rho) per credible set.
 
@@ -376,8 +382,9 @@ TEST=1 bash 32_submit_sushie.sh
 ```
 
 Builds per-modality locus lists (`$RESULTS_DIR/finemap/loci/{MOD}_loci.tsv`:
-union of q <= 0.05 lead phenotypes across ancestries, tested windows from
-the mapping parquets, L = min(10, max(5, n_independent + 2))), shards them
+union of q <= 0.05 lead phenotypes across ancestries from the
+phenotype-level discovery layer, tested windows reconstructed from the
+phenotype BEDs, L = min(10, max(5, n_independent + 2))), shards them
 (50 loci/shard), and submits ONE pilot shard. Check `$LOG_DIR/sushie_*.out`
 for per-locus wall time to size `SHARD_SIZE` / `WALLTIME` for the full run
 (fixture rate ~ 17 s per 300-variant locus).
