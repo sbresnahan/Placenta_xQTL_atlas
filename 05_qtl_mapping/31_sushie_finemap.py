@@ -248,6 +248,12 @@ def run_shard(args):
     for _, locus in loci.iterrows():
         mod, ph = locus["modality"], locus["phenotype_id"]
         trait = locus["_safe"]
+        # BED-derived locus lists can carry UCSC-style chromosome labels
+        # (e.g. "chr2"), but SuShiE --chrom requires an integer chromosome.
+        chrom_arg = re.sub(r"^chr", "", str(locus["chrom"]), flags=re.IGNORECASE)
+        if not chrom_arg.isdigit():
+            raise ValueError(
+                f"Unsupported chromosome label for SuShiE --chrom: {locus['chrom']!r}")
         t0 = time.time()
         rec = {"modality": mod, "phenotype_id": ph, "chrom": locus["chrom"],
                "start": locus["start"], "end": locus["end"], "L": locus["L"],
@@ -307,7 +313,7 @@ def run_shard(args):
                 "bash", "-lc",
                 "module load plink && "
                 f"plink2 --pfile {pgen_prefix} "
-                f"--chr {locus['chrom']} "
+                f"--chr {chrom_arg} "
                 f"--from-bp {int(locus['start'])} "
                 f"--to-bp {int(locus['end'])} "
                 "--export vcf bgz vcf-dosage=DS-force "
@@ -340,7 +346,7 @@ def run_shard(args):
         if all(c is not None for c in
                [cov_cache.get((a, mod)) for a in anc_used]):
             cmd += ["--covar"] + covar_paths
-        cmd += ["--chrom", str(locus["chrom"]),
+        cmd += ["--chrom", chrom_arg,
                 "--start", str(int(locus["start"])),
                 "--end", str(int(locus["end"])),
                 "--L", str(int(locus["L"])),
