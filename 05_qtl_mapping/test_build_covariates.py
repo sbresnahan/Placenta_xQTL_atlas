@@ -71,9 +71,8 @@ def write_fixtures(root, maternal_corr_with=None, hcp3_eq_pc1=False):
     pcs = pd.DataFrame({'sample_id': SAMPLES, **pc_data})
     pcs.to_csv(os.path.join(pc_dir, 'EAS_genotype_pcs.tsv'), sep='\t', index=False)
 
-    # metadata: maternal_age is the demographic covariate (advisor-directed
-    # swap, Oct 2026). A legacy GA column is included to assert it is IGNORED
-    # (the swap must fully remove GA from the covariate pool).
+    # Keep maternal_age and GA in the fixture to assert that neither enters
+    # the mapping covariate table.
     meta = pd.DataFrame({
         'array_id': SAMPLES,
         'sex': ['M', 'F'] * (N // 2),
@@ -142,18 +141,13 @@ qtl2, pc2 = write_fixtures(tmp2)
 r = run_25(qtl2, pc2, ['--exclude-covariates', 'ct_Maternal'])
 check('no-cap run exits 0', r.returncode == 0, r.stderr[-500:])
 covs2 = read_covs(qtl2)
-# 15 HCP + 5 PC + sex + maternal_age + 6 ct (8 minus Syncytiotrophoblast
-# reference minus ct_Maternal) = 28; nothing should be cap-dropped
-check('no cap: all 28 covariates retained', covs2.shape[0] == 28,
+# 15 HCP + 5 PC + sex + 6 ct (8 minus Syncytiotrophoblast reference
+# minus ct_Maternal) = 27; neither age covariate is included.
+check('no cap: all 27 covariates retained', covs2.shape[0] == 27,
       f'got {covs2.shape[0]}')
 check('no cap: HCP_15 retained', 'HCP_15' in covs2.index)
-# Covariate swap: maternal_age present and mean-centered; legacy GA ignored
-check('maternal_age present', 'maternal_age' in covs2.index)
-check('maternal_age mean-centered',
-      'maternal_age' in covs2.index and
-      abs(float(covs2.loc['maternal_age'].mean())) < 1e-8,
-      f"mean={float(covs2.loc['maternal_age'].mean()) if 'maternal_age' in covs2.index else 'dropped'}")
-check('legacy GA column ignored (swap complete)', 'GA' not in covs2.index)
+check('maternal_age ignored', 'maternal_age' not in covs2.index)
+check('GA ignored', 'GA' not in covs2.index)
 
 # ---------- test 3: explicit cap still works ----------
 r = run_25(qtl2, pc2, ['--exclude-covariates', 'ct_Maternal',
@@ -194,7 +188,7 @@ check('k=0: no HCP covariates',
 check('k=0: bare name Maternal matched ct_Maternal',
       'ct_Maternal' not in covs6.index)
 check('k=0: fixed covariates present',
-      {'PC1', 'sex', 'maternal_age', 'ct_Hofbauer'}.issubset(set(covs6.index)))
+      {'PC1', 'sex', 'ct_Hofbauer'}.issubset(set(covs6.index)))
 
 # ---------- test 7: technical replicates are averaged, not kept-first ----------
 # Duplicate array_id rows in metadata (same individual processed in two
@@ -236,17 +230,8 @@ check('discordant sex exclusion logged',
       'discordant sex' in r.stdout and 'excluding' in r.stdout,
       r.stdout[-800:])
 
-# maternal_age: averaged then centered. Centering uses the 26-row metadata
-# mean (both duplicates included), then replicate columns average:
-# expected = (ma_a + ma_b)/2 - mean(all 26 maternal_age values)
-ma_all = pd.concat([meta7['maternal_age']])
-m_all = ma_all.mean()
-expected_ma = (ma_a + ma_b) / 2 - m_all
-check('maternal_age averaged across replicates',
-      'maternal_age' in covs7.index and
-      np.isclose(covs7.loc['maternal_age', 'S00'], expected_ma),
-      f"got {covs7.loc['maternal_age', 'S00'] if 'maternal_age' in covs7.index else 'dropped'}, "
-      f"expected {expected_ma}")
+check('age covariates ignored with replicate metadata',
+      'maternal_age' not in covs7.index and 'GA' not in covs7.index)
 
 # sex: concordant replicate (S00, M/M) averages to exactly 0
 check('concordant sex replicate exact',
@@ -272,56 +257,19 @@ if 'ct_Endothelial' in covs7.index:
 else:
     check('cell-type replicate averaged (ct_Endothelial pruned — skipped)', True)
 
-# ---------- test 8: maternal_age swap semantics ----------
-# 8a. Demographic tier intact: an HCP correlated with maternal_age loses the
-#     pruning pair (maternal_age is protected at TIER_DEMOGRAPHIC).
+# ---------- test 8: age columns are never mapping covariates ----------
+# Missing maternal_age values must not trigger imputation or affect assembly.
 tmp8 = tempfile.mkdtemp()
 qtl8, pc8 = write_fixtures(tmp8)
-hcp8 = pd.read_csv(os.path.join(qtl8, 'EAS_hcp_factors_harmonized.tsv'),
-                   sep='\t', index_col=0)
 meta8 = pd.read_csv(os.path.join(qtl8, 'EAS_metadata.tsv'), sep='\t')
-ma8 = meta8.set_index('array_id').loc[SAMPLES, 'maternal_age']
-hcp8.loc['HCP_5'] = 3 * ma8.to_numpy() + 1e-4 * rng.standard_normal(N)
-hcp8.to_csv(os.path.join(qtl8, 'EAS_hcp_factors_harmonized.tsv'), sep='\t')
+meta8.loc[meta8['array_id'].isin(['S03', 'S17']), 'maternal_age'] = np.nan
+meta8.to_csv(os.path.join(qtl8, 'EAS_metadata.tsv'), sep='\t', index=False)
 r = run_25(qtl8, pc8, ['--exclude-covariates', 'ct_Maternal'])
-check('8a run exits 0', r.returncode == 0, r.stderr[-500:])
+check('age-ignore run exits 0', r.returncode == 0, r.stderr[-500:])
 covs8 = read_covs(qtl8)
-pruning8 = read_pruning(qtl8)
-check('8a: maternal_age (demographic tier) kept over correlated HCP_5',
-      'maternal_age' in covs8.index and 'HCP_5' not in covs8.index)
-h5 = pruning8[pruning8['covariate'] == 'HCP_5']
-check('8a: HCP_5 drop recorded as correlated with maternal_age',
-      len(h5) == 1 and h5.iloc[0]['reason'] == 'correlated'
-      and h5.iloc[0]['correlated_with'] == 'maternal_age')
-
-# 8b. Missing maternal_age values are mean-imputed (0 after centering).
-tmp8b = tempfile.mkdtemp()
-qtl8b, pc8b = write_fixtures(tmp8b)
-meta8b = pd.read_csv(os.path.join(qtl8b, 'EAS_metadata.tsv'), sep='\t')
-na_samples = ['S03', 'S17']
-meta8b.loc[meta8b['array_id'].isin(na_samples), 'maternal_age'] = np.nan
-meta8b.to_csv(os.path.join(qtl8b, 'EAS_metadata.tsv'), sep='\t', index=False)
-r = run_25(qtl8b, pc8b, ['--exclude-covariates', 'ct_Maternal'])
-check('8b run exits 0', r.returncode == 0, r.stderr[-500:])
-covs8b = read_covs(qtl8b)
-check('8b: missing maternal_age imputed to 0 (mean after centering)',
-      'maternal_age' in covs8b.index and
-      all(np.isclose(covs8b.loc['maternal_age', s], 0.0) for s in na_samples),
-      f"got {covs8b.loc['maternal_age', na_samples].tolist() if 'maternal_age' in covs8b.index else 'dropped'}")
-check('8b: imputation logged',
-      'Imputed' in r.stdout and 'maternal_age' in r.stdout)
-
-# 8c. No maternal_age column: warn + skip, run still succeeds.
-tmp8c = tempfile.mkdtemp()
-qtl8c, pc8c = write_fixtures(tmp8c)
-meta8c = pd.read_csv(os.path.join(qtl8c, 'EAS_metadata.tsv'), sep='\t')
-meta8c = meta8c.drop(columns=['maternal_age'])
-meta8c.to_csv(os.path.join(qtl8c, 'EAS_metadata.tsv'), sep='\t', index=False)
-r = run_25(qtl8c, pc8c, ['--exclude-covariates', 'ct_Maternal'])
-check('8c run exits 0 without maternal_age', r.returncode == 0, r.stderr[-500:])
-covs8c = read_covs(qtl8c)
-check('8c: maternal_age absent from output', 'maternal_age' not in covs8c.index)
-check('8c: warn logged', 'maternal_age column not found' in r.stdout)
+check('maternal_age absent from output', 'maternal_age' not in covs8.index)
+check('GA absent from output', 'GA' not in covs8.index)
+check('no maternal_age assembly/imputation log', 'maternal_age' not in r.stdout)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

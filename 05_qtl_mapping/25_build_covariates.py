@@ -11,8 +11,6 @@ Combines:
   - Genotype PCs selected by 24_outlier_exclusion.py ({ANC}_selected_pcs.txt;
     now the first 5 PCs, GTEx convention)
   - Sex (M→0, F→1) from metadata
-  - Maternal age (mean-centered) from metadata (replaces gestational age,
-    advisor-directed swap, Oct 2026)
   - Cohort fixed effects (k-1 indicator dummies, reference = largest cohort;
     added Oct 2026 with the within-cohort INT schema)
   - Cell-type proportions (collapsed types, arcsinh-transformed,
@@ -26,7 +24,7 @@ Optimization (in order):
      Catches degenerate HCP factors from singular HCP runs.
   2. Correlation pruning: iteratively drop the lower-priority member of the
      max-|r| pair while any |r| > --cor-threshold. Keep priority:
-     sex/maternal_age > genotype PCs > cell types > HCP factors; within a block,
+     sex/cohort indicators > genotype PCs > cell types > HCP factors; within a block,
      lower index kept. Because HCPs always lose to fixed covariates, the
      surviving fixed set is k-independent across the 25a grid; correlated
      HCPs are dropped, so effective k can fall below nominal k (recorded
@@ -73,7 +71,7 @@ import matplotlib.pyplot as plt
 plt.rcParams['font.family'] = ['Liberation Sans', 'Arimo', 'DejaVu Sans']
 
 # Priority tiers for correlation pruning (lower = higher priority)
-TIER_DEMOGRAPHIC = 0   # sex, maternal_age
+TIER_DEMOGRAPHIC = 0   # sex, cohort indicators
 TIER_GENO_PC = 1       # genotype PCs
 TIER_CELLTYPE = 2      # cell-type proportions
 TIER_HCP = 3           # HCP factors
@@ -247,7 +245,7 @@ def main():
             priority[name] = (TIER_GENO_PC, int(name[2:]))
         covariate_blocks.append(pcs_df)
 
-        # ---- 3. Sex and maternal_age from metadata ----
+        # ---- 3. Sex from metadata ----
         meta_path = os.path.join(args.qtl_dir, f"{anc}_metadata.tsv")
         if not os.path.exists(meta_path):
             print(f"  ERROR: metadata not found: {meta_path}")
@@ -269,22 +267,6 @@ def main():
         priority['sex'] = (TIER_DEMOGRAPHIC, 0)
         covariate_blocks.append(sex_df)
 
-        # maternal_age: mean-centered (advisor-directed swap: GA removed, no
-        # sensitivity arm; the chr1 sensitivity machinery in 25a remains
-        # available if a GA comparison is wanted later)
-        if 'maternal_age' in meta_df.columns:
-            ma = meta_df['maternal_age'].astype(float)
-            ma_centered = ma - ma.mean()
-            ma_df = pd.DataFrame({'maternal_age': ma_centered}).T
-            print(f"  maternal_age: mean={ma.mean():.2f} years, range=[{ma.min():.1f}, {ma.max():.1f}]")
-            if ma_centered.isna().any():
-                ma_df = ma_df.fillna(0)
-                print(f"    Imputed {int(ma_centered.isna().sum())} missing with mean (0 after centering)")
-            priority['maternal_age'] = (TIER_DEMOGRAPHIC, 1)
-            covariate_blocks.append(ma_df)
-        else:
-            print(f"  WARN: maternal_age column not found in metadata, skipping")
-
         # ppBMI: REMOVED per study decision (GTEx-conventions round) — not
         # included in the covariate pool.
 
@@ -296,7 +278,7 @@ def main():
         # the cohort dummies absorb any remaining between-cohort mean
         # structure and prevent between-cohort allele-frequency differences
         # from contributing to the SNP effect. Demographic tier: protected
-        # from correlation pruning like sex/maternal_age (if a cohort dummy is nearly
+        # from correlation pruning like sex (if a cohort dummy is nearly
         # collinear with a genotype PC, the PC is pruned instead and the
         # condition-number diagnostic guards the design).
         if 'cohort' in meta_df.columns:
@@ -312,7 +294,7 @@ def main():
                     name = f"cohort_{co}"
                     dummy = (cohorts == co).astype(float)
                     covariate_blocks.append(pd.DataFrame({name: dummy}).T)
-                    priority[name] = (TIER_DEMOGRAPHIC, 2 + i)
+                    priority[name] = (TIER_DEMOGRAPHIC, 1 + i)
             else:
                 print(f"  Single-cohort stratum ({cohort_counts.index[0]}); "
                       f"no cohort covariates added")
@@ -372,7 +354,7 @@ def main():
             # individual processed in two cohort batches). Average them —
             # the same convention as 26_harmonize_modalities.py for the
             # phenotype BEDs. All blocks are numeric by construction (HCPs,
-            # PCs, sex coded 0/1, mean-centered maternal_age, arcsinh cell types).
+            # PCs, sex coded 0/1, cohort indicators, arcsinh cell types).
             if block.columns.duplicated().any():
                 dup_cols = block.columns[block.columns.duplicated(keep=False)].unique().tolist()
                 print(f"  NOTE: block {bi}: averaging {len(dup_cols)} technical-replicate "
