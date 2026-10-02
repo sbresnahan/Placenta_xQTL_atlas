@@ -3,9 +3,9 @@
 pool_modalities_within_ancestry.py — Pool pre-normalization RNA phenotype BEDs
 across cohorts within each ancestry stratum, for the non-expression modalities.
 
-This is the unified pooler for roadmap step 4 (cross-cohort ComBat + pooling).
+This is the unified pooler for roadmap step 4 (cross-cohort pooling + normalization).
 Gene-level expression is handled separately by the HCP pipeline
-(pool_expression_within_ancestry.py + combat_normalize_hcp.R); this script
+(pool_expression_within_ancestry.py + normalize_expression_hcp.R); this script
 covers the remaining modalities:
 
     isoforms, isoform_expression, alt_TSS, alt_polyA, splicing,
@@ -30,7 +30,7 @@ Two input conventions are supported:
      passes it through (no re-pooling), parsing cohort labels from the
      {cohort}_ prefix.
 
-Cohort labels (needed downstream for ComBat batch) are resolved by:
+Cohort labels (needed downstream for within-cohort INT) are resolved by:
   - namespaced IDs  -> split on first underscore
   - original IDs    -> join to the ancestry map on sample_id
 
@@ -77,9 +77,11 @@ BED_META_COLS = ["#chr", "start", "end", "phenotype_id"]
 
 # Modalities whose unnorm BEDs are produced per-cohort and pooled here by
 # phenotype_id intersection (original sample IDs).
+# isoform_expression_counts is the QU-corrected counts BED written per cohort
+# by tximport_counts.R — the TMM->VST input for isoform_expression.
 INTERSECTION_MODALITIES = {
-    "isoforms", "isoform_expression", "alt_TSS", "alt_polyA", "RNA_editing",
-    "stability",
+    "isoforms", "isoform_expression", "isoform_expression_counts", "alt_TSS",
+    "alt_polyA", "RNA_editing", "stability",
 }
 
 # Modalities already pooled by harmonize_within_ancestry.py (namespaced IDs).
@@ -336,7 +338,7 @@ def pool_prepooled_stratum(ancestry, ancestry_samples, pre_pooled_dir,
 
     No re-pooling is performed; the BED is copied to the output dir with the
     canonical naming convention. Cohort labels are parsed from the namespaced
-    sample IDs and written to a sidecar TSV for the ComBat step.
+    sample IDs and written to a sidecar TSV for the normalization step.
     """
     print(f"\n{'='*60}")
     print(f"Ancestry stratum: {ancestry}")
@@ -372,7 +374,7 @@ def pool_prepooled_stratum(ancestry, ancestry_samples, pre_pooled_dir,
     df.to_csv(out_path, sep="\t", index=False, float_format="%g")
     print(f"  Output: {out_path}")
 
-    # Write cohort-label sidecar (consumed by the ComBat R script)
+    # Write cohort-label sidecar (consumed by the normalization R script)
     label_path = os.path.join(output_dir, f"{ancestry}_{modality}_cohort_labels.tsv")
     pd.DataFrame([
         {"sample_id": s, "cohort": cohort_labels[s]}

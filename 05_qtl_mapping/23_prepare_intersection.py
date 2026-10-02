@@ -255,8 +255,9 @@ def main():
         print(f"{'='*60}")
         
         # ---- Load all sample sets ----
-        # 1. Expression BED
-        expr_bed = os.path.join(hcp_dir, f"{anc}_combat_int_expression.bed")
+        # 1. Expression BED (TMM->VST schema: {anc}_vst_expression.bed; the
+        #    pre-VST within-cohort-INT schema wrote {anc}_int_expression.bed)
+        expr_bed = os.path.join(hcp_dir, f"{anc}_vst_expression.bed")
         if not os.path.exists(expr_bed):
             print(f"  ERROR: expression BED not found: {expr_bed}")
             continue

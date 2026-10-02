@@ -2,15 +2,15 @@
 #
 # hcp_from_matrix.R — HCP-only estimation from an already-normalized BED
 #
-# Companion to combat_normalize_hcp.R for the per-modality HCP optimization
+# Companion to normalize_expression_hcp.R for the per-modality HCP optimization
 # module (25b). The input BED is a FINAL harmonized mapping matrix
-# ({ANC}_{MOD}_harmonized.bed: QN + INT + ComBat already applied, array_id
+# ({ANC}_{MOD}_harmonized.bed: QN + within-cohort INT already applied, array_id
 # sample columns), so this script runs ONLY the HCP step of the
-# combat_normalize_hcp.R schema — no QN/INT, no outlier removal, no ComBat.
+# normalize_expression_hcp.R schema — no QN/INT, no outlier removal.
 # Phenotype values are therefore byte-identical to the matrix tensorQTL maps,
 # which isolates the HCP effect when comparing against the previous round.
 #
-# Steps (mirrors combat_normalize_hcp.R lines ~398-520):
+# Steps (mirrors normalize_expression_hcp.R HCP section):
 #   1. Load BED -> samples x phenotypes matrix
 #   2. Optional deterministic phenotype subsample (--max-phenotypes; bounds
 #      HCP cost for the ~150k-phenotype combined arm. HCP factors live in
@@ -21,8 +21,12 @@
 #      and subset to BED samples
 #   4. QC prep: median-impute NAs, drop zero-variance metrics, iteratively
 #      drop |r| > --qc-cor-threshold metrics (avoids singular Z'Z)
+#   4b. Optional (--cohort-dummies): append k-1 cohort dummies (metadata
+#      'cohort' column, array_id level, reference = largest cohort) to Z —
+#      the PsychENCODE/isoTWAS known-covariate design for the VST modalities,
+#      matching normalize_expression_hcp.R --mode vst
 #   5. Standardize both matrices (center + unit sum of squares)
-#   6. Rhcpp::hcp(Z = QC, Y = phenotype matrix, k, lambda1-3)
+#   6. Rhcpp::hcp(Z = QC [+ cohort dummies], Y = phenotype matrix, k, lambda1-3)
 #   7. Write hidden covariates W as a tensorQTL covariate table
 #      (covariate x sample, array_id columns — no harmonization needed)
 #
@@ -46,7 +50,7 @@ suppressPackageStartupMessages({
 # ---- CLI ----
 option_list <- list(
   make_option("--bed", type = "character",
-              help = "Harmonized phenotype BED (QN+INT+ComBat'd, array_id columns)"),
+              help = "Harmonized phenotype BED (QN + within-cohort INT'd, array_id columns)"),
   make_option("--qc-metrics", type = "character",
               help = "Pooled PicardTools QC metrics TSV (rnaseq_id rows)"),
   make_option("--metadata", type = "character",
@@ -65,6 +69,11 @@ option_list <- list(
               help = "Deterministic phenotype subsample cap for HCP estimation; 0 disables (default: 40000)"),
   make_option("--seed", type = "integer", default = 1,
               help = "Seed for the phenotype subsample (default: 1)"),
+  make_option("--cohort-dummies", action = "store_true", default = FALSE,
+              help = paste("Append k-1 cohort dummies (metadata 'cohort' column,",
+                           "reference = largest cohort) to the HCP known-covariate",
+                           "matrix Z. For VST-scale modalities (PsychENCODE/isoTWAS",
+                           "schema); INT-scale modalities do not need them.")),
   make_option("--output", type = "character",
               help = "Output HCP factors TSV path (covariate x sample)")
 )
@@ -81,6 +90,7 @@ opt_lambda3          <- opt[["lambda3"]]
 opt_qc_cor_threshold <- opt[["qc-cor-threshold"]]
 opt_max_phenotypes   <- opt[["max-phenotypes"]]
 opt_seed             <- opt[["seed"]]
+opt_cohort_dummies   <- opt[["cohort-dummies"]]
 opt_output           <- opt[["output"]]
 
 if (is.null(opt_bed) || is.null(opt_qc_metrics) || is.null(opt_metadata) ||
@@ -241,6 +251,43 @@ if (ncol(qc_subset) > 1) {
   }
 }
 cat(sprintf("  QC metrics after pruning: %d\n", ncol(qc_subset)))
+
+# ---- Optional: append k-1 cohort dummies as known covariates ----
+# PsychENCODE/isoTWAS design for the VST-scale modalities: cohort is a known
+# covariate in HCP estimation (matches normalize_expression_hcp.R --mode
+# vst). Appended AFTER the QC correlation pruning so the dummies are
+# protected from it. Cohort must be constant within array_id (replicates are
+# averaged to array_id above).
+if (opt_cohort_dummies) {
+  if (!"cohort" %in% colnames(meta)) {
+    stop("--cohort-dummies requires a 'cohort' column in --metadata; got: ",
+         paste(colnames(meta), collapse = ", "))
+  }
+  co_check <- tapply(meta$cohort, meta$array_id, function(x) length(unique(x)))
+  if (any(co_check > 1)) {
+    stop("cohort is not constant within array_id for: ",
+         paste(utils::head(names(co_check)[co_check > 1], 10), collapse = ", "))
+  }
+  co_map <- tapply(meta$cohort, meta$array_id, function(x) x[1])
+  co_vec <- co_map[expr_samples]
+  if (any(is.na(co_vec))) {
+    stop("No cohort label for array_id(s): ",
+         paste(utils::head(expr_samples[is.na(co_vec)], 10), collapse = ", "))
+  }
+  co <- factor(co_vec)
+  ref_cohort <- names(sort(table(co), decreasing = TRUE))[1]
+  co <- relevel(co, ref = ref_cohort)
+  if (nlevels(co) > 1) {
+    dummies <- model.matrix(~ co)[, -1, drop = FALSE]
+    colnames(dummies) <- sub("^co", "cohort_", colnames(dummies))
+    rownames(dummies) <- expr_samples
+    cat(sprintf("  HCP known covariates: + %d cohort dummies (reference: %s)\n",
+                ncol(dummies), ref_cohort))
+    qc_subset <- cbind(qc_subset, dummies)
+  } else {
+    cat("  HCP known covariates: single-cohort stratum — no cohort dummies added\n")
+  }
+}
 
 # ---- Standardize + HCP ----
 qc_std <- standardize_for_hcp(qc_subset)

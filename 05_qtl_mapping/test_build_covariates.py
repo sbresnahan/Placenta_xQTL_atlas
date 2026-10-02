@@ -71,10 +71,13 @@ def write_fixtures(root, maternal_corr_with=None, hcp3_eq_pc1=False):
     pcs = pd.DataFrame({'sample_id': SAMPLES, **pc_data})
     pcs.to_csv(os.path.join(pc_dir, 'EAS_genotype_pcs.tsv'), sep='\t', index=False)
 
-    # metadata
+    # metadata: maternal_age is the demographic covariate (advisor-directed
+    # swap, Oct 2026). A legacy GA column is included to assert it is IGNORED
+    # (the swap must fully remove GA from the covariate pool).
     meta = pd.DataFrame({
         'array_id': SAMPLES,
         'sex': ['M', 'F'] * (N // 2),
+        'maternal_age': 18 + 22 * rng.random(N),
         'GA': 28 + 12 * rng.random(N),
     })
     meta.to_csv(os.path.join(qtl_dir, 'EAS_metadata.tsv'), sep='\t', index=False)
@@ -139,11 +142,18 @@ qtl2, pc2 = write_fixtures(tmp2)
 r = run_25(qtl2, pc2, ['--exclude-covariates', 'ct_Maternal'])
 check('no-cap run exits 0', r.returncode == 0, r.stderr[-500:])
 covs2 = read_covs(qtl2)
-# 15 HCP + 5 PC + sex + GA + 6 ct (8 minus Syncytiotrophoblast reference
-# minus ct_Maternal) = 28; nothing should be cap-dropped
+# 15 HCP + 5 PC + sex + maternal_age + 6 ct (8 minus Syncytiotrophoblast
+# reference minus ct_Maternal) = 28; nothing should be cap-dropped
 check('no cap: all 28 covariates retained', covs2.shape[0] == 28,
       f'got {covs2.shape[0]}')
 check('no cap: HCP_15 retained', 'HCP_15' in covs2.index)
+# Covariate swap: maternal_age present and mean-centered; legacy GA ignored
+check('maternal_age present', 'maternal_age' in covs2.index)
+check('maternal_age mean-centered',
+      'maternal_age' in covs2.index and
+      abs(float(covs2.loc['maternal_age'].mean())) < 1e-8,
+      f"mean={float(covs2.loc['maternal_age'].mean()) if 'maternal_age' in covs2.index else 'dropped'}")
+check('legacy GA column ignored (swap complete)', 'GA' not in covs2.index)
 
 # ---------- test 3: explicit cap still works ----------
 r = run_25(qtl2, pc2, ['--exclude-covariates', 'ct_Maternal',
@@ -184,7 +194,7 @@ check('k=0: no HCP covariates',
 check('k=0: bare name Maternal matched ct_Maternal',
       'ct_Maternal' not in covs6.index)
 check('k=0: fixed covariates present',
-      {'PC1', 'sex', 'GA', 'ct_Hofbauer'}.issubset(set(covs6.index)))
+      {'PC1', 'sex', 'maternal_age', 'ct_Hofbauer'}.issubset(set(covs6.index)))
 
 # ---------- test 7: technical replicates are averaged, not kept-first ----------
 # Duplicate array_id rows in metadata (same individual processed in two
@@ -193,14 +203,14 @@ check('k=0: fixed covariates present',
 tmp7 = tempfile.mkdtemp()
 qtl7, pc7 = write_fixtures(tmp7)
 
-# S00: concordant sex (M/M), distinct GA values; S02: DISCORDANT sex (M/F)
+# S00: concordant sex (M/M), distinct maternal_age values; S02: DISCORDANT sex (M/F)
 meta7 = pd.read_csv(os.path.join(qtl7, 'EAS_metadata.tsv'), sep='\t')
-ga_a = float(meta7.loc[meta7['array_id'] == 'S00', 'GA'].iloc[0])
-ga_b = ga_a + 4.0  # distinct second measurement
+ma_a = float(meta7.loc[meta7['array_id'] == 'S00', 'maternal_age'].iloc[0])
+ma_b = ma_a + 4.0  # distinct second measurement
 dup_rows = pd.DataFrame([
-    {'array_id': 'S00', 'sex': 'M', 'GA': ga_b},                    # concordant
+    {'array_id': 'S00', 'sex': 'M', 'maternal_age': ma_b},                    # concordant
     {'array_id': 'S02', 'sex': 'F' if meta7.loc[meta7['array_id'] == 'S02', 'sex'].iloc[0] == 'M' else 'M',
-     'GA': float(meta7.loc[meta7['array_id'] == 'S02', 'GA'].iloc[0])},  # discordant
+     'maternal_age': float(meta7.loc[meta7['array_id'] == 'S02', 'maternal_age'].iloc[0])},  # discordant
 ])
 meta7 = pd.concat([meta7, dup_rows], ignore_index=True)
 meta7.to_csv(os.path.join(qtl7, 'EAS_metadata.tsv'), sep='\t', index=False)
@@ -226,17 +236,17 @@ check('discordant sex exclusion logged',
       'discordant sex' in r.stdout and 'excluding' in r.stdout,
       r.stdout[-800:])
 
-# GA: averaged then centered. Centering uses the 26-row metadata mean
-# (both duplicates included), then replicate columns average:
-# expected = (ga_a + ga_b)/2 - mean(all 26 GA values)
-ga_all = pd.concat([meta7['GA']])
-m_all = ga_all.mean()
-expected_ga = (ga_a + ga_b) / 2 - m_all
-check('GA averaged across replicates',
-      'GA' in covs7.index and
-      np.isclose(covs7.loc['GA', 'S00'], expected_ga),
-      f"got {covs7.loc['GA', 'S00'] if 'GA' in covs7.index else 'dropped'}, "
-      f"expected {expected_ga}")
+# maternal_age: averaged then centered. Centering uses the 26-row metadata
+# mean (both duplicates included), then replicate columns average:
+# expected = (ma_a + ma_b)/2 - mean(all 26 maternal_age values)
+ma_all = pd.concat([meta7['maternal_age']])
+m_all = ma_all.mean()
+expected_ma = (ma_a + ma_b) / 2 - m_all
+check('maternal_age averaged across replicates',
+      'maternal_age' in covs7.index and
+      np.isclose(covs7.loc['maternal_age', 'S00'], expected_ma),
+      f"got {covs7.loc['maternal_age', 'S00'] if 'maternal_age' in covs7.index else 'dropped'}, "
+      f"expected {expected_ma}")
 
 # sex: concordant replicate (S00, M/M) averages to exactly 0
 check('concordant sex replicate exact',
@@ -261,6 +271,57 @@ if 'ct_Endothelial' in covs7.index:
           f"got {covs7.loc['ct_Endothelial', 'S00']}, expected {expected_ct}")
 else:
     check('cell-type replicate averaged (ct_Endothelial pruned — skipped)', True)
+
+# ---------- test 8: maternal_age swap semantics ----------
+# 8a. Demographic tier intact: an HCP correlated with maternal_age loses the
+#     pruning pair (maternal_age is protected at TIER_DEMOGRAPHIC).
+tmp8 = tempfile.mkdtemp()
+qtl8, pc8 = write_fixtures(tmp8)
+hcp8 = pd.read_csv(os.path.join(qtl8, 'EAS_hcp_factors_harmonized.tsv'),
+                   sep='\t', index_col=0)
+meta8 = pd.read_csv(os.path.join(qtl8, 'EAS_metadata.tsv'), sep='\t')
+ma8 = meta8.set_index('array_id').loc[SAMPLES, 'maternal_age']
+hcp8.loc['HCP_5'] = 3 * ma8.to_numpy() + 1e-4 * rng.standard_normal(N)
+hcp8.to_csv(os.path.join(qtl8, 'EAS_hcp_factors_harmonized.tsv'), sep='\t')
+r = run_25(qtl8, pc8, ['--exclude-covariates', 'ct_Maternal'])
+check('8a run exits 0', r.returncode == 0, r.stderr[-500:])
+covs8 = read_covs(qtl8)
+pruning8 = read_pruning(qtl8)
+check('8a: maternal_age (demographic tier) kept over correlated HCP_5',
+      'maternal_age' in covs8.index and 'HCP_5' not in covs8.index)
+h5 = pruning8[pruning8['covariate'] == 'HCP_5']
+check('8a: HCP_5 drop recorded as correlated with maternal_age',
+      len(h5) == 1 and h5.iloc[0]['reason'] == 'correlated'
+      and h5.iloc[0]['correlated_with'] == 'maternal_age')
+
+# 8b. Missing maternal_age values are mean-imputed (0 after centering).
+tmp8b = tempfile.mkdtemp()
+qtl8b, pc8b = write_fixtures(tmp8b)
+meta8b = pd.read_csv(os.path.join(qtl8b, 'EAS_metadata.tsv'), sep='\t')
+na_samples = ['S03', 'S17']
+meta8b.loc[meta8b['array_id'].isin(na_samples), 'maternal_age'] = np.nan
+meta8b.to_csv(os.path.join(qtl8b, 'EAS_metadata.tsv'), sep='\t', index=False)
+r = run_25(qtl8b, pc8b, ['--exclude-covariates', 'ct_Maternal'])
+check('8b run exits 0', r.returncode == 0, r.stderr[-500:])
+covs8b = read_covs(qtl8b)
+check('8b: missing maternal_age imputed to 0 (mean after centering)',
+      'maternal_age' in covs8b.index and
+      all(np.isclose(covs8b.loc['maternal_age', s], 0.0) for s in na_samples),
+      f"got {covs8b.loc['maternal_age', na_samples].tolist() if 'maternal_age' in covs8b.index else 'dropped'}")
+check('8b: imputation logged',
+      'Imputed' in r.stdout and 'maternal_age' in r.stdout)
+
+# 8c. No maternal_age column: warn + skip, run still succeeds.
+tmp8c = tempfile.mkdtemp()
+qtl8c, pc8c = write_fixtures(tmp8c)
+meta8c = pd.read_csv(os.path.join(qtl8c, 'EAS_metadata.tsv'), sep='\t')
+meta8c = meta8c.drop(columns=['maternal_age'])
+meta8c.to_csv(os.path.join(qtl8c, 'EAS_metadata.tsv'), sep='\t', index=False)
+r = run_25(qtl8c, pc8c, ['--exclude-covariates', 'ct_Maternal'])
+check('8c run exits 0 without maternal_age', r.returncode == 0, r.stderr[-500:])
+covs8c = read_covs(qtl8c)
+check('8c: maternal_age absent from output', 'maternal_age' not in covs8c.index)
+check('8c: warn logged', 'maternal_age column not found' in r.stdout)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

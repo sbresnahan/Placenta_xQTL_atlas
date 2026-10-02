@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-peer_factors.py — Extract latent factors from ComBat+INT expression using PEER
+peer_factors.py — Extract latent factors from normalized expression using PEER
 
-Replaces the HCP step in combat_normalize_hcp.R when Rhcpp fails (singular
+Replaces the HCP step in normalize_expression_hcp.R when Rhcpp fails (singular
 matrices, zero-variance factors). PEER is the standard latent factor method
 for eQTL studies (used by GTEx). Falls back to SVD if the peer package is
 not installed.
 
-Reads the ComBat+INT expression BED written by combat_normalize_hcp.R,
+Reads the normalized expression BED written by normalize_expression_hcp.R,
 extracts K latent factors, and writes them in the same tensorQTL covariate
 format as the HCP script ({ANC}_hcp_factors.tsv).
 
 Usage:
   python3 peer_factors.py \
-      --expression EUR_combat_int_expression.bed \
+      --expression EUR_vst_expression.bed \
       --output-dir hcp_factors/ \
       --ancestry EUR \
       --k 15
@@ -76,7 +76,7 @@ def run_svd(mat, k):
 def main():
     parser = argparse.ArgumentParser(description="PEER latent factor extraction")
     parser.add_argument("--expression", required=True,
-                        help="ComBat+INT expression BED file")
+                        help="Normalized expression BED file")
     parser.add_argument("--output-dir", required=True,
                         help="Output directory (same as HCP output)")
     parser.add_argument("--ancestry", required=True,

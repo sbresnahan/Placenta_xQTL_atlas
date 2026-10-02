@@ -137,19 +137,19 @@ fine-mapping, and annotation enrichment.
 | File | Purpose |
 |------|---------|
 | collapse_replicates.py | Collapse technical-replicate runs to one column per individual |
-| 19_hcp_factors.sh | Expression pooling, Picard QC, QN + INT + ComBat, HCP factors |
+| 19_hcp_factors.sh | Expression pooling, Picard QC, QN + within-cohort INT, HCP factors |
 | 19a_picard_sharded.sh | Sharded Picard CollectRnaSeqMetrics |
 | 19b_fix_missing_metrics.sh | Retry failed Picard shards |
 | picard_qc.py, fix_missing_metrics.py | Picard helpers (also refFlat generation) |
 | check_hcp_chunks.sh | QC for Picard shard completeness |
 | pool_expression_within_ancestry.py | Expression pooling implementation |
 | pool_modalities_within_ancestry.py | Modality pooling implementation |
-| combat_normalize_hcp.R | QN + INT + ComBat + HCP estimation (expression) |
-| combat_normalize_modalities.R | QN + INT + ComBat for non-expression modalities |
+| normalize_expression_hcp.R | Pooled QN + within-cohort INT + HCP estimation (expression) |
+| normalize_modalities.R | Pooled QN + within-cohort INT for non-expression modalities |
 | hcp_from_matrix.R | HCP estimation from a matrix (used by 25b) |
 | hcp_diagnostic.R, hcp_diagnostic2.R | HCP diagnostic plots |
 | peer_factors.py | PEER-style factor helper |
-| 20_combat_modalities.sh | Pool + QN + INT + ComBat for non-expression modalities |
+| 20_normalize_modalities.sh | Pool + QN + within-cohort INT for non-expression modalities |
 | 21_install_tensorqtl.sh | Build the tensorqtl conda env and install R qvalue |
 | 22_genotype_pca.sh | Per-ancestry genotype PCA (plink2) |
 | genotype_pca_format.py | Reshape plink2 eigenvec/eigenval to covariate TSV + scree input |
@@ -167,6 +167,11 @@ fine-mapping, and annotation enrichment.
 | 28_submit_modalities.sh | Submit all ancestry x modality tensorQTL jobs (grouped / ungrouped / combined layers; stepwise independent scans via INDEPENDENT=1) |
 | compute_qvalues.R | Storey q-values via the R qvalue package (file bridge) |
 | 29_make_top_tables.py | Top-association tables from parquet outputs (all layers: grouped, ungrouped, combined, plus independent scans) |
+| 29b_expression_diagnostics.py | Expression diagnostic inputs: sample PCs, per-cohort residual variances, k=15 vs k=45 lead-stability table |
+| 29c_choi_comparison.py | Choi 2024 comparison: gene-top / exact-lead tables, significant-set retention, common-test catalog |
+| 29d_cohort_heterogeneity.py | Per-cohort cis scans for pooled-significant pairs; inverse-variance meta-analysis (Cochran Q, I²); genotype x cohort interaction scan |
+| 29e_plot_diagnostics.R | Diagnostic figures + baseline-vs-rerun validation summary |
+| 29f_run_diagnostics.sh | LSF driver chaining 29b-29e per ancestry (gate before fine-mapping) |
 | 30_combine_modalities.py | Combined cross-modality BED (namespaced phenotype IDs, gene groups) |
 | 31_sushie_finemap.py | SuSHiE locus preparation (ungrouped phenotype-level discovery layer; cis windows reconstructed from phenotype BEDs) and per-shard fine-mapping |
 | 32_submit_sushie.sh | SuSHiE LSF driver (locus prep, sharding, array submission) |
@@ -174,7 +179,7 @@ fine-mapping, and annotation enrichment.
 | 33_aggregate_finemap.py | Aggregate per-locus SuSHiE outputs (PIPs, credible sets, locus summary) |
 | 34_pip_annotation_enrichment.py | fastVEP consequence + cCRE/OCR enrichment of high-PIP variants |
 | 35_extract_report_extras.py | Targeted extractions for DevBrain-style report panels (cross-ancestry/cross-modality lead lookups, showcase-locus scans, lead-variant annotations, gnomAD constraint, PC-AiR staging) and QC summaries (before/after phenotype values/PCAs, genotype stage counts, Picard metrics) |
-| test_build_covariates.py, test_collapse_replicates.py, test_combat_modalities.py, test_hcp.py, test_optimize_hcp.py, test_optimize_hcp_modalities.py, test_extract_report_extras.py | Unit tests |
+| test_build_covariates.py, test_collapse_replicates.py, test_normalize_modalities.py, test_hcp.py, test_optimize_hcp.py, test_optimize_hcp_modalities.py, test_extract_report_extras.py | Unit tests |
 | test_sushie_finemap.py | End-to-end fine-mapping fixture (locus prep, SuSHiE recovery, aggregation, enrichment, report render) |
 
 ## reports/

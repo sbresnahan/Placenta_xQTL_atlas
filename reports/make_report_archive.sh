@@ -22,7 +22,7 @@
 #   ANCESTRIES   — space-separated labels (default: "EAS EUR")
 #   ANCESTRY_MAP — default: ${OUTPUT_BASE%/*}/pooled/pooled_sample_ancestry_RNAseq.tsv
 #   METADATA_TSV — default: ${OUTPUT_BASE%/*}/pooled/placenta_QTL_cohort_metadata.tsv
-#   COMBAT_DIR   — default: ${OUTPUT_BASE}/combat_modalities/combat_int
+#   NORM_DIR     — default: ${OUTPUT_BASE}/normalized_modalities/int
 #   GENO_QC_DIR  — module-01 report dir with *_rsq_pass_per_chr.tsv and
 #                  pooled_{sample_counts,variant_summary,variants_per_chr}.tsv
 #                  (default: unset — genotype-QC tables not staged)
@@ -247,7 +247,7 @@ fi
 # ---- 3.5 Sample-attrition log (raw FASTQ -> QTL mapping) -------------------
 # Per-sample matrix + stage-level summary covering every stage where samples
 # can drop, in chronological pipeline order: raw FASTQ staging, Salmon
-# quant, QU correction, assembled BEDs, ComBat (per ancestry x modality;
+# quant, QU correction, assembled BEDs, within-cohort INT (per ancestry x modality;
 # runs upstream of the genotype intersection on one run per individual),
 # genotype intersection + outlier exclusion ({ANC}_metadata.tsv from
 # scripts 23+24), the final covariate mapping set, and QTL inputs (per
@@ -258,22 +258,22 @@ fi
 # never a failed archive.
 ATTRITION_DIR="$STAGING/data/qc/attrition"
 mkdir -p "$ATTRITION_DIR"
-COMBAT_DIR="${COMBAT_DIR:-${OUTPUT_BASE}/combat_modalities/combat_int}"
+NORM_DIR="${NORM_DIR:-${OUTPUT_BASE}/normalized_modalities/int}"
 ANCESTRY_MAP="${ANCESTRY_MAP:-${OUTPUT_BASE%/*}/pooled/pooled_sample_ancestry_RNAseq.tsv}"
 METADATA_TSV="${METADATA_TSV:-${OUTPUT_BASE%/*}/pooled/placenta_QTL_cohort_metadata.tsv}"
 
 echo "  ANCESTRY_MAP: $ANCESTRY_MAP"
 echo "  METADATA_TSV: $METADATA_TSV"
-echo "  COMBAT_DIR:   $COMBAT_DIR"
+echo "  NORM_DIR:     $NORM_DIR"
 
 if ! python3 - "$ATTRITION_DIR" "$CONFIG" "$OUTPUT_BASE" "$QTL_DIR" \
-         "$COMBAT_DIR" "$ANCESTRY_MAP" "$METADATA_TSV" "$ANCESTRIES" <<'PYEOF'
+         "$NORM_DIR" "$ANCESTRY_MAP" "$METADATA_TSV" "$ANCESTRIES" <<'PYEOF'
 import csv
 import gzip
 import os
 import re
 import sys
-attrition_dir, config_path, output_base, qtl_dir, combat_dir, \
+attrition_dir, config_path, output_base, qtl_dir, norm_dir, \
     ancestry_map, metadata_tsv, ancestries = sys.argv[1:9]
 ancestries = ancestries.split()
 MODS = ["expression", "isoforms", "isoform_expression", "splicing",
@@ -455,8 +455,8 @@ else:
 meta_rnaseq = {}    # ANC -> set of rnaseq_id (post-intersection, post-outlier)
 meta_array = {}     # ANC -> {rnaseq_id: array_id}
 cov_cols = {}       # ANC -> set of array_id (final mapping set)
-combat_cols = {}    # (ANC, mod) -> set of array_id
-combat_imputed = [] # modalities whose combat stage was carried forward
+int_cols = {}       # (ANC, mod) -> set of array_id
+int_imputed = []    # modalities whose INT stage was carried forward
 qtl_cols = {}       # (ANC, mod) -> set of array_id
 for anc in ancestries:
     mrows = read_table(os.path.join(qtl_dir, f"{anc}_metadata.tsv"))
@@ -471,20 +471,25 @@ for anc in ancestries:
         warn(f"{anc}_covariates.tsv not found")
     cov_cols[anc] = set(cc or [])
     for mod in MODS:
-        for pat, skip in ((f"{anc}_{mod}_combat_int.bed", 4),
-                          (f"{anc}_{mod}_combat_int.bed.gz", 4)):
-            p = os.path.join(combat_dir, pat)
+        # TMM->VST schema: isoform_expression normalizes to _vst.bed; the
+        # ratio modalities keep _int.bed. Try VST first (canonical when both
+        # exist in a transitional tree).
+        for pat, skip in ((f"{anc}_{mod}_vst.bed", 4),
+                          (f"{anc}_{mod}_vst.bed.gz", 4),
+                          (f"{anc}_{mod}_int.bed", 4),
+                          (f"{anc}_{mod}_int.bed.gz", 4)):
+            p = os.path.join(norm_dir, pat)
             if os.path.isfile(p):
-                combat_cols[(anc, mod)] = set(tsv_columns(p, skip) or [])
+                int_cols[(anc, mod)] = set(tsv_columns(p, skip) or [])
                 break
         else:
-            # Combat BED missing (e.g. intermediates cleaned): carry forward
+            # Normalized BED missing (e.g. intermediates cleaned): carry forward
             # the previous stage — assume every post-intersection/post-outlier
-            # sample was retained through ComBat (stated in the report).
-            warn(f"combat BED not found: {anc}_{mod} — carrying forward "
+            # sample was retained through normalization (stated in the report).
+            warn(f"normalized BED not found: {anc}_{mod} — carrying forward "
                  f"metadata-stage membership")
-            combat_cols[(anc, mod)] = set(meta_array.get(anc, {}).values())
-            combat_imputed.append(f"{anc}_{mod}")
+            int_cols[(anc, mod)] = set(meta_array.get(anc, {}).values())
+            int_imputed.append(f"{anc}_{mod}")
         for pat, skip in ((f"{anc}_{mod}_harmonized.bed", 4),
                           (f"{anc}_{mod}.bed.gz", 4)):
             p = os.path.join(qtl_dir, pat)
@@ -495,7 +500,7 @@ for anc in ancestries:
             warn(f"QTL-input BED not found: {anc}_{mod}")
 
 # ---- normalize BED column ID spaces ------------------------------------------
-# combat_int and QTL-input BED columns can carry stage/cohort namespace
+# INT and QTL-input BED columns can carry stage/cohort namespace
 # prefixes (e.g. 'NIEHS_RICHS_SRR...' written by upstream phenotyping
 # stages). Strip them against the known ID universe so membership tests
 # match; without this, namespaced stages silently score 0.
@@ -505,10 +510,10 @@ for anc in ancestries:
     known_ids |= {v for v in meta_array.get(anc, {}).values() if v}
     known_ids |= cov_cols.get(anc, set())
 ns_notes = []
-for key, cols in list(combat_cols.items()):
-    combat_cols[key], n_s = normalize_cols(cols, known_ids)
+for key, cols in list(int_cols.items()):
+    int_cols[key], n_s = normalize_cols(cols, known_ids)
     if n_s:
-        ns_notes.append(f"combat {key[0]}_{key[1]} ({n_s} cols)")
+        ns_notes.append(f"int {key[0]}_{key[1]} ({n_s} cols)")
 for key, cols in list(qtl_cols.items()):
     qtl_cols[key], n_s = normalize_cols(cols, known_ids)
     if n_s:
@@ -535,12 +540,12 @@ for anc in ancestries:
     for sid in meta_rnaseq.get(anc, set()):
         add_id(sid)
 
-# Chronological pipeline order: ComBat runs upstream of the genotype
-# intersection (one run per individual), so in_combat_* precedes
+# Chronological pipeline order: normalization (INT) runs upstream of the
+# genotype intersection (one run per individual), so in_int_* precedes
 # in_metadata_*; covariates are the final per-individual mapping set.
 stage_cols = (["fastq_r1_present", "fastq_r2_present", "has_quant_sf",
                "has_qu_quant_sf"] + [f"in_{m}_bed" for m in EXPR_MODS]
-              + [f"in_combat_{a}_{m}" for a in ancestries for m in MODS]
+              + [f"in_int_{a}_{m}" for a in ancestries for m in MODS]
               + [f"in_metadata_{a}" for a in ancestries]
               + [f"in_covariates_{a}" for a in ancestries]
               + [f"in_qtl_{a}_{m}" for a in ancestries for m in MODS])
@@ -570,10 +575,10 @@ for sid in all_ids:
     for a in ancestries:
         for m in MODS:
             key = arr or sid
-            # combat_int BEDs are pre-harmonization (rnaseq_id columns);
+            # INT BEDs are pre-harmonization (rnaseq_id columns);
             # accept either ID space
-            ccols = combat_cols.get((a, m), set())
-            row[f"in_combat_{a}_{m}"] = int(sid in ccols or key in ccols)
+            ccols = int_cols.get((a, m), set())
+            row[f"in_int_{a}_{m}"] = int(sid in ccols or key in ccols)
             row[f"in_qtl_{a}_{m}"] = int(key in qtl_cols.get((a, m), set()))
     matrix.append(row)
 
@@ -589,7 +594,7 @@ with open(samples_path, "w", newline="") as fh:
 def strata_for(col):
     """(stratum_type, stratum) pairs meaningful for a stage column."""
     out = [("total", "all")]
-    m = re.fullmatch(r"in_(?:metadata|covariates|combat|qtl)_(\w+?)(?:_(.+))?",
+    m = re.fullmatch(r"in_(?:metadata|covariates|int|qtl)_(\w+?)(?:_(.+))?",
                      col)
     anc_match = next((a for a in ancestries if f"_{a}_" in col
                       or col.endswith(f"_{a}")), None)
@@ -636,10 +641,10 @@ with open(summary_path, "w", newline="") as fh:
     w.writerows(summary)
 
 print(f"  attrition log: {len(matrix)} samples x {len(stage_cols)} stages")
-if combat_imputed:
-    print(f"  NOTE: combat stage carried forward from the post-outlier "
-          f"metadata stage for {len(combat_imputed)} ancestry x modality "
-          f"cell(s) (combat BEDs not on disk): {', '.join(combat_imputed)}")
+if int_imputed:
+    print(f"  NOTE: INT stage carried forward from the post-outlier "
+          f"metadata stage for {len(int_imputed)} ancestry x modality "
+          f"cell(s) (INT BEDs not on disk): {', '.join(int_imputed)}")
 if ns_notes:
     print(f"  NOTE: stripped stage/cohort namespace prefixes from BED "
           f"columns: {', '.join(ns_notes)}")

@@ -45,7 +45,6 @@ packages from `R_LIBS_USER=/rsrch5/.../R_package_library/ubuntu/4.3.1`.
 |---|---|
 | data.table, dplyr, tidyr, optparse, parallel | plumbing across stages |
 | ggplot2, patchwork, RColorBrewer | QC/diagnostic plots |
-| sva (ComBat) | cross-cohort batch correction (03, 05) |
 | Rhcpp | HCP latent-factor estimation (05) |
 | edgeR, tximport | `catchSalmon` QU correction of isoforms (03) |
 | rtracklayer | GTF parsing / tx2gene maps (03) |

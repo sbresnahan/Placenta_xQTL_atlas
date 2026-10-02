@@ -22,12 +22,23 @@
 #   rtracklayer in the seadragon R library (R_LIBS_USER). rtracklayer is used
 #   to build tx2gene from the reference GTF.
 #
+# COUNT-SCALE BEDS FOR TMM->VST (tximport_counts.R):
+#   Two additional unnorm BEDs feed the stage-5 TMM->VST normalization
+#   (PsychENCODE/isoTWAS convention) for the two count-based expression
+#   modalities: expression_counts.bed (gene-level tximport
+#   countsFromAbundance="lengthScaledTPM" from the ORIGINAL quants) and
+#   isoform_expression_counts.bed (transcript-level tximport txOut=TRUE from
+#   the QU-corrected quants). They are pooling intermediates only — not
+#   copied to output/, not bgzipped/indexed.
+#
 # Usage: 10_aggregate_expression.sh --config <config.yml> --scripts-dir <dir> <cohort>
 # Outputs:
 #   <cohort_dir>/intermediate/expression_qu/<sample>/quant.sf   (QU-corrected)
 #   <cohort_dir>/output/unnorm/expression.bed
 #   <cohort_dir>/output/unnorm/isoforms.bed
 #   <cohort_dir>/output/unnorm/isoform_expression.bed
+#   <cohort_dir>/output/unnorm/expression_counts.bed            (TMM->VST input)
+#   <cohort_dir>/output/unnorm/isoform_expression_counts.bed    (TMM->VST input)
 #   <cohort_dir>/output/expression.bed.gz (+ .tbi)
 #   <cohort_dir>/output/isoforms.bed.gz (+ .tbi)
 #   <cohort_dir>/output/isoforms.phenotype_groups.txt
@@ -132,17 +143,38 @@ fi
 
 # ---- Assemble ISOFORM-level BEDs from QU-corrected dir ----
 # isoforms.bed = within-gene usage ratios; isoform_expression.bed = the same
-# QU-corrected transcript TPMs BEFORE the ratio division (abundance modality).
+# QU-corrected transcript abundances BEFORE the ratio division (abundance
+# modality). --units tpm_from_counts: the adjusted quant.sf 'TPM' column is
+# CPM-scale (see qu_correct_salmon.R), so length-normalized TPM is recomputed
+# from NumReads x EffectiveLength — molecule-fraction abundances and usage
+# ratios (PANTRY/devBrain convention).
 python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
     --samples "$SAMPLES_FILE" \
     --input-dir "$EXPR_QU_DIR" \
     --ref-anno "$REF_ANNO" \
+    --units tpm_from_counts \
     --output-isoforms "${UNNORM_DIR}/isoforms.bed" \
     --output-isoform-expr "${UNNORM_DIR}/isoform_expression.bed"
 
+# ---- Count-scale BEDs for TMM->VST normalization (PsychENCODE/isoTWAS) ----
+# Gene-level: tximport countsFromAbundance="lengthScaledTPM" from the ORIGINAL
+# Salmon quants. Isoform-level: tximport txOut=TRUE from the QU-corrected
+# quants (QU-corrected NumReads are the count-like values). Consumed by the
+# stage-5 poolers as modalities expression_counts / isoform_expression_counts.
+echo "[$(date)] tximport count-scale BEDs (expression_counts, isoform_expression_counts)"
+conda deactivate 2>/dev/null || true
+$SING_R "${SEADRAGON_SCRIPTS}/tximport_counts.R" \
+    --samples "$SAMPLES_FILE" \
+    --salmon-dir "$EXPR_DIR" \
+    --qu-dir "$EXPR_QU_DIR" \
+    --ref-anno "$REF_ANNO" \
+    --out-dir "$UNNORM_DIR"
+conda activate samtools-1.16.1
+source /rsrch5/home/epi/bhattacharya_lab/software/MAJIQ/bin/activate
+
 # ---- Canonical BEDs = unnorm (normalization applied in stage 5) ----
 # Per-cohort QN+INT is discontinued: normalization now happens once, after
-# cross-cohort pooling, in stage 5 (19_hcp_factors.sh / 20_combat_modalities.sh).
+# cross-cohort pooling, in stage 5 (19_hcp_factors.sh / 20_normalize_modalities.sh).
 # The canonical output/<modality>.bed is the unnorm BED so downstream paths
 # (16_index_outputs.sh, combine_modalities.sh) are unchanged.
 cp "${UNNORM_DIR}/expression.bed" "${OUTPUT_DIR}/expression.bed"

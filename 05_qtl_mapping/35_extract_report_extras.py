@@ -753,8 +753,8 @@ def qc_phenotype_summaries(qtl_dir, ancestries, out_dir,
 
     Stages: 'before' = pooled unnormalized BED
     ({pooled_bed_dir}/{ANC}_{MOD}_pooled.bed, input to
-    20_combat_modalities.sh), 'after' = final mapping BED
-    ({qtl_dir}/{ANC}_{MOD}.bed.gz, post QN+INT+ComBat). Writes:
+    20_normalize_modalities.sh), 'after' = final mapping BED
+    ({qtl_dir}/{ANC}_{MOD}.bed.gz, post QN + within-cohort INT). Writes:
       qc_pheno_values.tsv.gz    — up to n_values sampled values per
                                   anc x mod x stage x cohort cell
       qc_pheno_quantiles.tsv    — exact 1..99% quantiles per cell
@@ -959,7 +959,7 @@ def main():
                     help="dir holding per-cohort *_pcair_pcs.tsv")
     ap.add_argument("--pooled-bed-dir", default=None,
                     help="dir with {ANC}_{MOD}_pooled.bed (unnormalized; "
-                         "combat_modalities/pooled) for before-stage QC")
+                         "normalized_modalities/pooled) for before-stage QC")
     ap.add_argument("--ancestry-map", default=None,
                     help="pooled_sample_ancestry_RNAseq.tsv (sample_id, "
                          "assigned_ancestry, cohort) for cohort labels")

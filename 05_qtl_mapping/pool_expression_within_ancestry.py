@@ -6,7 +6,7 @@ across cohorts within each ancestry stratum.
 Reads the unnorm gene-level expression BED files produced by the PANTRY
 pipeline (step 10_aggregate_expression.sh writes output/unnorm/expression.bed)
 and pools them within ancestry strata, taking the gene intersection across
-cohorts. The output is the input for ComBat + INT + HCP estimation.
+cohorts. The output is the input for QN + within-cohort INT + HCP estimation.
 
 Usage:
   python3 pool_expression_within_ancestry.py \
@@ -17,7 +17,10 @@ Usage:
 
 The ancestry map is a 3-column TSV: sample_id, assigned_ancestry, cohort.
 
-Output: <ancestry>_pooled_expression.bed per ancestry stratum.
+Output: <ancestry>_pooled_<modality>.bed per ancestry stratum (e.g.
+expression -> <ancestry>_pooled_expression.bed; expression_counts ->
+<ancestry>_pooled_expression_counts.bed, the TMM->VST input written per
+cohort by tximport_counts.R).
 """
 
 import argparse
@@ -217,7 +220,7 @@ def pool_ancestry_stratum(ancestry, ancestry_samples, cohort_dirs, modality,
         f"Column count mismatch: {len(pooled.columns)} vs {4 + len(all_samples)}"
 
     # Write output
-    out_path = os.path.join(output_dir, f"{ancestry}_pooled_expression.bed")
+    out_path = os.path.join(output_dir, f"{ancestry}_pooled_{modality}.bed")
     pooled.to_csv(out_path, sep="\t", index=False, float_format="%g")
     print(f"  Output: {out_path}")
     print(f"  Shape: {pooled.shape[0]} genes x {len(all_samples)} samples")

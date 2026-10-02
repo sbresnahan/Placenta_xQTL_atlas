@@ -27,10 +27,10 @@ Splicing is the one empirically null modality (Storey pi1 = 0, calibrated
 QQ). AFR/AMR/SAS pooled genotypes exist and are the next mapping targets.
 
 The EAS/EUR mapping was run without collapsing technical replicates: both
-NIGMS runs per individual entered ComBat and the QTL inputs, and duplicate
+NIGMS runs per individual entered normalization and the QTL inputs, and duplicate
 individual columns were averaged downstream (scripts 23/25/26). Run-level
 and individual-level sample counts therefore differ in the report (e.g.
-EUR 145 individuals at ComBat vs 161 runs at QTL input). The optional
+EUR 145 individuals at normalization vs 161 runs at QTL input). The optional
 collapse pre-step is documented in ../05_qtl_mapping/README.md.
 
 ## Re-rendering

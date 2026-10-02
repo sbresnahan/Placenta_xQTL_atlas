@@ -37,7 +37,7 @@ transcriptome annotation from
   deconvolution.
 - **04_sample_linkage/**: builds the per-cohort RNA-seq to genotype sample ID
   map (`rnaseq_to_array_id_map.csv`) consumed by the mapping stage.
-- **05_qtl_mapping/**: cross-cohort pooling with QN + INT + ComBat, HCP
+- **05_qtl_mapping/**: cross-cohort pooling with QN + within-cohort INT, HCP
   latent-factor estimation and per-modality k optimization, genotype PCA,
   sample intersection, outlier exclusion, covariate assembly, tensorQTL cis
   mapping (grouped, ungrouped, combined, stepwise-conditional) with Storey
@@ -66,7 +66,7 @@ transcriptome annotation from
   rnaseq_to_array_id_map.csv
         |
 05_qtl_mapping (per ancestry)
-  19/20   pool + QN + INT + ComBat + HCP factors
+  19/20   pool + QN + within-cohort INT + HCP factors
   21      tensorqtl env setup (once)
   22-24   genotype PCA, sample intersection, outlier exclusion
   25      covariate assembly

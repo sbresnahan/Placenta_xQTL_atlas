@@ -3,7 +3,8 @@
 26_harmonize_modalities.py — Harmonize modality BEDs to array_id sample space
 
 Brings the 7 non-expression modality BEDs from script 20
-(combat_modalities/combat_int/{ANC}_{modality}_combat_int.bed) into the final
+(normalized_modalities/int/{ANC}_{modality}_int.bed, or {ANC}_{modality}_vst.bed
+for the TMM->VST modalities listed in --vst-modalities) into the final
 QTL sample set (array_id), using the post-intersection, post-outlier metadata
 written by scripts 23+24 ({ANC}_metadata.tsv in qtl_inputs). Because the
 metadata is already post-outlier, this single step handles both intersection
@@ -34,7 +35,7 @@ Also copies each modality's phenotype_groups.txt into qtl_inputs.
 Usage:
   python3 26_harmonize_modalities.py \
       --qtl-dir <qtl_inputs dir> \
-      --modality-dir <combat_modalities/combat_int dir> \
+      --modality-dir <normalized_modalities/int dir> \
       --ancestries "EAS EUR" \
       --modalities "alt_polyA alt_TSS intron_retention isoforms RNA_editing splicing stability"
 """
@@ -133,17 +134,24 @@ def main():
     parser.add_argument("--qtl-dir", required=True,
                         help="QTL inputs directory (contains {ANC}_metadata.tsv from scripts 23+24)")
     parser.add_argument("--modality-dir", required=True,
-                        help="Directory with {ANC}_{modality}_combat_int.bed and "
+                        help="Directory with {ANC}_{modality}_int.bed and "
                              "{ANC}_{modality}.phenotype_groups.txt (script 20 output)")
     parser.add_argument("--ancestries", default="EAS EUR",
                         help="Space-separated ancestry labels")
     parser.add_argument("--modalities",
                         default="alt_polyA alt_TSS intron_retention isoforms isoform_expression RNA_editing splicing stability",
                         help="Space-separated modality labels")
+    parser.add_argument("--vst-modalities", default="isoform_expression",
+                        help="Space-separated modalities whose normalized BEDs use the "
+                             "TMM->VST suffix ({ANC}_{mod}_vst.bed) instead of "
+                             "{ANC}_{mod}_int.bed (PsychENCODE/isoTWAS schema). "
+                             "Pass 'none' to read all modalities as _int.bed.")
     args = parser.parse_args()
 
     ancestries = args.ancestries.split()
     modalities = args.modalities.split()
+    vst_modalities = set() if args.vst_modalities.strip().lower() in ("", "none") \
+        else set(args.vst_modalities.split())
 
     for anc in ancestries:
         print(f"\n{'='*60}")
@@ -168,7 +176,8 @@ def main():
 
         all_merges = []
         for mod in modalities:
-            bed_path = os.path.join(args.modality_dir, f"{anc}_{mod}_combat_int.bed")
+            norm_suffix = "vst" if mod in vst_modalities else "int"
+            bed_path = os.path.join(args.modality_dir, f"{anc}_{mod}_{norm_suffix}.bed")
             groups_path = os.path.join(args.modality_dir, f"{anc}_{mod}.phenotype_groups.txt")
             out_bed = os.path.join(args.qtl_dir, f"{anc}_{mod}_harmonized.bed")
             out_groups = os.path.join(args.qtl_dir, f"{anc}_{mod}.phenotype_groups.txt")

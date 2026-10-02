@@ -18,8 +18,8 @@ Run AFTER 23_prepare_intersection.py and 24_outlier_exclusion.py (needs
 and BEFORE the canonical 25_build_covariates.py run.
 
 Per ancestry, per k in --k-grid (default: 0 5 10 15 20 25 30):
-  1. Re-estimate HCP at k: combat_normalize_hcp.R --k k into a per-k dir
-     (full QN -> INT -> outlier removal -> ComBat -> HCP chain; k=0 skips
+  1. Re-estimate HCP at k: normalize_expression_hcp.R --k k into a per-k dir
+     (full QN -> within-cohort INT -> outlier removal -> HCP chain; k=0 skips
      HCP estimation via --skip-hcp).
   2. Harmonize HCP factors to array_id space, restricted to the
      post-outlier sample set in {qtl_dir}/{ANC}_metadata.tsv.
@@ -200,7 +200,7 @@ def main():
     parser.add_argument("--ancestry-map", required=True,
                         help="pooled_sample_ancestry_RNAseq.tsv")
     parser.add_argument("--scripts-dir", required=True,
-                        help="Directory with combat_normalize_hcp.R, "
+                        help="Directory with normalize_expression_hcp.R, "
                              "25_build_covariates.py, 27_run_tensorqtl.py")
     parser.add_argument("--ancestries", default="EAS EUR",
                         help="Space-separated ancestry labels")
@@ -297,8 +297,18 @@ def main():
                     expr_file = os.path.join(pooled_expr, f'{anc}_pooled_expression.bed')
                     if not os.path.exists(expr_file):
                         sys.exit(f"ERROR: pooled expression not found: {expr_file}")
-                    run(r_cmd + [os.path.join(args.scripts_dir, 'combat_normalize_hcp.R'),
+                    # TMM->VST schema: pass the pooled counts BED when present
+                    # (PsychENCODE/isoTWAS); fall back to --mode int otherwise.
+                    counts_file = os.path.join(pooled_expr, f'{anc}_pooled_expression_counts.bed')
+                    if os.path.exists(counts_file):
+                        mode_args = ['--mode', 'vst', '--counts', counts_file]
+                    else:
+                        print(f"    WARN: pooled counts not found: {counts_file}; "
+                              f"falling back to --mode int")
+                        mode_args = ['--mode', 'int']
+                    run(r_cmd + [os.path.join(args.scripts_dir, 'normalize_expression_hcp.R'),
                                  '--expression', expr_file,
+                                 *mode_args,
                                  '--qc-metrics', all_qc,
                                  '--ancestry-map', args.ancestry_map,
                                  '--ancestry', anc,

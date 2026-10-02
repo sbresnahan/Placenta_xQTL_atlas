@@ -12,7 +12,7 @@
 # match the main wrapper's Stage-2 glob (*_qc_metrics.tsv). After all chunks
 # finish, run this script once with MERGE=1 to write the per-cohort
 # ${COHORT}_qc_metrics.tsv files the wrapper expects; the wrapper then skips
-# Stage 1 and proceeds to Stages 2-4 (pool QC, pool expression, ComBat+HCP).
+# Stage 1 and proceeds to Stages 2-4 (pool QC, pool expression, QN + within-cohort INT + HCP).
 #
 # Usage:
 #   1) Submit one array per cohort (NCHUNKS=16 works for all four):

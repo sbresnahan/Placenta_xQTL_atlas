@@ -1,11 +1,15 @@
 #!/bin/bash
 # =============================================================================
-# 20_combat_modalities.sh — LSF wrapper for cross-cohort ComBat + pooling
-#                            of non-expression RNA modalities (roadmap step 4)
+# 20_normalize_modalities.sh — LSF wrapper for cross-cohort pooling + QN +
+#                               within-cohort INT of non-expression RNA
+#                               modalities (roadmap step 4)
+#                               (formerly 20_combat_modalities.sh)
 # =============================================================================
-# Orchestrates pooling + ComBat + INT for the 6 non-expression modalities
-# (isoforms, alt_TSS, alt_polyA, splicing, intron_retention, RNA_editing,
-#  stability) across all ancestry strata on seadragon.
+# Orchestrates pooling + QN + within-cohort INT for the 7 non-expression
+# modalities (isoforms, alt_TSS, alt_polyA, splicing, intron_retention,
+# RNA_editing, stability) across all ancestry strata on seadragon.
+# ComBat is DROPPED (schema change, Oct 2026): per-feature INT is applied
+# separately within each cohort; see normalize_expression_hcp.R header.
 #
 # Gene-level expression is handled separately by the HCP pipeline
 # (19_hcp_factors.sh); HCP factors estimated there are reused as covariates
@@ -18,22 +22,27 @@
 #     - splicing, intron_retention:
 #       pass through pre-pooled BEDs from harmonize_within_ancestry.py
 #       (namespaced sample IDs)
-#   Stage 2: QN + INT + ComBat per ancestry x modality (R via singularity)
-#     - normalization first, ComBat last (devBrain xQTL schema)
+#     - isoform_expression additionally pools isoform_expression_counts
+#       (QU-corrected counts from tximport_counts.R; TMM->VST input)
+#   Stage 2: QN + within-cohort INT per ancestry x modality (R via singularity)
+#     - pooled QN first, then per-feature INT within each cohort; no ComBat
 #     - isoforms additionally exclude the expression-outlier samples written
 #       by 19_hcp_factors.sh (devBrain §3.3)
+#     - isoform_expression uses TMM -> VST on the pooled counts BED instead
+#       (PsychENCODE/isoTWAS schema; terminal VST, no INT) when the counts
+#       BED exists, and falls back to QN + within-cohort INT otherwise
 #
 # Usage:
-#   bsub -env "CONFIG=\"config.yml\",SCRIPTS_DIR=\"/path/to/scripts\",ANCESTRY_MAP=\"/path/to/pooled_sample_ancestry_RNAseq.tsv\"" < 20_combat_modalities.sh
+#   bsub -env "CONFIG=\"config.yml\",SCRIPTS_DIR=\"/path/to/scripts\",ANCESTRY_MAP=\"/path/to/pooled_sample_ancestry_RNAseq.tsv\"" < 20_normalize_modalities.sh
 #
 # Or run directly (interactive / non-LSF):
 #   CONFIG=config.yml SCRIPTS_DIR=/path/to/scripts \
-#   ANCESTRY_MAP=/path/to/pooled_sample_ancestry_RNAseq.tsv bash 20_combat_modalities.sh
+#   ANCESTRY_MAP=/path/to/pooled_sample_ancestry_RNAseq.tsv bash 20_normalize_modalities.sh
 #
 # Required env vars:
 #   CONFIG        — path to config.yml
 #   SCRIPTS_DIR   — directory containing pool_modalities_within_ancestry.py,
-#                   combat_normalize_modalities.R, and config_get.py
+#                   normalize_modalities.R, and config_get.py
 #   ANCESTRY_MAP  — path to pooled_sample_ancestry_RNAseq.tsv
 #
 # Optional env vars:
@@ -41,7 +50,7 @@
 #                     (default: isoforms alt_TSS alt_polyA splicing
 #                      intron_retention RNA_editing stability)
 #   ANCESTRIES      — space-separated ancestry labels to process (default: all)
-#   OUTPUT_DIR      — output directory (default: ${OUTPUT_BASE}/combat_modalities)
+#   OUTPUT_DIR      — output directory (default: ${OUTPUT_BASE}/normalized_modalities)
 #   HARMONIZE_DIR   — root dir of harmonize_within_ancestry.py outputs
 #                     (default: ${OUTPUT_BASE}; 17 writes
 #                      ${OUTPUT_BASE}/<ancestry>/<modality>/unnorm/<modality>.bed)
@@ -52,8 +61,8 @@
 #BSUB -M 32
 #BSUB -R "rusage[mem=32]"
 #BSUB -W 24:00
-#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/combat_mod.%J.out
-#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/combat_mod.%J.err
+#BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/norm_mod.%J.out
+#BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/norm_mod.%J.err
 
 set -eo pipefail
 
@@ -113,7 +122,7 @@ done
 echo "  Cohort dir map: $COHORT_DIRS_ARGS"
 
 if [ -z "$OUTPUT_DIR" ]; then
-    OUTPUT_DIR="${OUTPUT_BASE}/combat_modalities"
+    OUTPUT_DIR="${OUTPUT_BASE}/normalized_modalities"
 fi
 if [ -z "$HARMONIZE_DIR" ]; then
     # 17_harmonize_within_ancestry.sh writes ${OUTPUT_BASE}/<ANC>/<modality>/...
@@ -121,7 +130,7 @@ if [ -z "$HARMONIZE_DIR" ]; then
 fi
 mkdir -p "$OUTPUT_DIR"
 
-echo "[$(date)] Cross-cohort ComBat + Pooling for Non-Expression Modalities"
+echo "[$(date)] Cross-cohort Pooling + QN + Within-Cohort INT for Non-Expression Modalities"
 echo "  CONFIG:        $CONFIG"
 echo "  SCRIPTS_DIR:   $SCRIPTS_DIR"
 echo "  ANCESTRY_MAP:  $ANCESTRY_MAP"
@@ -182,16 +191,30 @@ for MODALITY in $MODALITIES; do
         --output-dir "$POOLED_DIR" \
         --ancestries $ANCESTRY_LIST \
         $EXTRA_ARGS
+
+    # isoform_expression additionally pools its QU-corrected counts BED
+    # (per-cohort output/unnorm/isoform_expression_counts.bed from
+    # tximport_counts.R) — the TMM->VST input for stage 2.
+    if [ "$MODALITY" = "isoform_expression" ]; then
+        echo "  [$(date)] Modality: isoform_expression_counts (VST input)"
+        python3 "${SCRIPTS_DIR}/pool_modalities_within_ancestry.py" \
+            --ancestry-map "$ANCESTRY_MAP" \
+            --config "$CONFIG" \
+            --cohort-dirs $COHORT_DIRS_ARGS \
+            --modality "isoform_expression_counts" \
+            --output-dir "$POOLED_DIR" \
+            --ancestries $ANCESTRY_LIST
+    fi
 done
 
 # =============================================================================
-# Stage 2: ComBat + INT per ancestry x modality (R via singularity)
+# Stage 2: QN + within-cohort INT per ancestry x modality (R via singularity)
 # =============================================================================
 echo ""
-echo "[$(date)] Stage 2: QN + INT + ComBat per ancestry x modality"
+echo "[$(date)] Stage 2: QN + within-cohort INT per ancestry x modality"
 
-COMBAT_DIR="${OUTPUT_DIR}/combat_int"
-mkdir -p "$COMBAT_DIR"
+INT_DIR="${OUTPUT_DIR}/int"
+mkdir -p "$INT_DIR"
 
 export R_LIBS_USER="/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
 SING_R="singularity exec --bind /rsrch5 --bind /rsrch9 /risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif Rscript"
@@ -242,12 +265,24 @@ for ANCESTRY in $ANCESTRY_LIST; do
             fi
         fi
 
-        $SING_R "${SCRIPTS_DIR}/combat_normalize_modalities.R" \
+        # isoform_expression: TMM -> VST path (PsychENCODE/isoTWAS schema) when
+        # the pooled counts BED exists; otherwise fall back to QN + INT.
+        if [ "$MODALITY" = "isoform_expression" ]; then
+            COUNTS_BED="${POOLED_DIR}/${ANCESTRY}_isoform_expression_counts_pooled.bed"
+            if [ -f "$COUNTS_BED" ]; then
+                EXTRA_ARGS="${EXTRA_ARGS} --counts-input ${COUNTS_BED}"
+            else
+                echo "      WARN: pooled counts BED not found: $COUNTS_BED"
+                echo "             isoform_expression falls back to QN + within-cohort INT"
+            fi
+        fi
+
+        $SING_R "${SCRIPTS_DIR}/normalize_modalities.R" \
             --input "$POOLED_BED" \
             --ancestry-map "$ANCESTRY_MAP" \
             --ancestry "$ANCESTRY" \
             --modality "$MODALITY" \
-            --output-dir "$COMBAT_DIR" \
+            --output-dir "$INT_DIR" \
             $EXTRA_ARGS
     done
 done
@@ -258,13 +293,13 @@ done
 echo ""
 echo "[$(date)] Pipeline Complete"
 echo "  Pooled BEDs:    ${POOLED_DIR}/"
-echo "  ComBat+INT BEDs: ${COMBAT_DIR}/"
+echo "  Normalized BEDs: ${INT_DIR}/ (QN+INT: *_int.bed; TMM->VST: *_vst.bed)"
 echo ""
-echo "  ComBat+INT phenotype BEDs (for tensorQTL):"
-ls -lh "${COMBAT_DIR}"/*_combat_int.bed 2>/dev/null || echo "    (none found)"
+echo "  Normalized phenotype BEDs (for tensorQTL):"
+ls -lh "${INT_DIR}"/*_int.bed "${INT_DIR}"/*_vst.bed 2>/dev/null || echo "    (none found)"
 echo ""
 echo "  Phenotype groups:"
-ls -lh "${COMBAT_DIR}"/*.phenotype_groups.txt 2>/dev/null || echo "    (none found)"
+ls -lh "${INT_DIR}"/*.phenotype_groups.txt 2>/dev/null || echo "    (none found)"
 echo ""
 echo "  Diagnostics:"
-ls -lh "${COMBAT_DIR}"/*_combat_diagnostics.pdf 2>/dev/null || echo "    (none found)"
+ls -lh "${INT_DIR}"/*_diagnostics.pdf 2>/dev/null || echo "    (none found)"

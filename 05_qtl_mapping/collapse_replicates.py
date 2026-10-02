@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 collapse_replicates.py — Collapse technical-replicate RNA-seq runs to one
-column per individual, upstream of within-ancestry pooling, ComBat, and QTL
+column per individual, upstream of within-ancestry pooling, normalization, and QTL
 mapping.
 
 Some individuals were sequenced as two runs (e.g. two placental quadrant
@@ -96,7 +96,10 @@ BED_META_COLS = ["#chr", "start", "end", "phenotype_id"]
 
 # Modalities with staged per-cohort unnorm BEDs (consumed by the
 # intersection poolers via --cohort-dirs).
-COUNT_MODALITIES = {"expression", "isoform_expression"}
+# The *_counts variants (tximport_counts.R outputs) are count-scale, so
+# technical replicates are summed exactly like expression/isoform_expression.
+COUNT_MODALITIES = {"expression", "isoform_expression",
+                    "expression_counts", "isoform_expression_counts"}
 RATIO_BED_MODALITIES = {"isoforms", "alt_TSS", "alt_polyA", "stability", "RNA_editing"}
 STAGED_BED_MODALITIES = sorted(COUNT_MODALITIES | RATIO_BED_MODALITIES)
 
@@ -305,28 +308,43 @@ def _load_tx2gene(ref_anno):
 
 
 def collapse_counts(bed, runs_present):
-    """expression / isoform_expression: sum the BED count columns."""
+    """expression / isoform_expression: sum the BED value columns.
+    isoform_expression holds length-normalized TPM (assemble_bed.py
+    tpm_from_counts); summed-TPM ranks equal TPM-of-pooled-counts ranks
+    (the per-transcript length factor commutes with the run sum), so
+    summing keeps collapsed samples on the same scale."""
     return bed[runs_present].sum(axis=1, min_count=1).to_numpy()
 
 
 def collapse_isoforms(bed, runs_present, run_dirs, ref_anno, tx2gene_cache):
     """isoforms: sum QU-corrected transcript counts, recompute within-gene
-    ratios. The denominator uses ALL transcripts in the quants that map to
+    ratios. Ratios are molecule fractions: counts are length-normalized
+    (count / EffectiveLength) before the within-gene division, matching the
+    tpm_from_counts scale assemble_bed.py uses for single-run samples.
+    The denominator uses ALL transcripts in the quants that map to
     the gene (same as assemble_bed.assemble_expression), not just the
     transcripts retained in the BED."""
     summed = _sum_salmon_runs(run_dirs, runs_present, EXPR_QU_DIR)
     if summed is None:
         return None
+    # EffectiveLength from the first present run (constant across runs)
+    q0 = os.path.join(run_dirs[runs_present[0]], EXPR_QU_DIR,
+                      runs_present[0], "quant.sf")
+    eff = pd.read_csv(q0, sep="\t").set_index("Name")["EffectiveLength"]
+    eff = pd.to_numeric(eff, errors="coerce").reindex(summed.index)
+    x = summed / eff
+    x[(eff.isna()) | (eff <= 0)] = 0.0  # undefined length -> no abundance
+    x = x.fillna(0.0)
     if tx2gene_cache.get("map") is None:
         tx2gene_cache["map"] = _load_tx2gene(ref_anno)
     tx2gene = tx2gene_cache["map"]
-    genes = pd.Series(summed.index.map(tx2gene), index=summed.index)
+    genes = pd.Series(x.index.map(tx2gene), index=x.index)
     keep = genes.notna()
-    summed = summed[keep]
+    x = x[keep]
     genes = genes[keep]
-    totals = summed.groupby(genes).sum()
-    ratio = summed / totals.loc[genes].to_numpy()
-    pid = pd.Index(genes + "__" + summed.index, name="phenotype_id")
+    totals = x.groupby(genes).sum()
+    ratio = x / totals.loc[genes].to_numpy()
+    pid = pd.Index(genes + "__" + x.index, name="phenotype_id")
     vec = pd.Series(ratio.to_numpy(), index=pid)
     return vec.reindex(bed["phenotype_id"]).to_numpy()
 

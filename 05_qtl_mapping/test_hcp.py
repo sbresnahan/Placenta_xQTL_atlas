@@ -5,8 +5,8 @@ test_hcp.py — Synthetic test suite for the HCP latent factor extraction pipeli
 Tests all components with synthetic data:
   1. test_picard_qc: mock PicardTools metric files → verify parsing
   2. test_pool_expression: synthetic BEDs for 2 cohorts, 2 ancestries → verify pooling
-  3. test_combat_normalize_hcp: synthetic expression + QC → verify QN, INT,
-     ComBat-last batch removal, HCP
+  3. test_normalize_expression_hcp: synthetic expression + QC → verify QN,
+     within-cohort INT (cohort shift removed by construction), HCP
   3b. test_connectivity_outliers: corrupted sample → verify bicor
      connectivity outlier removal (z < -3)
   4. test_reflat_generation: verify GTF → refFlat conversion
@@ -274,12 +274,12 @@ def test_pool_expression():
 
 
 # =============================================================================
-# Test 3: ComBat + INT + HCP (requires R)
+# Test 3: QN + within-cohort INT + HCP (requires R)
 # =============================================================================
 
-def test_combat_normalize_hcp():
-    """Test ComBat + INT + HCP with synthetic data (requires R + sva + Rhcpp)."""
-    print("\n--- test_combat_normalize_hcp ---")
+def test_normalize_expression_hcp():
+    """Test QN + within-cohort INT + HCP with synthetic data (requires R + Rhcpp)."""
+    print("\n--- test_normalize_expression_hcp ---")
 
     # Check if R is available
     r_available = shutil.which("Rscript") is not None
@@ -310,7 +310,7 @@ def test_combat_normalize_hcp():
             # Inject batch effect: cohort2 gets an 8x multiplicative shift on
             # half the genes. Feature-specific (a uniform all-gene shift is
             # erased by QN itself) and strong relative to the lognormal
-            # background, so ComBat has something to remove.
+            # background, so the within-cohort INT has something to remove.
             if i < n_genes // 2:
                 base[n_samples_cohort1:] = base[n_samples_cohort1:] * 8
             data.append(base)
@@ -332,13 +332,16 @@ def test_combat_normalize_hcp():
             ("cohort2", "EUR"): cohort2_samples,
         })
 
-        # Run QN + INT + ComBat + HCP. --outlier-z -999 disables connectivity
-        # outlier removal so the sample set is deterministic in this test
-        # (outlier detection itself is covered by test_connectivity_outliers).
+        # Run QN + within-cohort INT + HCP. --mode int: the script default is
+        # now "vst" (TMM->VST schema); this test exercises the INT branch.
+        # --outlier-z -999 disables connectivity outlier removal so the sample
+        # set is deterministic in this test (outlier detection itself is
+        # covered by test_connectivity_outliers).
         output_dir = os.path.join(tmpdir, "hcp_output")
         cmd = [
-            "Rscript", os.path.join(SCRIPTS_DIR, "combat_normalize_hcp.R"),
+            "Rscript", os.path.join(SCRIPTS_DIR, "normalize_expression_hcp.R"),
             "--expression", expr_path,
+            "--mode", "int",
             "--qc-metrics", qc_path,
             "--ancestry-map", anc_map_path,
             "--ancestry", "EUR",
@@ -356,7 +359,7 @@ def test_combat_normalize_hcp():
                 print(f"    {result.stderr.strip().split(chr(10))[-1]}")
                 return
             raise AssertionError(
-                f"ComBat+HCP failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+                f"QN+INT+HCP failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
 
         # Check HCP factors output
         hcp_path = os.path.join(output_dir, "EUR_hcp_factors.tsv")
@@ -372,8 +375,8 @@ def test_combat_normalize_hcp():
                     "HCP factor names should start with HCP_")
 
         # Check expression output
-        expr_out_path = os.path.join(output_dir, "EUR_combat_int_expression.bed")
-        assert_true(os.path.exists(expr_out_path), "ComBat+INT expression BED not found")
+        expr_out_path = os.path.join(output_dir, "EUR_int_expression.bed")
+        assert_true(os.path.exists(expr_out_path), "Normalized expression BED not found")
 
         expr_out = pd.read_csv(expr_out_path, sep="\t")
         expr_samples = [c for c in expr_out.columns
@@ -381,10 +384,9 @@ def test_combat_normalize_hcp():
         assert_true(len(expr_samples) == len(all_samples),
                     f"Expected {len(all_samples)} samples in output, got {len(expr_samples)}")
 
-        # Check that values are approximately standard normal. With ComBat
-        # LAST, the output is approximately but not exactly N(0,1) per
-        # gene — use a looser tolerance than a ComBat->INT ordering
-        # would allow.
+        # Check that values are approximately standard normal. Rank-based INT
+        # with qnorm(r/(n+1)) quantiles gives sd slightly below 1 (growing
+        # with n); use a loose tolerance on the pooled values.
         data_values = expr_out[expr_samples].values.flatten()
         data_values = data_values[~np.isnan(data_values)]
         mean_val = np.mean(data_values)
@@ -399,44 +401,33 @@ def test_combat_normalize_hcp():
         assert_true(len(outliers_df) == 0,
                     f"Expected 0 outliers with --outlier-z -999, got {len(outliers_df)}")
 
-        # ComBat-last batch removal: paired run with --skip-combat gives the
-        # pre-ComBat (QN+INT) reference; the cohort mean difference on the
-        # batch-affected genes must shrink after ComBat.
-        nocombat_dir = os.path.join(tmpdir, "hcp_nocombat")
-        cmd_nc = [
-            "Rscript", os.path.join(SCRIPTS_DIR, "combat_normalize_hcp.R"),
-            "--expression", expr_path,
-            "--qc-metrics", qc_path,
-            "--ancestry-map", anc_map_path,
-            "--ancestry", "EUR",
-            "--k", "5",
-            "--outlier-z", "-999",
-            "--skip-combat", "--skip-hcp",
-            "--output-dir", nocombat_dir,
-        ]
-        result_nc = subprocess.run(cmd_nc, capture_output=True, text=True)
-        assert_true(result_nc.returncode == 0,
-                    f"--skip-combat run failed:\n{result_nc.stderr}")
-        expr_nc = pd.read_csv(
-            os.path.join(nocombat_dir, "EUR_combat_int_expression.bed"), sep="\t")
+        # Within-cohort INT guarantee: every gene is ~mean-0 within each
+        # cohort, so the injected 8x cohort shift is removed BY CONSTRUCTION
+        # (no ComBat). Not exactly 0: QN assigns the same rank-mean value to
+        # a gene whenever it ties on within-sample rank across samples, and
+        # tie-averaged ranks break the exact symmetry of the INT quantiles
+        # (residual ~1e-2 at toy gene counts, shrinking as genes >> samples).
+        # Per-cohort sd equals the rank-INT quantile sd for that cohort's n
+        # (identical across cohorts of equal size here).
         c1, c2 = cohort1_samples, cohort2_samples
         affected = [f"GENE{i:05d}" for i in range(n_genes // 2)]
-        def cohort_gap(df):
-            sub = df[df["phenotype_id"].isin(affected)]
-            return (sub[c1].mean(axis=1) - sub[c2].mean(axis=1)).abs().mean()
-        gap_before = cohort_gap(expr_nc)
-        gap_after = cohort_gap(expr_out)
-        assert_true(gap_after < gap_before * 0.5,
-                    f"ComBat should remove cohort shift: before={gap_before:.3f}, "
-                    f"after={gap_after:.3f}")
+        sub = expr_out[expr_out["phenotype_id"].isin(affected)]
+        gap = (sub[c1].mean(axis=1) - sub[c2].mean(axis=1)).abs().max()
+        assert_true(gap < 0.05,
+                    f"Within-cohort INT should zero the cohort mean gap, got {gap:.2e}")
+        sd_c1 = sub[c1].values.std()
+        sd_c2 = sub[c2].values.std()
+        assert_true(abs(sd_c1 - sd_c2) < 0.05,
+                    f"Per-cohort sd should match across equal-n cohorts: "
+                    f"{sd_c1:.3f} vs {sd_c2:.3f}")
 
         # Check diagnostics PDF
         diag_path = os.path.join(output_dir, "EUR_hcp_diagnostics.pdf")
         assert_true(os.path.exists(diag_path), "Diagnostics PDF not found")
         assert_true(os.path.getsize(diag_path) > 1000, "Diagnostics PDF too small (likely empty)")
 
-        print("  PASSED: ComBat removes batch effect, INT produces ~N(0,1), "
-              "HCP factors have correct dimensions")
+        print("  PASSED: within-cohort INT zeroes cohort shift by construction, "
+              "values ~N(0,1), HCP factors have correct dimensions")
 
 
 # =============================================================================
@@ -489,7 +480,8 @@ def test_connectivity_outliers():
         qc_path = os.path.join(tmpdir, "qc_metrics.tsv")
         make_synthetic_qc(qc_path, all_samples, n_metrics=6, seed=11)
 
-        # Single cohort: ComBat skipped, isolating the outlier-removal step
+        # Single cohort: within-cohort INT reduces to a plain pooled INT,
+        # isolating the outlier-removal step
         anc_map_path = os.path.join(tmpdir, "ancestry_map.tsv")
         make_synthetic_ancestry_map(anc_map_path, {
             ("cohort1", "EUR"): all_samples,
@@ -497,8 +489,9 @@ def test_connectivity_outliers():
 
         output_dir = os.path.join(tmpdir, "hcp_output")
         cmd = [
-            "Rscript", os.path.join(SCRIPTS_DIR, "combat_normalize_hcp.R"),
+            "Rscript", os.path.join(SCRIPTS_DIR, "normalize_expression_hcp.R"),
             "--expression", expr_path,
+            "--mode", "int",
             "--qc-metrics", qc_path,
             "--ancestry-map", anc_map_path,
             "--ancestry", "EUR",
@@ -512,7 +505,7 @@ def test_connectivity_outliers():
                 print("  SKIPPED: missing R package")
                 return
             raise AssertionError(
-                f"combat_normalize_hcp.R failed:\nSTDOUT:\n{result.stdout}\n"
+                f"normalize_expression_hcp.R failed:\nSTDOUT:\n{result.stdout}\n"
                 f"STDERR:\n{result.stderr}")
 
         # The corrupted sample must be flagged and removed
@@ -523,7 +516,7 @@ def test_connectivity_outliers():
                     f"Corrupted sample {bad_sample} not flagged; outliers: {outliers}")
 
         expr_out = pd.read_csv(
-            os.path.join(output_dir, "EUR_combat_int_expression.bed"), sep="\t")
+            os.path.join(output_dir, "EUR_int_expression.bed"), sep="\t")
         out_samples = [c for c in expr_out.columns
                        if c not in ["#chr", "start", "end", "phenotype_id"]]
         assert_true(bad_sample not in out_samples,
@@ -658,7 +651,7 @@ def main():
     tests = {
         "test_picard_qc": test_picard_qc,
         "test_pool_expression": test_pool_expression,
-        "test_combat_normalize_hcp": test_combat_normalize_hcp,
+        "test_normalize_expression_hcp": test_normalize_expression_hcp,
         "test_connectivity_outliers": test_connectivity_outliers,
         "test_reflat_generation": test_reflat_generation,
         "test_full_pipeline": test_full_pipeline,

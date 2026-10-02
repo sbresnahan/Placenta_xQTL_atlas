@@ -321,14 +321,16 @@ describe_hit <- function(h) {
 This report summarizes the multi-ancestry placental xQTL analysis:
 cohort-only genotype PCA on LD-pruned variants within each ancestry stratum,
 a conventional covariate set (first 5 genotype PCs + HCP factors + sex,
-gestational age, and cell-type fractions; maternal cell fraction excluded
+maternal age, and cell-type fractions; maternal cell fraction excluded
 before correlation pruning at |r| > 0.9; HCP count optimized per ancestry × modality
 via module 25b; no covariate cap), a MAF ≥ 0.01 filter with a ≥ 5
 minor-allele-count floor at the
 genotype intersection, Storey q-values (computed with the R `qvalue`
-package), and per-phenotype rank-based inverse-normal transformation of all
-modalities (isoform usage mapped as within-gene relative-abundance ratios;
-isoform expression as transcript-level TPM abundance).
+package), and per-phenotype normalization of all
+modalities (TMM → variance-stabilizing transformation for the two
+count-based expression modalities; rank-based inverse-normal transformation
+for the ratio-based modalities; isoform usage mapped as within-gene
+relative-abundance ratios).
 Mapping covers
 `r n_cells` ancestry × modality × layer cells (EAS n ≈ `r n_samp["EAS"]`,
 EUR n ≈ `r n_samp["EUR"]`). The results narrative follows the figure
@@ -435,7 +437,7 @@ RNA-seq reads for SNUH and NIGMS were retrieved from SRA with prefetch and faste
 
 ## Transcriptomic phenotyping
 
-Nine RNA modalities were quantified per sample with an in-house rewrite of the PANTRY phenotyping pipeline (github.com/PejLab/Pantry) adapted to the local compute cluster. Gene expression was taken as gene-level abundance aggregated from Salmon with tximport. Isoform expression was taken as transcript-level TPM after quantification uncertainty correction (see below). Isoform usage was computed as within-gene relative abundance ratios after correcting transcript counts for quantification uncertainty: edgeR catchSalmon was used to estimate per-transcript overdispersion from the Salmon bootstrap replicates, and counts were divided by the estimated overdispersion (Chen et al., Nucleic Acids Res 2023). Alternative transcription start site and alternative polyadenylation usage were quantified with txrevise: event annotations were constructed in two event groups, each split into upstream, contained, and downstream positional classes, and event abundance was quantified with Salmon against the six resulting transcript indices. Splice junction usage was quantified by extracting junctions from the STAR alignments with RegTools and clustering them with leafCutter (minimum 30 reads per cluster, minimum cluster ratio 0.001); intron usage ratios within clusters were carried as phenotypes. Intron retention was quantified with MAJIQ. RNA editing levels were computed at REDIportal sites (TABLE1_hg38_v3) from samtools mpileup output as the proportion of edited reads per site. RNA stability was approximated per gene as the ratio of exonic to intronic read counts from featureCounts. Because splice junctions and retained introns are defined by the observed data in each cohort, splicing and intron retention features were harmonized across cohorts by stable genomic coordinates before pooling. Phenotypes were exported as bgzipped, tabix-indexed BED files with gene-level phenotype groupings where applicable.
+Nine RNA modalities were quantified per sample with an in-house rewrite of the PANTRY phenotyping pipeline (github.com/PejLab/Pantry) adapted to the local compute cluster. Gene expression was quantified from Salmon with tximport, both as gene-level TPM (used for detection filtering) and as gene-level lengthScaledTPM count-scaled abundances (tximport countsFromAbundance = "lengthScaledTPM"), the latter serving as the TMM-VST normalization input. Isoform expression was taken as transcript-level TPM after quantification uncertainty correction (see below), with TPM recomputed from the QU-corrected counts and Salmon effective lengths; the QU-corrected transcript counts themselves served as the TMM-VST normalization input for isoform expression. Isoform usage was computed as within-gene relative abundance ratios after correcting transcript counts for quantification uncertainty: edgeR catchSalmon was used to estimate per-transcript overdispersion from the Salmon bootstrap replicates, and counts were divided by the estimated overdispersion (Chen et al., Nucleic Acids Res 2023). Alternative transcription start site and alternative polyadenylation usage were quantified with txrevise: event annotations were constructed in two event groups, each split into upstream, contained, and downstream positional classes, and event abundance was quantified with Salmon against the six resulting transcript indices. Splice junction usage was quantified by extracting junctions from the STAR alignments with RegTools and clustering them with leafCutter (minimum 30 reads per cluster, minimum cluster ratio 0.001); intron usage ratios within clusters were carried as phenotypes. Intron retention was quantified with MAJIQ. RNA editing levels were computed at REDIportal sites (TABLE1_hg38_v3) from samtools mpileup output as the proportion of edited reads per site. RNA stability was approximated per gene as the ratio of exonic to intronic read counts from featureCounts. Because splice junctions and retained introns are defined by the observed data in each cohort, splicing and intron retention features were harmonized across cohorts by stable genomic coordinates before pooling. Phenotypes were exported as bgzipped, tabix-indexed BED files with gene-level phenotype groupings where applicable.
 
 ## Cell-type deconvolution
 
@@ -445,9 +447,9 @@ Cell-type proportions were estimated from bulk gene expression with MuSiC, using
 
 RNA-seq sample identifiers were linked to genotype sample identifiers within each cohort using cohort-specific keys: SRA run-to-subject metadata for SNUH and NIGMS, and array subject identifiers for NIEHS_RICHS and GUSTO. The linkage table was checked for match rates, duplicates, and missing values before mapping.
 
-## Phenotype pooling, normalization, and batch correction
+## Phenotype pooling and normalization
 
-Within each ancestry stratum, per-cohort phenotype matrices were pooled and normalized in a single pass, following the conventions of the developing-brain xQTL atlas (Wen et al., Science 2024). Gene and isoform expression were filtered to features with TPM above 0.1 in more than 25% of samples, and ratio-based modalities were filtered to features detected in at least 40% of samples. Filtered matrices were quantile normalized, and each phenotype was rank inverse-normal transformed. For expression, sample outliers were removed before batch correction using signed bicor network connectivity (z below -3). Cross-cohort batch effects were adjusted with ComBat (sva) with cohort as the batch variable, applied as the final normalization step.
+Within each ancestry stratum, per-cohort phenotype matrices were pooled and normalized in a single pass. The two count-based expression modalities (gene expression and isoform expression) followed the PsychENCODE/isoTWAS convention (Bhattacharya et al., Nat Genet 2023): after the detection filter, pooled count matrices — gene-level lengthScaledTPM counts from tximport for gene expression, and QU-corrected transcript counts for isoform expression — were normalized with edgeR TMM followed by the DESeq2 variance-stabilizing transformation, with TMM effective library sizes supplied to DESeq2 as size factors (counts themselves never pre-divided), and no subsequent rank transformation. The six ratio-based modalities followed the conventions of the developing-brain xQTL atlas (Wen et al., Science 2024): filtered matrices were quantile normalized across the pooled stratum, and each phenotype was then rank inverse-normal transformed separately within each cohort, so every cohort enters mapping on an identical standard-normal scale. Gene and isoform expression were filtered to features with TPM above 0.1 in more than 25% of samples (the filter is computed on the TPM matrices and the retained feature set is carried onto the count matrices), and ratio-based modalities were filtered to features detected in at least 40% of samples. For expression, sample outliers were removed from the normalized matrix using signed bicor network connectivity (z below -3). Cohort effects are absorbed by cohort indicator covariates in the mapping model — and, for the VST-normalized expression modalities, by cohort indicators included as known covariates during hidden-factor estimation — rather than by adjusting the phenotype matrix.
 
 ## Genotype principal components and sample quality control
 
@@ -455,7 +457,7 @@ Within each stratum, pooled genotypes were LD-pruned (plink2 indep-pairwise 200 
 
 ## Covariate assembly and hidden factor estimation
 
-Mapping covariates comprised the first five genotype PCs, sex, gestational age, estimated cell-type fractions (with the dominant cell type as the compositional reference and the maternal fraction excluded), and hidden confounding factors estimated from batch-corrected expression with Rhcpp, using Picard alignment quality-control metrics as known covariates. Covariates with near-zero variance were dropped, and the remaining set was pruned iteratively at pairwise absolute correlation above 0.9, with retention priority given to sex and gestational age, then genotype PCs, then cell types, then hidden factors. The number of hidden factors was optimized separately for each ancestry and modality: factors were re-estimated at each k in {0...5...100} by 5, chromosome 1 was mapped with tensorQTL under each candidate covariate set (the full genome was mapped for modalities with fewer than 300 chromosome-1 phenotypes), and the k yielding the most eGenes at Storey q of at most 0.05 was selected, with ties resolved to the smaller k.
+Mapping covariates comprised the first five genotype PCs, sex, maternal age, estimated cell-type fractions (with the dominant cell type as the compositional reference and the maternal fraction excluded), cohort indicator covariates, and hidden confounding factors estimated from the normalized expression matrix with Rhcpp, using Picard alignment quality-control metrics and cohort indicators as known covariates. Covariates with near-zero variance were dropped, and the remaining set was pruned iteratively at pairwise absolute correlation above 0.9, with retention priority given to sex and maternal age, then genotype PCs, then cell types, then hidden factors. The number of hidden factors was optimized separately for each ancestry and modality: factors were re-estimated at each k in {0...5...100} by 5, chromosome 1 was mapped with tensorQTL under each candidate covariate set (the full genome was mapped for modalities with fewer than 300 chromosome-1 phenotypes), and the k yielding the most eGenes at Storey q of at most 0.05 was selected, with ties resolved to the smaller k.
 
 ## cis-xQTL mapping
 
@@ -493,28 +495,28 @@ tot_ind <- attr_summary %>%
   select(stage, n_present) %>% tibble::deframe()
 if (length(tot_ind) == 0) tot_ind <- tot_run  # pre-dual-level archives
 n_anc <- table(attr_samples$ancestry)
-# Chronological order: ComBat runs upstream of the genotype intersection.
-# Pre-ancestry stages are run-level (libraries); post-ancestry stages are
-# individual-level (unique array_id) — the operative mapping sets.
+# Chronological order: normalization (INT) runs upstream of the genotype
+# intersection. Pre-ancestry stages are run-level (libraries); post-ancestry
+# stages are individual-level (unique array_id) — the operative mapping sets.
 funnel <- tibble(
   stage = c("Raw FASTQ libraries", "Salmon quantified", "QU-corrected",
             "Assembled modality BEDs", "Ancestry-assigned (EAS/EUR)",
-            "ComBat inputs (expression)",
+            "Normalization inputs (expression)",
             "Genotype intersection + PCA-outlier survival",
             "QTL inputs (expression)",
             "Final mapping set (individuals)"),
   EAS = c(NA, NA, NA, NA, unname(n_anc["EAS"]),
-          tot_ind["in_combat_EAS_expression"], tot_ind["in_metadata_EAS"],
+          tot_ind["in_int_EAS_expression"], tot_ind["in_metadata_EAS"],
           tot_ind["in_qtl_EAS_expression"],
           unname(n_samp["EAS"])),
   EUR = c(NA, NA, NA, NA, unname(n_anc["EUR"]),
-          tot_ind["in_combat_EUR_expression"], tot_ind["in_metadata_EUR"],
+          tot_ind["in_int_EUR_expression"], tot_ind["in_metadata_EUR"],
           tot_ind["in_qtl_EUR_expression"],
           unname(n_samp["EUR"])),
   Total = c(tot_run["fastq_r1_present"], tot_run["has_quant_sf"],
             tot_run["has_qu_quant_sf"], tot_run["in_expression_bed"],
             unname(n_anc["EAS"] + n_anc["EUR"]),
-            tot_ind["in_combat_EAS_expression"] + tot_ind["in_combat_EUR_expression"],
+            tot_ind["in_int_EAS_expression"] + tot_ind["in_int_EUR_expression"],
             tot_ind["in_metadata_EAS"] + tot_ind["in_metadata_EUR"],
             tot_ind["in_qtl_EAS_expression"] + tot_ind["in_qtl_EUR_expression"],
             sum(n_samp))) %>%
@@ -544,17 +546,17 @@ knitr::kable(funnel %>% arrange(stage) %>% select(stage, EAS, EUR, Total),
 ```{r attrition-modality, eval=RUN_ATTRITION}
 mod_ret <- tidyr::crossing(ancestry = c("EAS", "EUR"),
                            modality = MODALITY_LEVELS) %>%
-  mutate(combat = map2_dbl(ancestry, modality,
-                           ~ unname(tot_ind[paste0("in_combat_", .x, "_", .y)])),
+  mutate(int = map2_dbl(ancestry, modality,
+                        ~ unname(tot_ind[paste0("in_int_", .x, "_", .y)])),
          qtl_input = map2_dbl(ancestry, modality,
                               ~ unname(tot_ind[paste0("in_qtl_", .x, "_", .y)]))) %>%
   pivot_wider(names_from = ancestry,
-              values_from = c(combat, qtl_input)) %>%
-  select(modality, combat_EAS, qtl_input_EAS, combat_EUR, qtl_input_EUR)
+              values_from = c(int, qtl_input)) %>%
+  select(modality, int_EAS, qtl_input_EAS, int_EUR, qtl_input_EUR)
 knitr::kable(mod_ret,
-             col.names = c("modality", "ComBat", "QTL input",
-                           "ComBat", "QTL input"),
-             caption = "Per-modality retention at the ComBat and QTL-input stages, in individuals (unique array_id; run-level counts are in attrition_summary.tsv).")
+             col.names = c("modality", "INT", "QTL input",
+                           "INT", "QTL input"),
+             caption = "Per-modality retention at the normalization (INT) and QTL-input stages, in individuals (unique array_id; run-level counts are in attrition_summary.tsv).")
 ```
 
 ```{r attrition-narrative, results='asis'}
@@ -574,22 +576,22 @@ if (!RUN_ATTRITION) {
     "removal leave %d EAS and %d EUR RNA-seq samples; collapsing technical ",
     "replicates to one column per individual gives the final mapping sets of ",
     "**%d EAS and %d EUR individuals**.\n\n",
-    "Two stage-specific notes. (1) ComBat runs upstream of the genotype intersection ",
-    "on one run per individual, so ComBat-stage membership (%d EAS / %d EUR for the ",
-    "non-expression modalities; the expression ComBat BEDs were no longer present at ",
+    "Two stage-specific notes. (1) Normalization (INT) runs upstream of the genotype intersection ",
+    "on one run per individual, so INT-stage membership (%d EAS / %d EUR for the ",
+    "non-expression modalities; the expression INT BEDs were no longer present at ",
     "archive time and are carried forward from the genotype-intersection stage) counts ",
     "a single run per individual, whereas QTL-input membership (%d EAS / %d EUR) flags ",
     "every QC-passing run whose individual survives to mapping — both runs of a ",
     "technical-replicate pair map to the same individual (array_id) column. Run-level ",
-    "counts can therefore exceed ComBat-stage counts without any sample gain; phenotype ",
-    "values for replicated individuals come from the single ComBat-processed run, ",
+    "counts can therefore exceed INT-stage counts without any sample gain; phenotype ",
+    "values for replicated individuals come from the single normalized run, ",
     "run-level covariates are averaged across the pair, and the operative mapping sets ",
     "are the per-individual counts. (2) Splicing is the only modality with QTL-input ",
     "attrition (%d EAS / %d EUR), from junction-level harmonization.\n"),
     nrow(attr_samples), tot_run["has_quant_sf"],
     tot_run["in_metadata_EAS"], tot_run["in_metadata_EUR"],
     as.integer(n_samp[["EAS"]]), as.integer(n_samp[["EUR"]]),
-    tot_ind["in_combat_EAS_isoforms"], tot_ind["in_combat_EUR_isoforms"],
+    tot_ind["in_int_EAS_isoforms"], tot_ind["in_int_EUR_isoforms"],
     tot_run["in_qtl_EAS_expression"], tot_run["in_qtl_EUR_expression"],
     tot_run["in_qtl_EAS_splicing"], tot_run["in_qtl_EUR_splicing"]))
 }
@@ -862,7 +864,7 @@ remain in the final sets.
 ```{r fig-covariate-distributions, fig.width=10, fig.height=4.8}
 cov_long <- bind_rows(lapply(names(cov_sets), function(a) {
   cov_sets[[a]] %>%
-    filter(covariate_id %in% c("sex", "GA") |
+    filter(covariate_id %in% c("sex", "maternal_age") |
              grepl("^ct_", covariate_id)) %>%
     pivot_longer(-covariate_id, names_to = "sample_id",
                  values_to = "value") %>%
@@ -888,7 +890,7 @@ cov_dist_tab <- cov_long %>%
             q3 = round(quantile(value, 0.75, na.rm = TRUE), 4),
             .groups = "drop")
 knitr::kable(cov_dist_tab,
-             caption = "Fixed-covariate distributions per ancestry (final model values; GA is mean-centered, sex is the numeric code, ct_* are deconvolution cell-type proportions).")
+             caption = "Fixed-covariate distributions per ancestry (final model values; maternal_age is mean-centered, sex is the numeric code, ct_* are deconvolution cell-type proportions).")
 write_tsv(cov_dist_tab, file.path(params$table_dir,
                                   "covariate_distributions.tsv"))
 ```
@@ -897,7 +899,8 @@ write_tsv(cov_dist_tab, file.path(params$table_dir,
 
 *Before/after view of the two saved processing stages per modality: the
 pooled unnormalized matrix (input to module 20) and the final
-QN + INT + ComBat BED used for mapping. Distribution panels show up to 5,000
+normalized BED used for mapping (TMM -> VST for gene/isoform expression;
+QN + within-cohort INT for the ratio-based modalities). Distribution panels show up to 5,000
 sampled values per cohort with quartile guides; PCA panels are computed on a
 5,000-feature subsample with per-feature z-scoring so before/after geometry
 is comparable (extraction script 35, section qc).*
@@ -905,7 +908,7 @@ is comparable (extraction script 35, section qc).*
 ```{r qc-feature-counts, eval=!is.null(qc_pheno_counts)}
 fc <- qc_pheno_counts %>%
   mutate(stage = factor(stage, levels = c("before", "after"),
-                        labels = c("pooled unnormalized", "QN+INT+ComBat"))) %>%
+                        labels = c("pooled unnormalized", "normalized (VST/INT)"))) %>%
   arrange(ancestry, factor(modality, levels = MODALITY_LEVELS), stage)
 knitr::kable(fc, caption = "Features and samples per modality at each saved processing stage.")
 write_tsv(fc, file.path(params$table_dir, "phenotype_feature_counts.tsv"))
@@ -928,7 +931,7 @@ fc_prose <- fc %>%
 `r if (is.null(qc_pheno_counts)) "*Skipped: qc_pheno_feature_counts.tsv is not in this archive — run 35_extract_report_extras.py --only qc on seadragon and re-archive.*" else fc_prose`
 
 ```{r fig-qc-violins, fig.width=9, fig.height=4.8, eval=!is.null(qc_pheno_values)}
-stage_lbl <- c(before = "pooled unnormalized", after = "QN+INT+ComBat")
+stage_lbl <- c(before = "pooled unnormalized", after = "normalized (VST/INT)")
 for (m in intersect(MODALITY_LEVELS, unique(qc_pheno_values$modality))) {
   d <- qc_pheno_values %>%
     filter(modality == m) %>%
@@ -948,11 +951,17 @@ for (m in intersect(MODALITY_LEVELS, unique(qc_pheno_values$modality))) {
 }
 violin_prose <- paste0(
   "Per-cohort value distributions before (left column) and after (right ",
-  "column) QN + INT + ComBat. Cohort-specific location/scale shifts visible ",
-  "in the pooled unnormalized stage collapse onto a common ",
+  "column) normalization. For the ratio-based modalities (QN + ",
+  "within-cohort INT), cohort-specific location/scale shifts ",
+  "visible in the pooled unnormalized stage collapse onto a common ",
   "standard-normal-like distribution after processing; quantile ",
-  "normalization aligns the distributions by construction, and ComBat ",
-  "removes the residual cohort mean shifts.")
+  "normalization aligns the distributions, and the per-cohort ",
+  "inverse-normal transform removes residual cohort location/scale ",
+  "differences by construction. For the two expression modalities ",
+  "(terminal TMM -> VST), cohort scale differences are NOT removed by ",
+  "construction — cohort enters through indicator covariates in the ",
+  "mapping model and in hidden-factor estimation, and cohort variance ",
+  "heterogeneity is re-verified by the diagnostic gate (29b-29f).")
 if (any(grepl(" \\(lumped\\)$", qc_pheno_values$cohort)))
   violin_prose <- paste0(
     violin_prose,
@@ -966,15 +975,15 @@ if ("expression" %in% qc_pheno_values$modality &&
     !"before" %in% qc_pheno_values$stage[qc_pheno_values$modality == "expression"])
   violin_prose <- paste0(
     violin_prose,
-    " Expression has no pooled-unnormalized stage (pooling + ComBat is run ",
-    "for the non-expression modalities), so its panel shows the final ",
-    "stage only.")
+    " Expression has no pooled-unnormalized stage (pooled unnormalized BEDs ",
+    "are saved only for the non-expression modalities), so its panel shows ",
+    "the final stage only.")
 ```
 
 `r if (is.null(qc_pheno_values)) "*Skipped: qc_pheno_values.tsv.gz is not in this archive — run 35_extract_report_extras.py --only qc with --pooled-bed-dir on seadragon and re-archive.*" else violin_prose`
 
 ```{r fig-qc-pca, fig.width=9, fig.height=8, eval=!is.null(qc_pheno_pca)}
-stage_lbl <- c(before = "pooled unnormalized", after = "QN+INT+ComBat")
+stage_lbl <- c(before = "pooled unnormalized", after = "normalized (VST/INT)")
 for (m in intersect(MODALITY_LEVELS, unique(qc_pheno_pca$modality))) {
   d <- qc_pheno_pca %>%
     filter(modality == m) %>%
@@ -992,7 +1001,7 @@ for (m in intersect(MODALITY_LEVELS, unique(qc_pheno_pca$modality))) {
 }
 ```
 
-`r if (is.null(qc_pheno_pca)) "*Skipped: qc_pheno_pca.tsv.gz is not in this archive — run 35_extract_report_extras.py --only qc on seadragon and re-archive.*" else "Sample PCA per modality (rows: processing stage; columns: ancestry stratum), colored by cohort. Cohort clustering in the pooled-unnormalized row that disappears in the QN+INT+ComBat row indicates successful batch removal; residual clustering would motivate revisiting the ComBat batch variable."`
+`r if (is.null(qc_pheno_pca)) "*Skipped: qc_pheno_pca.tsv.gz is not in this archive — run 35_extract_report_extras.py --only qc on seadragon and re-archive.*" else "Sample PCA per modality (rows: processing stage; columns: ancestry stratum), colored by cohort. For the ratio-based modalities (QN + within-cohort INT), cohort clustering in the pooled-unnormalized row that disappears in the normalized row indicates successful cohort-scale harmonization; residual clustering would motivate revisiting the cohort covariates in the mapping model. For the two expression modalities (terminal TMM -> VST), cohort structure may persist in the normalized row by design — it is absorbed by cohort indicator covariates rather than by the phenotype transform."`
 
 ## Sequencing QC
 
@@ -1053,18 +1062,27 @@ optimization, permutation calibration, signal fraction).*
   alternative polyA, RNA editing, RNA stability), harmonized to genotyped
   samples (array_id), with NIGMS technical replicates averaged per
   individual. The two isoform modalities are both built from QU-corrected
-  Salmon transcript counts (mean count ≥ 10): **isoform usage** is
+  Salmon transcript counts (mean count ≥ 10), length-normalized to TPM
+  (count / effective length, scaled per sample to sum to 10^6):
+  **isoform usage** is
   within-gene relative-abundance ratios (transcript TPM / gene-total TPM;
   PANTRY convention, mean ratio in [0.05, 0.95]) and **isoform expression**
   is the pre-ratio transcript TPM abundance (DevBrain §3.3 convention).
   Per ancestry stratum:
   feature filtering (isoform usage: usage > 0.1 in > 25% of samples;
   isoform expression: TPM > 0.1 in > 25% of samples, DevBrain
-  §3.3; ratio modalities: detected in ≥ 40%, DevBrain §3.4),
-  batch-median NA imputation, quantile normalization across samples +
-  rank-based inverse-normal transformation per phenotype, then ComBat
-  (batch = cohort) **last** — the DevBrain "ComBat on the normalized data"
-  convention. No log2 pre-transform is applied: rank-based INT is invariant
+  §3.3; ratio modalities: detected in ≥ 40%, DevBrain §3.4).
+  The two count-based expression modalities (gene expression, isoform
+  expression) are then normalized by edgeR TMM -> DESeq2 VST on the pooled
+  count matrices (gene-level lengthScaledTPM counts; QU-corrected
+  transcript counts), terminal — no rank-based INT — with cohort indicators
+  as known covariates in HCP estimation and in the mapping model
+  (PsychENCODE/isoTWAS convention). The ratio-based modalities are
+  batch-median NA-imputed, quantile-normalized across the pooled
+  stratum + rank-based inverse-normal transformed per phenotype
+  **within each cohort**, with cohort indicator covariates in the mapping
+  model absorbing residual cohort effects. For the INT modalities no log2
+  pre-transform is applied: rank-based INT is invariant
   to any monotone transform, so log2/VST would be exact no-ops on the
   mapped scale.
 - **Genotypes**: ancestry-stratified plink2 pgen; variants filtered to
@@ -1078,11 +1096,11 @@ optimization, permutation calibration, signal fraction).*
   convention.
 - **Covariates**: per ancestry × modality, first-5 genotype PCs + HCP factors
   1–k\* (k\* selected per ancestry × modality by module 25b, chr1 eGene
-  maximization on each modality's own HCPs) + sex + gestational
+  maximization on each modality's own HCPs) + sex + maternal
   age + cell-type fractions (Syncytiotrophoblast as reference). The maternal
   cell-fraction covariate (`ct_Maternal`) is excluded BEFORE pruning by
   analysis decision (coded `--exclude-covariates`); the remaining pool is correlation-pruned (iterative max-|r| >
-  0.9 removal, protecting sex/GA > PCs > cell types > HCPs — correlated
+  0.9 removal, protecting sex/maternal_age > PCs > cell types > HCPs — correlated
   HCPs are dropped, so effective k can fall below nominal k\*) with **no
   covariate cap** (details and QC below).
 - **Mapping** (tensorQTL, cis window ±1 Mb): (i) **per-modality grouped** —
@@ -2707,11 +2725,11 @@ only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should
    splicing quantification harmonization across the EAS cohorts, and adding
    EAS cohorts, are the targeted next steps.
 3. **Technical replicates.** 25 mapped individuals (4 EAS, 21 EUR) have two
-   RNA-seq runs. Phenotype values come from the single ComBat-processed run
+   RNA-seq runs. Phenotype values come from the single normalized run
    per individual, while run-level covariates (cell-type fractions, QC
    metrics) are averaged across the pair — a slight phenotype/covariate
    misalignment for those individuals. Future runs will collapse replicates
-   at the count level before batch correction so phenotypes and covariates
+   at the count level before normalization so phenotypes and covariates
    are averaged consistently, with a pre-collapse replicate-concordance QC
    gate.
 4. **Carrier-count propagation.** `r if (all(mac_tab$n_lt5 == 0)) "The MAC ≥ 5 floor propagated cleanly to every mapping output (audit table above)." else "The MAC ≥ 5 floor predates outlier exclusion, so low-carrier tests persist in some mapping outputs (audit table above). No reported result depends on them; hit lists should post-filter to ma_count ≥ 5, and re-applying the floor after outlier exclusion would remove them at the source."`
@@ -2741,7 +2759,7 @@ only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should
   each with stepwise `cis.map_independent` scans), MAF ≥ 0.01 + MAC ≥ 5 at
   the genotype intersection, ±1 Mb window, **Storey
   q-values** on pval_beta via the R `qvalue` package (singularity-R bridge).
-  Covariates: as described (first-5 PCs + HCP_1–k\* + sex/GA/cell types;
+  Covariates: as described (first-5 PCs + HCP_1–k\* + sex/maternal_age/cell types;
   maternal fraction excluded before correlation pruning; no cap). Genotype
   PCs: cohort-only plink2 PCA on LD-pruned variants.
 - Fine-mapping: SuSHiE joint cross-ancestry fine-mapping of the

@@ -5,7 +5,7 @@
 # Run interactively (not via LSF):
 #   singularity exec --bind /rsrch5 --bind /rsrch9 \
 #     /risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif Rscript hcp_diagnostic.R \
-#     --expression /rsrch9/.../EAS_combat_int_expression.bed \
+#     --expression /rsrch9/.../EAS_vst_expression.bed \
 #     --qc-metrics /rsrch9/.../all_qc_metrics.tsv \
 #     --ancestry-map /rsrch9/.../pooled_sample_ancestry_RNAseq.tsv \
 #     --ancestry EAS
@@ -32,7 +32,7 @@ cat("\n========================================\n")
 cat("HCP Diagnostic\n")
 cat("========================================\n")
 
-# ---- Load data (same as combat_normalize_hcp.R) ----
+# ---- Load data (same as normalize_expression_hcp.R) ----
 cat("\n[1] Loading expression BED...\n")
 bed_hdr <- strsplit(readLines(opt[["expression"]], n = 1, warn = FALSE), "\t", fixed = TRUE)[[1]]
 bed_cc <- rep("numeric", length(bed_hdr))

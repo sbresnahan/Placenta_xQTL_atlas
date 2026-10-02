@@ -5,8 +5,12 @@
 # Orchestrates the full HCP pipeline on seadragon:
 #   Stage 1: PicardTools QC metrics (per-sample, per cohort)
 #   Stage 2: Pool QC metrics across cohorts
-#   Stage 3: Pool expression within ancestry strata
-#   Stage 4: ComBat + INT + HCP estimation (per ancestry)
+#   Stage 3: Pool expression within ancestry strata (TPM BED + the
+#            expression_counts BED from tximport_counts.R)
+#   Stage 4: TMM -> VST + HCP estimation (per ancestry; PsychENCODE/isoTWAS
+#            schema — terminal VST on pooled counts, cohort dummies in the
+#            HCP known-covariate matrix; falls back to QN + within-cohort INT
+#            with --mode int when the pooled counts BED is missing)
 #
 # Usage:
 #   bsub -env "CONFIG=\"config.yml\",SCRIPTS_DIR=\"/path/to/scripts\",ANCESTRY_MAP=\"/path/to/pooled_sample_ancestry_RNAseq.tsv\"" < 19_hcp_factors.sh
@@ -18,13 +22,15 @@
 # Required env vars:
 #   CONFIG        — path to config.yml
 #   SCRIPTS_DIR   — directory containing picard_qc.py, pool_expression_within_ancestry.py,
-#                   combat_normalize_hcp.R, and config_get.py
+#                   normalize_expression_hcp.R, and config_get.py
 #   ANCESTRY_MAP  — path to pooled_sample_ancestry_RNAseq.tsv
 #
 # Optional env vars:
 #   COHORTS       — space-separated cohort names to process (default: all from config)
 #   ANCESTRIES    — space-separated ancestry labels to process (default: all)
 #   K             — number of HCP factors (default: 15)
+#   STAGES        — space-separated subset of "0 1 2 3 4" (default: all);
+#                   use STAGES=4 for the within-cohort-INT rerun
 #   OUTPUT_DIR    — output directory (default: ${OUTPUT_BASE}/hcp)
 #   REFFLAT       — path to refFlat file (default: ${REFERENCE_DIR}/HPLRv2.refFlat)
 #   GENE_ANNOT    — path to gene GC/length annotation TSV (optional)
@@ -151,9 +157,24 @@ for a in sorted(df['assigned_ancestry'].unique()):
 fi
 echo "  Ancestries: $ANCESTRY_LIST"
 
+# ---- Stage selection (rerun support) ---------------------------------------
+# STAGES: space-separated subset of "0 1 2 3 4" (default: all stages).
+# The within-cohort-INT rerun only needs stage 4 (STAGES=4); stages 1-3
+# regenerate identical outputs into the kept dirs and can be skipped to
+# save Picard compute time.
+STAGES="${STAGES:-0 1 2 3 4}"
+run_stage() { case " $STAGES " in *" $1 "*) return 0 ;; *) return 1 ;; esac }
+echo "  Stages:       $STAGES"
+
+# Cross-stage paths (defined unconditionally so partial-stage reruns work)
+QC_DIR="${OUTPUT_DIR}/qc_metrics"
+ALL_QC="${OUTPUT_DIR}/all_qc_metrics.tsv"
+POOLED_DIR="${OUTPUT_DIR}/pooled_expression"
+
 # =============================================================================
 # Stage 0: Generate refFlat and gene GC/length annotation (if not present)
 # =============================================================================
+if run_stage 0; then
 echo ""
 echo "[$(date)] Stage 0: Reference files"
 
@@ -184,9 +205,12 @@ else
     echo "  Gene annotation exists: $GENE_ANNOT"
 fi
 
+fi  # run_stage 0
+
 # =============================================================================
 # Stage 1: PicardTools QC metrics (per cohort)
 # =============================================================================
+if run_stage 1; then
 echo ""
 echo "[$(date)] Stage 1: PicardTools QC metrics"
 
@@ -243,14 +267,14 @@ for COHORT in $COHORT_LIST; do
 done
 
 conda deactivate 2>/dev/null || true
+fi  # run_stage 1
 
 # =============================================================================
 # Stage 2: Pool QC metrics across cohorts
 # =============================================================================
+if run_stage 2; then
 echo ""
 echo "[$(date)] Stage 2: Pool QC metrics across cohorts"
-
-ALL_QC="${OUTPUT_DIR}/all_qc_metrics.tsv"
 
 python3 -c "
 import pandas as pd
@@ -277,13 +301,15 @@ print(f'Pooled: {pooled_metrics.shape[0]} samples x {pooled_metrics.shape[1]} me
 print(f'Written: ${ALL_QC}')
 "
 
+fi  # run_stage 2
+
 # =============================================================================
 # Stage 3: Pool expression within ancestry strata
 # =============================================================================
+if run_stage 3; then
 echo ""
 echo "[$(date)] Stage 3: Pool expression within ancestry strata"
 
-POOLED_DIR="${OUTPUT_DIR}/pooled_expression"
 mkdir -p "$POOLED_DIR"
 
 python3 "${SCRIPTS_DIR}/pool_expression_within_ancestry.py" \
@@ -294,11 +320,24 @@ python3 "${SCRIPTS_DIR}/pool_expression_within_ancestry.py" \
     --output-dir "$POOLED_DIR" \
     --ancestries $ANCESTRY_LIST
 
+# Also pool the count-scale BED (tximport_counts.R output) — the TMM->VST
+# input for stage 4 (PsychENCODE/isoTWAS schema).
+python3 "${SCRIPTS_DIR}/pool_expression_within_ancestry.py" \
+    --ancestry-map "$ANCESTRY_MAP" \
+    --config "$CONFIG" \
+    --cohort-dirs $COHORT_DIRS_ARGS \
+    --modality expression_counts \
+    --output-dir "$POOLED_DIR" \
+    --ancestries $ANCESTRY_LIST
+
+fi  # run_stage 3
+
 # =============================================================================
-# Stage 4: ComBat + INT + HCP estimation (per ancestry)
+# Stage 4: TMM -> VST + HCP estimation (per ancestry)
 # =============================================================================
+if run_stage 4; then
 echo ""
-echo "[$(date)] Stage 4: ComBat + INT + HCP estimation"
+echo "[$(date)] Stage 4: TMM -> VST + HCP estimation (fallback: QN + within-cohort INT)"
 
 HCP_DIR="${OUTPUT_DIR}/hcp_factors"
 mkdir -p "$HCP_DIR"
@@ -315,8 +354,20 @@ for ANCESTRY in $ANCESTRY_LIST; do
         continue
     fi
 
-    $SING_R "${SCRIPTS_DIR}/combat_normalize_hcp.R" \
+    # TMM -> VST (PsychENCODE/isoTWAS schema) when the pooled counts BED
+    # exists; otherwise fall back to QN + within-cohort INT (--mode int).
+    COUNTS_FILE="${POOLED_DIR}/${ANCESTRY}_pooled_expression_counts.bed"
+    if [ -f "$COUNTS_FILE" ]; then
+        MODE_ARGS="--mode vst --counts ${COUNTS_FILE}"
+    else
+        echo "    WARN: pooled counts not found: $COUNTS_FILE"
+        echo "          falling back to --mode int (QN + within-cohort INT)"
+        MODE_ARGS="--mode int"
+    fi
+
+    $SING_R "${SCRIPTS_DIR}/normalize_expression_hcp.R" \
         --expression "$EXPR_FILE" \
+        $MODE_ARGS \
         --qc-metrics "$ALL_QC" \
         --ancestry-map "$ANCESTRY_MAP" \
         --ancestry "$ANCESTRY" \
@@ -327,6 +378,7 @@ for ANCESTRY in $ANCESTRY_LIST; do
         --lambda2 1 \
         --lambda3 1
 done
+fi  # run_stage 4
 
 # =============================================================================
 # Summary
@@ -340,8 +392,8 @@ echo ""
 echo "  HCP factor files (for tensorQTL --covariates):"
 ls -lh "${HCP_DIR}"/*_hcp_factors.tsv 2>/dev/null || echo "    (none found)"
 echo ""
-echo "  ComBat+INT expression BEDs:"
-ls -lh "${HCP_DIR}"/*_combat_int_expression.bed 2>/dev/null || echo "    (none found)"
+echo "  Normalized expression BEDs (TMM->VST: *_vst_expression.bed; QN+INT: *_int_expression.bed):"
+ls -lh "${HCP_DIR}"/*_vst_expression.bed "${HCP_DIR}"/*_int_expression.bed 2>/dev/null || echo "    (none found)"
 echo ""
 echo "  Diagnostics:"
 ls -lh "${HCP_DIR}"/*_hcp_diagnostics.pdf 2>/dev/null || echo "    (none found)"

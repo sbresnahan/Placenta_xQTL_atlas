@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-test_combat_modalities.py — Synthetic test suite for the cross-cohort ComBat +
-pooling helpers (roadmap step 4).
+test_normalize_modalities.py — Synthetic test suite for the cross-cohort
+pooling + within-cohort INT normalization helpers (roadmap step 4).
 
 Tests:
   T1: detection filter + QN/INT correctness (R script, single cohort)
   T2: pooling phenotype_id intersection (Python pooler)
   T3: namespaced pass-through for pre-pooled modalities (Python pooler)
-  T4: ComBat-last end-to-end on synthetic batched data (R script)
-  T5: single-batch fallback (R script)
+  T4: within-cohort INT end-to-end on synthetic cohort-shifted data (R script)
+  T5: single-sample-cohort robustness (R script)
 
 Run:
-  python3 test_combat_modalities.py
+  python3 test_normalize_modalities.py
 """
 
 import os
@@ -26,7 +26,7 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 POOLER = HERE / "pool_modalities_within_ancestry.py"
-R_SCRIPT = HERE / "combat_normalize_modalities.R"
+R_SCRIPT = HERE / "normalize_modalities.R"
 
 BED_META = ["#chr", "start", "end", "phenotype_id"]
 
@@ -59,8 +59,9 @@ def test_detection_filter_and_int():
     print("\n=== T1: detection filter + QN/INT (single cohort) ===")
     tmp = Path(tempfile.mkdtemp())
 
-    # 202 features x 40 samples, ONE cohort (ComBat skipped -> output is
-    # exactly QN + INT). Proportion-scale values including exact 0s.
+    # 202 features x 40 samples, ONE cohort (within-cohort INT over the
+    # whole stratum -> output is exactly QN + INT). Proportion-scale values
+    # including exact 0s.
     # (QN needs a realistic feature count to be smooth — with only a handful
     # of features every sample collapses onto the same few quantile means and
     # the per-feature INT sd is artificially deflated by ties.)
@@ -90,7 +91,7 @@ def test_detection_filter_and_int():
     anc = pd.DataFrame({
         "sample_id": samples,
         "assigned_ancestry": ["EUR"] * n_samp,
-        "cohort": ["cA"] * n_samp,  # single cohort -> ComBat skipped
+        "cohort": ["cA"] * n_samp,  # single cohort -> INT over full stratum
     })
     anc_path = tmp / "ancestry.tsv"
     anc.to_csv(anc_path, sep="\t", index=False)
@@ -110,7 +111,7 @@ def test_detection_filter_and_int():
         report("T1 Rscript runs", False, r.stderr[-500:])
         return
 
-    out_bed = out_dir / "EUR_splicing_combat_int.bed"
+    out_bed = out_dir / "EUR_splicing_int.bed"
     if not out_bed.exists():
         report("T1 output BED exists", False, str(out_bed))
         return
@@ -127,7 +128,8 @@ def test_detection_filter_and_int():
     report("T1 no NaN/Inf in output",
            not data.isna().any().any() and not np.isinf(data.values).any())
 
-    # Single cohort => ComBat skipped => output is exactly QN+INT.
+    # Single cohort => within-cohort INT over the full stratum => output is
+    # exactly QN+INT.
     # Check the continuous features are ~N(0,1) (the zero-heavy feature has
     # tied ranks, so it is checked only for presence above).
     cont = df[df["phenotype_id"].str.startswith(("BG", "G1__"))]
@@ -285,22 +287,22 @@ def test_prepooled_passthrough():
 
 
 # ---------------------------------------------------------------------------
-# T4: ComBat end-to-end on synthetic batched data (R)
+# T4: within-cohort INT end-to-end on synthetic cohort-shifted data (R)
 # ---------------------------------------------------------------------------
 
-def test_combat_endtoend():
-    print("\n=== T4: ComBat-last end-to-end (batch removal) ===")
+def test_withincohort_int_endtoend():
+    print("\n=== T4: within-cohort INT end-to-end (cohort-shift removal) ===")
     tmp = Path(tempfile.mkdtemp())
 
     # Synthetic data: 50 features x 40 samples, 2 cohorts (20 each).
-    # Inject a cohort-specific mean shift so ComBat has something to remove.
+    # Inject a cohort-specific mean shift so the within-cohort INT has
+    # something to remove.
     rng = np.random.RandomState(42)
     n_feat, n_samp = 50, 40
     # Proportions in [0.2, 0.5]. Cohort B gets a +0.35 shift on the FIRST HALF
     # of features only (-> [0.55, 0.85], no boundary clipping). The shift must
     # be feature-specific: a uniform all-feature shift is invisible to
-    # within-sample ranks and is erased by QN itself, leaving ComBat nothing
-    # to remove.
+    # within-sample ranks and is erased by QN itself.
     base = 0.2 + 0.3 * rng.rand(n_feat, n_samp)
     affected = np.arange(n_feat // 2)
     base[affected, 20:] += 0.35
@@ -316,12 +318,13 @@ def test_combat_endtoend():
     })
     for j, s in enumerate(samples):
         bed[s] = base[:, j]
-    bed_path = tmp / "test_combat.bed"
+    bed_path = tmp / "test_int.bed"
     bed.to_csv(bed_path, sep="\t", index=False, float_format="%g")
 
     # Paired design: run the SAME input twice.
-    #   Run A: single-cohort ancestry map -> ComBat skipped -> QN+INT only
-    #   Run B: two-cohort ancestry map -> QN+INT then ComBat (ComBat last)
+    #   Run A: single-cohort ancestry map -> pooled INT (shift preserved)
+    #   Run B: two-cohort ancestry map -> within-cohort INT (shift removed
+    #          by construction)
     anc_single = pd.DataFrame({
         "sample_id": samples,
         "assigned_ancestry": ["EUR"] * n_samp,
@@ -339,7 +342,8 @@ def test_combat_endtoend():
     anc_two.to_csv(anc_two_path, sep="\t", index=False)
 
     datas = {}
-    for tag, anc_path in [("before", anc_single_path), ("after", anc_two_path)]:
+    for tag, anc_path in [("pooled", anc_single_path),
+                          ("withincohort", anc_two_path)]:
         out_dir = tmp / f"out_{tag}"
         out_dir.mkdir()
         r = run([
@@ -353,56 +357,74 @@ def test_combat_endtoend():
         if r.returncode != 0:
             report(f"T4 Rscript runs ({tag})", False, r.stderr[-800:])
             return
-        datas[tag] = pd.read_csv(out_dir / "EUR_splicing_combat_int.bed",
+        datas[tag] = pd.read_csv(out_dir / "EUR_splicing_int.bed",
                                  sep="\t").drop(columns=BED_META)
     report("T4 Rscript runs (both)", True)
 
     from sklearn.decomposition import PCA
     ca_idx, cb_idx = np.arange(20), np.arange(20, 40)
 
-    # Cohort separation on PC1, before vs after ComBat
+    # Cohort separation on PC1: pooled INT vs within-cohort INT
     centroids = {}
     for tag, data in datas.items():
         pca = PCA(n_components=2).fit_transform(data.T.values)
         centroids[tag] = abs(pca[ca_idx, 0].mean() - pca[cb_idx, 0].mean())
-    report("T4 cohort separation reduced by ComBat (PC1 centroid distance)",
-           centroids["after"] < centroids["before"] * 0.5,
-           f"before={centroids['before']:.3f}, after={centroids['after']:.3f}")
+    report("T4 cohort separation removed by within-cohort INT (PC1 gap)",
+           centroids["withincohort"] < centroids["pooled"] * 0.5,
+           f"pooled={centroids['pooled']:.3f}, "
+           f"withincohort={centroids['withincohort']:.3f}")
 
-    # Per-feature cohort mean difference on the AFFECTED features (ComBat
-    # removes location effects; unaffected features have nothing to remove)
-    d_before = (datas["before"].iloc[affected][samples[:20]].mean(axis=1)
-                - datas["before"].iloc[affected][samples[20:]].mean(axis=1)).abs().mean()
-    d_after = (datas["after"].iloc[affected][samples[:20]].mean(axis=1)
-               - datas["after"].iloc[affected][samples[20:]].mean(axis=1)).abs().mean()
-    report("T4 per-feature cohort mean difference removed",
-           d_after < d_before * 0.5,
-           f"before={d_before:.3f}, after={d_after:.3f}")
+    # Within-cohort INT guarantee: every feature is ~mean-0 within each
+    # cohort, so the injected shift is removed BY CONSTRUCTION (no
+    # batch-correction step). Not exactly 0 here: QN assigns the same
+    # rank-mean value to a feature whenever it ties on within-sample rank
+    # across samples (frequent with only 50 features), and tie-averaged
+    # ranks break the exact symmetry of the INT quantiles. The residual is
+    # ~1e-2 at this toy feature count and shrinks as features >> samples.
+    # The pooled-INT arm must retain a positive gap, else the test is
+    # vacuous.
+    wc = datas["withincohort"]
+    d_pooled = (datas["pooled"].iloc[affected][samples[:20]].mean(axis=1)
+                - datas["pooled"].iloc[affected][samples[20:]].mean(axis=1)).abs().mean()
+    gap = (wc.iloc[affected][samples[:20]].mean(axis=1)
+           - wc.iloc[affected][samples[20:]].mean(axis=1)).abs().max()
+    report("T4 per-feature cohort mean gap removed by construction",
+           gap < 0.05 and d_pooled > 0.1,
+           f"pooled gap={d_pooled:.3f}, within-cohort max|gap|={gap:.2e}")
 
-    # With ComBat last the output is approximately but not exactly N(0,1)
-    # per feature — loose sanity bounds only.
-    data = datas["after"]
-    means = data.mean(axis=1).abs()
-    sds = data.std(axis=1)
+    # Per-cohort sd equals the rank-INT quantile sd for that cohort's n
+    # (identical across equal-n cohorts here).
+    sd_ca = wc[samples[:20]].values.std()
+    sd_cb = wc[samples[20:]].values.std()
+    report("T4 per-cohort sd matches across equal-n cohorts",
+           abs(sd_ca - sd_cb) < 0.05,
+           f"sd cA={sd_ca:.3f}, sd cB={sd_cb:.3f}")
+
+    # Pooled output is approximately but not exactly N(0,1) per feature -
+    # loose sanity bounds only.
+    means = wc.mean(axis=1).abs()
+    sds = wc.std(axis=1)
     report("T4 final means ~0 (loose)", (means < 0.5).all(),
            f"max|mean|={means.max():.3f}")
     report("T4 final sds ~1 (loose)", ((sds > 0.5) & (sds < 1.5)).all(),
            f"sd range=[{sds.min():.3f},{sds.max():.3f}]")
 
     # Diagnostics PDF produced
-    diag = tmp / "out_after" / "EUR_splicing_combat_diagnostics.pdf"
+    diag = tmp / "out_withincohort" / "EUR_splicing_diagnostics.pdf"
     report("T4 diagnostics PDF produced", diag.exists(), str(diag))
 
 
 # ---------------------------------------------------------------------------
-# T5: single-batch fallback (R)
+# T5: single-sample-cohort robustness (R)
 # ---------------------------------------------------------------------------
 
-def test_single_batch_fallback():
-    print("\n=== T5: single-batch fallback ===")
+def test_single_sample_cohort():
+    print("\n=== T5: single-sample-cohort robustness ===")
     tmp = Path(tempfile.mkdtemp())
 
-    # 2 cohorts, but cohort B has only 1 sample -> merged into 'other'
+    # 2 cohorts, but cohort B has only 1 sample. No batch merging: every
+    # cohort is INT'd on its own ranks regardless of size (n=1 ->
+    # qnorm(1/2) = 0 for every feature).
     rng = np.random.RandomState(7)
     n_feat = 20
     bed = pd.DataFrame({
@@ -440,15 +462,18 @@ def test_single_batch_fallback():
     if r.returncode != 0:
         report("T5 Rscript runs (no crash)", False, r.stderr[-800:])
         return
-    report("T5 Rscript runs (no crash with single-sample batch)", True)
+    report("T5 Rscript runs (no crash with single-sample cohort)", True)
 
-    out_bed = out_dir / "EUR_RNA_editing_combat_int.bed"
+    out_bed = out_dir / "EUR_RNA_editing_int.bed"
     report("T5 output BED produced", out_bed.exists(), str(out_bed))
 
     if out_bed.exists():
         df = pd.read_csv(out_bed, sep="\t")
         data = df.drop(columns=BED_META)
         report("T5 no NaN in output", not data.isna().any().any())
+        report("T5 single-sample cohort INTs to constant 0",
+               (data["b1"].abs() < 1e-12).all(),
+               f"b1 range=[{data['b1'].min()},{data['b1'].max()}]")
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +482,7 @@ def test_single_batch_fallback():
 
 def main():
     print("=" * 60)
-    print("test_combat_modalities.py — synthetic test suite")
+    print("test_normalize_modalities.py — synthetic test suite")
     print("=" * 60)
 
     if not POOLER.exists():
@@ -470,8 +495,8 @@ def main():
     test_detection_filter_and_int()
     test_pooling_intersection()
     test_prepooled_passthrough()
-    test_combat_endtoend()
-    test_single_batch_fallback()
+    test_withincohort_int_endtoend()
+    test_single_sample_cohort()
 
     print(f"\n{'=' * 60}")
     print(f"Results: {PASS} passed, {FAIL} failed")

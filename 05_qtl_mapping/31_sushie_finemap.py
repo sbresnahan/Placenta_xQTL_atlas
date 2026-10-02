@@ -27,7 +27,7 @@ run
 
 Conventions
 -----------
-- Phenotype BEDs: {qtl_dir}/{ANC}_{MOD}.bed.gz (QN+INT+ComBat values keyed
+- Phenotype BEDs: {qtl_dir}/{ANC}_{MOD}.bed.gz (QN + within-cohort INT values keyed
   by array_id — the exact values used in mapping).
 - Genotypes: {qtl_dir}/{ANC}_qtl.pgen/.pvar/.psam (intersected, MAC>=5).
 - Covariates: {qtl_dir}/{ANC}_covariates_{MOD}.tsv (tensorQTL orientation:

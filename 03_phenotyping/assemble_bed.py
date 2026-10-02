@@ -109,7 +109,8 @@ def map_introns_to_genes(introns: list, exons: pd.DataFrame) -> pd.DataFrame:
 #   d = d[units]  # 'tpm' or 'est_counts'
 #
 # Salmon quant.sf has columns: Name, Length, EffectiveLength, TPM, NumReads
-# We map: Name -> target_id (index), TPM -> tpm, NumReads -> est_counts
+# We map: Name -> target_id (index), TPM -> tpm, NumReads -> est_counts,
+# EffectiveLength -> eff_length
 # =============================================================================
 
 # Map Salmon quant.sf column names to the kallisto-compatible names used
@@ -118,6 +119,7 @@ SALMON_COLUMN_MAP = {
     'Name': 'target_id',
     'TPM': 'tpm',
     'NumReads': 'est_counts',
+    'EffectiveLength': 'eff_length',
 }
 
 def load_salmon(sample_ids: list, salmon_dir: Path, units: str) -> pd.DataFrame:
@@ -129,7 +131,13 @@ def load_salmon(sample_ids: list, salmon_dir: Path, units: str) -> pd.DataFrame:
     Args:
         sample_ids: List of sample IDs.
         salmon_dir: Directory containing per-sample subdirectories with quant.sf.
-        units: 'tpm' or 'est_counts' (mapped from Salmon 'TPM' or 'NumReads').
+        units: 'tpm' or 'est_counts' (mapped from Salmon 'TPM' or 'NumReads'),
+            or 'tpm_from_counts': length-normalized TPM recomputed per sample as
+            (NumReads/EffectiveLength) / sum(NumReads/EffectiveLength) * 1e6.
+            Use 'tpm_from_counts' for the QU-corrected quants (expression_qu/):
+            qu_correct_salmon.R writes count-proportional CPM values into the
+            'TPM' column there (drop-in quant.sf compatibility), so the 'tpm'
+            mode would read CPM-scale values, not length-normalized TPM.
     """
     counts = []
     for i, sample in enumerate(sample_ids):
@@ -138,7 +146,16 @@ def load_salmon(sample_ids: list, salmon_dir: Path, units: str) -> pd.DataFrame:
         # Rename Salmon columns to kallisto-compatible names
         d = d.rename(columns=SALMON_COLUMN_MAP)
         d = d.set_index('target_id')
-        d = d[units]  # 'tpm' or 'est_counts'
+        if units == 'tpm_from_counts':
+            eff = pd.to_numeric(d['eff_length'], errors='coerce')
+            cnt = pd.to_numeric(d['est_counts'], errors='coerce').fillna(0.0)
+            x = cnt / eff
+            x[(eff.isna()) | (eff <= 0)] = 0.0  # undefined length -> no abundance
+            x = x.fillna(0.0)
+            total = x.sum()
+            d = x / total * 1e6 if total > 0 else x
+        else:
+            d = d[units]  # 'tpm' or 'est_counts'
         d.name = sample
         counts.append(d)
     return pd.concat(counts, axis=1)
@@ -205,7 +222,15 @@ def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno
     per-transcript values as `bed_iso` but BEFORE the within-gene ratio
     division, filtered only by the `min_count` floor (the devBrain-style
     TPM > 0.1 in > 25% of samples filter is applied downstream, at the
-    ComBat stage). `bed_iso` remains the isoform *usage* (ratio) BED.
+    normalization stage). `bed_iso` remains the isoform *usage* (ratio) BED.
+
+    Units note: for QU-corrected quants (expression_qu/), pass
+    units='tpm_from_counts'. The adjusted quant.sf 'TPM' column is CPM-scale
+    (count-proportional; see qu_correct_salmon.R), so 'tpm' would yield
+    read-fraction abundances/ratios; 'tpm_from_counts' recomputes
+    length-normalized TPM from NumReads x EffectiveLength, giving
+    molecule-fraction abundances and usage ratios (PANTRY/devBrain
+    convention).
     """
     if bed_iso is None and bed_gene is None and bed_iso_expr is None:
         raise ValueError("assemble_expression: at least one of bed_iso / bed_gene / bed_iso_expr must be provided")
@@ -393,8 +418,11 @@ def main():
     p_expr.add_argument('--min-count', type=int, default=10, help='Minimum mean count for isoform to be included in isoform-level BED')
     p_expr.add_argument('--min-frac', type=float, default=0.05, help='Minimum mean relative abundance for isoform to be included in isoform-level BED')
     p_expr.add_argument('--max-frac', type=float, default=0.95, help='Maximum mean relative abundance for isoform to be included in isoform-level BED')
-    p_expr.add_argument('--units', choices=['tpm', 'est_counts'], default='tpm',
-                        help='Units to read from Salmon quant.sf (tpm or est_counts). Defaults to tpm')
+    p_expr.add_argument('--units', choices=['tpm', 'est_counts', 'tpm_from_counts'], default='tpm',
+                        help="Units to read from Salmon quant.sf (tpm, est_counts, or tpm_from_counts). "
+                             "Defaults to tpm. Use tpm_from_counts for QU-corrected quants (expression_qu/): "
+                             "their 'TPM' column is CPM-scale, so length-normalized TPM is recomputed from "
+                             "NumReads and EffectiveLength instead")
     p_expr.add_argument('--log2-expr', action='store_true',
                         help='If set, gene-level expression values are log2 transformed (log2(x + 1)) before being written to BED file')
 

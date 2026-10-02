@@ -6,7 +6,7 @@
 # combined cross-modality arm by maximizing cis-eGene discovery (Storey
 # q <= 0.05), with HCPs re-estimated at each candidate k from that
 # modality's own harmonized BED (hcp_from_matrix.R — HCP-only; the BEDs are
-# already QN+INT+ComBat'd). 25a_optimize_hcp.sh covers the expression-only
+# already QN + within-cohort INT'd). 25a_optimize_hcp.sh covers the expression-only
 # special case. Mapping scope per modality: chr1 subset when the BED has
 # >= CHR1_MIN chr1 phenotypes (default 300), else genome-wide.
 #

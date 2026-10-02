@@ -1,8 +1,10 @@
 # 05_qtl_mapping
 
 Ancestry-stratified cis-xQTL mapping under GTEx conventions: cross-cohort
-pooling with QN + INT + ComBat (normalization first, ComBat last; devBrain
-xQTL schema, Wen et al., Science 2024, 384:eadh0829), HCP latent-factor
+pooling with QN + within-cohort INT (pooled QN first, then per-phenotype
+rank INT within each cohort; devBrain xQTL schema, Wen et al., Science
+2024, 384:eadh0829), cohort indicator covariates in the mapping model, HCP
+latent-factor
 estimation with per-modality k optimization, cohort-only genotype PCA,
 genotype x phenotype intersection with a minor-allele-count floor,
 PC-outlier exclusion, covariate assembly, tensorQTL mapping with Storey
@@ -47,13 +49,13 @@ Scripts 19-20 run once across ancestries; the rest run per ancestry.
 | # | Script(s) | Purpose |
 |---|---|---|
 | pre | `collapse_replicates.py` | Optional pre-step: collapse technical-replicate runs to one column per individual (see "Technical replicates" below) |
-| 19 | `19_hcp_factors.sh`, `19a_picard_sharded.sh`, `19b_fix_missing_metrics.sh` | HCP pipeline: Picard QC (`picard_qc.py`) -> pool metrics (`fix_missing_metrics.py`) -> pool expression within ancestry (`pool_expression_within_ancestry.py`) -> TPM > 0.1 in > 25% filter -> QN + INT -> connectivity-outlier removal (bicor, z < -3; writes `{ANC}_expression_outliers.tsv`) -> ComBat last -> HCP, provisional k=15 (`combat_normalize_hcp.R`, `peer_factors.py`) |
-| 20 | `20_combat_modalities.sh` | Pool + QN + INT + ComBat (last), 7 non-expression modalities (`pool_modalities_within_ancestry.py`, `combat_normalize_modalities.R`); devBrain filters (isoforms TPM > 0.1/>25%; others detected >= 40%); isoforms exclude expression outliers via `--exclude-samples`; splicing/IR via stage-17 pre-pooled BEDs. HCP factors from 19 are reused |
+| 19 | `19_hcp_factors.sh`, `19a_picard_sharded.sh`, `19b_fix_missing_metrics.sh` | HCP pipeline: Picard QC (`picard_qc.py`) -> pool metrics (`fix_missing_metrics.py`) -> pool expression within ancestry (`pool_expression_within_ancestry.py`) -> TPM > 0.1 in > 25% filter -> pooled QN -> per-cohort INT -> connectivity-outlier removal (bicor, z < -3; writes `{ANC}_expression_outliers.tsv`) -> HCP, provisional k=15 (`normalize_expression_hcp.R`, `peer_factors.py`) |
+| 20 | `20_normalize_modalities.sh` | Pool + QN + per-cohort INT, 7 non-expression modalities (`pool_modalities_within_ancestry.py`, `normalize_modalities.R`); devBrain filters (isoforms TPM > 0.1/>25%; others detected >= 40%); isoforms exclude expression outliers via `--exclude-samples`; splicing/IR via stage-17 pre-pooled BEDs. HCP factors from 19 are reused |
 | 21 | `21_install_tensorqtl.sh` | One-time setup: tensorqtl conda env + R `qvalue` + Storey-bridge smoke test |
 | 22 | `22_genotype_pca.sh` | Cohort-only genotype PCA: LD-prune (`--indep-pairwise 200 50 0.2`) -> `plink2 --pca 20 exact` -> `genotype_pca_format.py` -> `{ANC}_genotype_pcs.tsv` + scree (`PCA_scree.R`) |
 | 23 | `23_prepare_intersection.py` | Genotype x phenotype intersection on the RNA-to-DNA map; pgen filtered to intersection samples with MAC >= 5 (`--mac 5`; `--mac 0` disables); sample columns renamed rnaseq_id -> array_id |
 | 24 | `24_outlier_exclusion.py` | First-5-PC selection; 6-SD PC outliers removed from pgen/BED/HCP/deconvolution/metadata. Edits intersection files in place — always rerun 23 before 24 |
-| 25 | `25_build_covariates.py` | Covariates: PC1-5 + HCP_1-k + sex + GA + cell types (dominant type as compositional reference); `--exclude-covariates ct_Maternal` applied before \|r\| > 0.9 pruning; near-zero-variance pre-filter; pruning priority sex/GA > PCs > cell types > HCPs (pruned HCPs reduce effective k below nominal); no covariate cap. Technical-replicate sample columns (duplicate array_id) are averaged per covariate; discordant-sex replicates are excluded. `--hcp-file`/`--hcp-k`/`--out-suffix` support the 25a/25b optimization modules; the canonical per-modality run writes `{ANC}_covariates_{MOD}.tsv` |
+| 25 | `25_build_covariates.py` | Covariates: PC1-5 + HCP_1-k + sex + GA + cell types (dominant type as compositional reference) + cohort indicators (k-1 dummies from `{ANC}_metadata.tsv`, largest cohort as reference; skipped for single-cohort strata); `--exclude-covariates ct_Maternal` applied before \|r\| > 0.9 pruning; near-zero-variance pre-filter; pruning priority sex/GA > PCs > cell types > HCPs (pruned HCPs reduce effective k below nominal); no covariate cap. Technical-replicate sample columns (duplicate array_id) are averaged per covariate; discordant-sex replicates are excluded. `--hcp-file`/`--hcp-k`/`--out-suffix` support the 25a/25b optimization modules; the canonical per-modality run writes `{ANC}_covariates_{MOD}.tsv` |
 | 25a | `25a_optimize_hcp.sh`, `optimize_hcp_chr1.py` | Expression-only HCP-count optimization (devBrain section 4.2), run after 23/24 and before canonical 25: re-estimate HCP per k in {0,5,10,15,20,25,30}, map chr1 expression per k (1 Mb window, MAF >= 0.01), pick k\* maximizing eGenes at Storey q <= 0.05 (ties -> smaller k); installs k\* as `{ANC}_hcp_factors_harmonized.tsv` (provisional file backed up to `*.pre25a_backup.tsv`); writes `{ANC}_optimal_hcp.tsv` + `.png`. Every per-k model uses the same pruned fixed covariate set (`EXCLUDE_COVARIATES`, default `ct_Maternal`); HCPs lost to correlation pruning are reported (`n_hcp_used`/`n_hcp_dropped`) |
 | 25b | `25b_optimize_hcp_modalities.sh`, `optimize_hcp_modalities.py`, `hcp_from_matrix.R` | Per-modality HCP-count optimization: per ancestry x modality group (9 modalities + combined), HCP-only estimation from that group's harmonized BED per k (deterministic 40k-phenotype subsample caps cost for the combined arm), chr1-subset mapping (genome-wide when < 300 chr1 phenotypes), k\* = argmax eGenes at Storey q <= 0.05 (ties -> smaller k); installs `{ANC}_{MOD}_hcp_factors_optimized.tsv`, writes `{ANC}_{MOD}_optimal_hcp.tsv`/`.png` to `qtl_inputs/hcp_optimization_modalities/`. One LSF job per ancestry x modality; full procedure below |
 | 26 | `26_harmonize_modalities.py` | Harmonize the 7 non-expression modality BEDs to the final array_id sample set (handles stage-17 namespaced IDs for splicing/IR) |
@@ -61,13 +63,14 @@ Scripts 19-20 run once across ancestries; the rest run per ancestry.
 | 27 | `27_run_tensorqtl.sh` + `27_run_tensorqtl.py` | tensorQTL `cis.map_cis` per ancestry x modality (grouped, `group_s`, when `phenotype_groups.txt` exists); `--independent` stepwise conditional mode; Storey q-values via the `compute_qvalues.R` file bridge (`QVALUE_RSCRIPT`), `--qvalue-method bh` as fallback. Covariates default to `{ANC}_covariates_{MOD}.tsv` (25b), falling back to `{ANC}_covariates.tsv` with a warning; `COVARIATES_FILE` accepts `{ANC}` and `{MOD}` placeholders |
 | 28 | `28_submit_modalities.sh` | Submission driver: one LSF job per ancestry x modality (`TEST=1` pilot; threads `QVALUE_METHOD`/`MAF_THRESHOLD`) |
 | 29 | `29_make_top_tables.py` | Rebuild sorted `*_cisqtl_top.tsv` from parquets (no tensorQTL rerun) |
+| 29b-f | `29b_expression_diagnostics.py`, `29c_choi_comparison.py`, `29d_cohort_heterogeneity.py`, `29e_plot_diagnostics.R`, `29f_run_diagnostics.sh` | Validation gate between mapping and fine-mapping: expression sample PCs + per-cohort residual-variance table + k=15-vs-45 lead stability (29b); Choi 2024 gene-top / exact-lead / significant-set retention vs the external SNUH study (29c); per-cohort scans + Cochran Q / I2 + genotype x cohort interaction for pooled-significant pairs (29d); figures + baseline-vs-rerun validation summary (29e); LSF driver (29f) |
 | 31 | `31_sushie_finemap.py` | Cross-ancestry fine-mapping: `prepare-loci` builds per-modality locus lists (union of q <= 0.05 grouped-layer lead phenotypes across ancestries; tested windows from the mapping parquets; L = min(10, max(5, n_independent + 2)) from the stepwise layer); `run` fine-maps one shard of loci jointly across ancestries with SuSHiE (individual-level mode, in-sample LD from the intersected pgens; purity 0.5; phenotypes missing from an ancestry's BED drop that ancestry for the locus; per-locus `.ancestries`/`.done` markers + per-shard diagnostics) |
 | 32 | `32_submit_sushie.sh` + `32a_run_sushie_shard.sh` | LSF driver: prepare loci per modality -> shard (default 50 loci/shard) -> one array job per shard in the `sushie` conda env (`TEST=1` pilot; skip-if-done/running guards; `FORCE_LOCI`/`FORCE_RUN`; `ANCESTRIES`/`MODALITIES`/`SHARD_SIZE`/`QUEUE`/`WALLTIME`/`THREADS` env overrides) |
 | 33 | `33_aggregate_finemap.py` | Aggregate per-locus SuSHiE outputs -> `finemap/aggregated/`: `finemap_pips.tsv.gz` (per-variant PIPs, CS membership, per-ancestry effect weights, locus diagnostics), `finemap_credible_sets.tsv.gz` (per-CS summaries incl. cross-ancestry rho), `finemap_locus_summary.tsv` (convergence, ELBO, n CS, max PIP per locus) |
 | 34 | `34_pip_annotation_enrichment.py` | High-PIP (>= 0.9) variant annotation enrichment: `--make-fastvep-input` -> fastVEP consequences (splice/LoF/missense/synonymous/UTR/intron/regulatory/flanking/intergenic); intersects ENCODE SCREEN cCRE classes + placenta OCR BED; Fisher exact (primary), log10(distance)-adjusted logistic (sensitivity), PIP-weighted enrichment; BH-FDR per test family |
 
 Diagnostics/utilities: `hcp_diagnostic.R`, `hcp_diagnostic2.R`,
-`check_hcp_chunks.sh`, `test_hcp.py`, `test_combat_modalities.py`,
+`check_hcp_chunks.sh`, `test_hcp.py`, `test_normalize_modalities.py`,
 `test_build_covariates.py`, `test_collapse_replicates.py`,
 `test_optimize_hcp.py`, `test_optimize_hcp_modalities.py`,
 `test_sushie_finemap.py` (end-to-end fine-mapping fixture: locus prep,
@@ -352,7 +355,7 @@ python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
 # see reports/runbook_report_extras_seadragon.md step 5 for details.
 python3 "$SCRIPTS_DIR/35_extract_report_extras.py" \
   --results-dir "$RESULTS_DIR" --qtl-dir "$QTL_DIR" --only qc \
-  --pooled-bed-dir "$OUTPUT_BASE/combat_modalities/pooled" \
+  --pooled-bed-dir "$OUTPUT_BASE/normalized_modalities/pooled" \
   --ancestry-map "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/pooled_sample_ancestry_RNAseq.tsv" \
   --geno-ancestry-map "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/pooled/genotypes/pooled_sample_ancestry.tsv" \
   --cohort-qc-glob "/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/*/genotypes/imputed/qc" \
@@ -618,3 +621,12 @@ grouped / ungrouped / combined — plus `_independent` stepwise outputs;
 locus-summary, and enrichment tables).
 
 Next: [../reports/README.md](../reports/README.md).
+
+---
+
+*Schema-change note (2026-10-02): ComBat batch correction was dropped in
+favor of pooled QN + per-cohort rank INT + cohort indicator covariates
+(within-cohort INT schema). The last commit using the ComBat schema is
+`ea2b344ab9cd7cdf116b742d97f072d3f7597186` (main, 2026-10-02, "Remove stale
+files") — check out that commit to reproduce or revert to the ComBat-era
+pipeline.*

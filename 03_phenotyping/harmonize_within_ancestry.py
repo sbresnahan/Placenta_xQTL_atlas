@@ -6,7 +6,7 @@ splicing (leafCutter) and intron retention (MAJIQ) within an ancestry stratum.
 Pools per-cohort intermediates, harmonizes features by stable genomic
 coordinates, and writes pooled intermediates in the tool's native format so
 that assemble_bed.py can produce a unified unnorm/ BED ready for downstream
-ComBat + normalization.
+normalization (pooled QN + within-cohort INT).
 
 Splicing strategy:
     leafCutter cluster numbers are cohort-specific. Junctions are harmonized

@@ -10,7 +10,7 @@ per pair); multiple pairs per invocation are supported for serial runs.
 
 Design (per ancestry x modality, per k in --k-grid):
   1. HCP-only estimation at k on the FULL harmonized BED
-     ({ANC}_{MOD}_harmonized.bed — QN+INT+ComBat already applied) via
+     ({ANC}_{MOD}_harmonized.bed — QN + within-cohort INT already applied) via
      hcp_from_matrix.R. k=0 writes a header-only file (no HCP covariates).
      --max-hcp-phenotypes bounds the combined arm's HCP cost with a
      deterministic phenotype subsample (estimation only; mapping always
@@ -183,8 +183,13 @@ def optimize_one(anc, mod, args, k_grid, work_root, r_cmd):
                 base.write_empty_hcp(meta, per_k_hcp)
                 print("    k=0: no HCP covariates (sample set only)")
             else:
+                # VST-scale modalities (isoform_expression): cohort dummies as
+                # known HCP covariates (PsychENCODE/isoTWAS schema, matching
+                # normalize_expression_hcp.R --mode vst).
+                cohort_dummy_args = ['--cohort-dummies'] if mod == 'isoform_expression' else []
                 base.run(r_cmd + [os.path.join(args.scripts_dir, 'hcp_from_matrix.R'),
                                   '--bed', harm_bed,
+                                  *cohort_dummy_args,
                                   '--qc-metrics', args.qc_metrics,
                                   '--metadata', meta_path,
                                   '--k', str(k),

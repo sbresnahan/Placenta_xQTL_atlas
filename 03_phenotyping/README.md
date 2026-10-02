@@ -8,8 +8,8 @@ BEDs per cohort — expression, isoforms, alt_TSS, alt_polyA, splicing,
 intron retention, RNA editing, stability — unnormalized, bgzipped, and
 tabix-indexed, with `phenotype_groups.txt` gene groupings. Normalization
 (QN + INT) is applied once after ancestry-stratified pooling in stage 5
-(scripts 19/20), followed by ComBat (devBrain xQTL schema; Wen et al.,
-Science 2024, 384:eadh0829).
+(scripts 19/20), with the inverse-normal transform applied within each
+cohort (devBrain xQTL schema; Wen et al., Science 2024, 384:eadh0829).
 
 A standalone config-driven version of this module for general use is at
 [sbresnahan/pantry-seadragon](https://github.com/sbresnahan/pantry-seadragon);

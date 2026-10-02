@@ -44,12 +44,21 @@
 #    NumReads):
 #       Name            = transcript_id
 #       NumReads        = QU-corrected (scaled) counts
-#       TPM             = recomputed from scaled counts (per-sample TPM =
-#                         scaled_count / sum(scaled_count) * 1e6)
+#       TPM             = CPM recomputed from scaled counts (per-sample
+#                         scaled_count / sum(scaled_count) * 1e6). NOTE: this
+#                         is count-proportional CPM, NOT length-normalized
+#                         TPM — the column keeps the Salmon name only for
+#                         drop-in quant.sf compatibility. Downstream,
+#                         assemble_bed.py is called with --units
+#                         tpm_from_counts, which recomputes true
+#                         length-normalized TPM from NumReads x
+#                         EffectiveLength, so the CPM-scale column is not
+#                         used for the isoform BEDs.
 #       Length          = carried from the original quant.sf
 #       EffectiveLength = carried from the original quant.sf
 #    This makes <out-dir> a drop-in replacement for the original Salmon dir
-#    from assemble_bed.py's perspective (it reads Name/TPM/NumReads).
+#    from assemble_bed.py's perspective (it reads Name/TPM/NumReads, plus
+#    EffectiveLength for the tpm_from_counts mode).
 #
 # Scope
 # -----

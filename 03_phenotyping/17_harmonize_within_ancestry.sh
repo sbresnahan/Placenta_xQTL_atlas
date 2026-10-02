@@ -5,7 +5,7 @@
 # =============================================================================
 # Pools per-cohort splicing (leafCutter) and intron retention (MAJIQ)
 # intermediates, harmonizes features by stable genomic coordinates, and writes
-# pooled unnorm/ BED files ready for downstream ComBat + normalization.
+# pooled unnorm/ BED files ready for downstream normalization.
 #
 # No modifications to scripts 12/13 or assemble_bed.py. Reuses assemble_bed.py
 # on pooled intermediates.

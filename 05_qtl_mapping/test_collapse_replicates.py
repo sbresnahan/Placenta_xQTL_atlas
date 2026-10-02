@@ -45,12 +45,13 @@ def _write_bed(path, pids, samples):
     df.to_csv(path, sep="\t", index=False, float_format="%g")
 
 
-def _write_quant(path, counts):
+def _write_quant(path, counts, eff_lengths=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame({
         "Name": list(counts.keys()),
         "Length": [1000] * len(counts),
-        "EffectiveLength": [900.0] * len(counts),
+        "EffectiveLength": ([900.0] * len(counts) if eff_lengths is None
+                            else [eff_lengths[k] for k in counts.keys()]),
         "TPM": [1.0] * len(counts),
         "NumReads": list(counts.values()),
     })
@@ -159,9 +160,11 @@ def fixture(tmp_path_factory):
         "S7": [0.1, 0.5, 0.9], "S8": [0.9, 0.5, 0.1],
     })
     _write_quant(base / "cohortA" / "intermediate" / "expression_qu" / "S1" / "quant.sf",
-                 {"tx1": 60, "tx2": 40, "tx3": 10, "tx4": 100})
+                 {"tx1": 60, "tx2": 40, "tx3": 10, "tx4": 100},
+                 eff_lengths={"tx1": 900, "tx2": 300, "tx3": 900, "tx4": 450})
     _write_quant(base / "cohortA" / "intermediate" / "expression_qu" / "S2" / "quant.sf",
-                 {"tx1": 30, "tx2": 20, "tx3": 50, "tx4": 90})
+                 {"tx1": 30, "tx2": 20, "tx3": 50, "tx4": 90},
+                 eff_lengths={"tx1": 900, "tx2": 300, "tx3": 900, "tx4": 450})
 
     # ---- alt_TSS (ratios) + txrevise group quants ----
     _write_bed(unnormA / "alt_TSS.bed",
@@ -368,12 +371,14 @@ def test_isoform_expression_count_sum(collapsed):
 
 
 def test_isoforms_ratio_recomputed_full_denominator(collapsed):
-    """Collapsed ratios must use the full transcript denominator (including
-    tx3, which is absent from the BED): tx1 = 90/210, not 90/150."""
+    """Collapsed ratios are molecule fractions (length-normalized) and must
+    use the full transcript denominator (including tx3, which is absent from
+    the BED). Collapsed counts tx1..tx3 = 90/60/60 with lengths 900/300/900:
+    x = (0.1, 0.2, 1/15), G1 total = 11/30, so tx1 = 3/11, tx2 = 6/11."""
     _, out, _ = collapsed
     bed = _staged_bed(out, "cohortA", "isoforms")
-    assert bed["S1"].iloc[0] == pytest.approx(90 / 210, rel=1e-5)
-    assert bed["S1"].iloc[1] == pytest.approx(60 / 210, rel=1e-5)
+    assert bed["S1"].iloc[0] == pytest.approx(3 / 11, rel=1e-5)
+    assert bed["S1"].iloc[1] == pytest.approx(6 / 11, rel=1e-5)
     assert bed["S1"].iloc[2] == pytest.approx(1.0, rel=1e-5)
     assert list(bed["S7"]) == [0.1, 0.5, 0.9]             # discordant: primary
 
