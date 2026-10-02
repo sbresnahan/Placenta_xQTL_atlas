@@ -50,8 +50,7 @@ paths at the top of each script are set for the seadragon layout.
    `cohort_imputationQC.R` (per cohort), `mega_imputationQC.R` (pooled).
 8. **Ancestry assignment** — `prep_pcAiR.lsf` (build the 1000 Genomes
    reference pgen), then `PC_AiR.R` (GENESIS PC-AiR of cohort samples
-   against 1KG, writes `assigned_ancestry`). `AFR_check.R` + `AFR_LD.bed`
-   support AFR-stratum checks.
+   against 1KG, writes `assigned_ancestry`). `AFR_check.R` support AFR-stratum checks.
 9. **Cross-cohort pooling** — `mega_merge_and_filter.lsf` (+
    `mega_merge_and_filter_check.lsf`): builds `pooled_sample_ancestry.tsv`,
    subsets each cohort's Rsq-passing VCF to ancestry-stratum samples, splits
