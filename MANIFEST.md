@@ -156,7 +156,7 @@ fine-mapping, and annotation enrichment.
 | PCA_scree.R | Scree plots per ancestry |
 | 23_prepare_intersection.py | Genotype x phenotype intersection; pgen filtered to intersection samples (MAC >= 5); IDs renamed rnaseq_id -> array_id |
 | 24_outlier_exclusion.py | 6-SD outlier exclusion on genotype PC1-5 (edits intersection files in place) |
-| 25_build_covariates.py | Assemble covariate table (PCs + HCPs + sex + GA + cell types), prune correlated covariates |
+| 25_build_covariates.py | Assemble covariate table (PCs + HCPs + sex + cell types), prune correlated covariates |
 | 25a_optimize_hcp.sh | Expression-only HCP k grid search on chr1 |
 | optimize_hcp_chr1.py | Implementation of 25a |
 | 25b_optimize_hcp_modalities.sh | Per-modality HCP k grid search |

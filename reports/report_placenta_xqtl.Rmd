@@ -864,7 +864,7 @@ remain in the final sets.
 ```{r fig-covariate-distributions, fig.width=10, fig.height=4.8}
 cov_long <- bind_rows(lapply(names(cov_sets), function(a) {
   cov_sets[[a]] %>%
-    filter(covariate_id %in% c("sex", "maternal_age") |
+    filter(covariate_id %in% c("sex") |
              grepl("^ct_", covariate_id)) %>%
     pivot_longer(-covariate_id, names_to = "sample_id",
                  values_to = "value") %>%
@@ -890,7 +890,7 @@ cov_dist_tab <- cov_long %>%
             q3 = round(quantile(value, 0.75, na.rm = TRUE), 4),
             .groups = "drop")
 knitr::kable(cov_dist_tab,
-             caption = "Fixed-covariate distributions per ancestry (final model values; maternal_age is mean-centered, sex is the numeric code, ct_* are deconvolution cell-type proportions).")
+             caption = "Fixed-covariate distributions per ancestry (final model values; sex is the numeric code, ct_* are deconvolution cell-type proportions).")
 write_tsv(cov_dist_tab, file.path(params$table_dir,
                                   "covariate_distributions.tsv"))
 ```
@@ -1100,7 +1100,7 @@ optimization, permutation calibration, signal fraction).*
   age + cell-type fractions (Syncytiotrophoblast as reference). The maternal
   cell-fraction covariate (`ct_Maternal`) is excluded BEFORE pruning by
   analysis decision (coded `--exclude-covariates`); the remaining pool is correlation-pruned (iterative max-|r| >
-  0.9 removal, protecting sex/maternal_age > PCs > cell types > HCPs — correlated
+  0.9 removal, protecting sex > PCs > cell types > HCPs — correlated
   HCPs are dropped, so effective k can fall below nominal k\*) with **no
   covariate cap** (details and QC below).
 - **Mapping** (tensorQTL, cis window ±1 Mb): (i) **per-modality grouped** —
@@ -2759,7 +2759,7 @@ only`r if (any(mac_tab$n_lt5 > 0)) " — and the flagged low-carrier rows should
   each with stepwise `cis.map_independent` scans), MAF ≥ 0.01 + MAC ≥ 5 at
   the genotype intersection, ±1 Mb window, **Storey
   q-values** on pval_beta via the R `qvalue` package (singularity-R bridge).
-  Covariates: as described (first-5 PCs + HCP_1–k\* + sex/maternal_age/cell types;
+  Covariates: as described (first-5 PCs + HCP_1–k\* + sex/cell types;
   maternal fraction excluded before correlation pruning; no cap). Genotype
   PCs: cohort-only plink2 PCA on LD-pruned variants.
 - Fine-mapping: SuSHiE joint cross-ancestry fine-mapping of the
