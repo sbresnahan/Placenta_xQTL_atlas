@@ -34,8 +34,10 @@ Inputs (per ancestry; all post-23/24/25 pipeline outputs):
   {qtl_dir}/{ANC}_covariates_expression.tsv  (fallback: {ANC}_covariates.tsv)
   {qtl_dir}/{ANC}_metadata.tsv               (array_id -> cohort)
   {qtl_dir}/{ANC}_qtl.{pgen,pvar,psam}       (k-comparison only)
-  {hcp_opt_dir}/results_k{K}/{ANC}_expression_cisqtl.parquet
-  {hcp_opt_dir}/{ANC}_covariates_k{K}.tsv    (K = --k-low/--k-high)
+  25a staging, auto-detected for K = --k-low/--k-high:
+    isolated per-k: {qtl_dir}/hcp_optimization_per_k/{ANC}/k{K}/work/{ANC}/
+    legacy serial:  {hcp_opt_dir}/{ANC}/
+    legacy flat:    {hcp_opt_dir}/
 
 Usage:
   python3 29b_expression_diagnostics.py --qtl-dir $QTL_DIR --ancestry EAS \
@@ -219,12 +221,44 @@ def write_hcp_k_comparison(anc, qtl_dir, hcp_opt_dir, k_low, k_high,
     pq = {}
     cov = {}
     for k in (k_low, k_high):
-        p = os.path.join(hcp_opt_dir, f"results_k{k}",
-                         f"{anc}_expression_cisqtl.parquet")
-        c = os.path.join(hcp_opt_dir, f"{anc}_covariates_k{k}.tsv")
-        for f in (p, c):
-            if not os.path.exists(f):
-                sys.exit(f"ERROR: required 25a staging file not found: {f}")
+        # 25a has had three staging layouts. Prefer the current isolated
+        # per-k sandbox, then the legacy serial ancestry subdir, then the
+        # oldest flat layout. Require BOTH the parquet and matching per-k
+        # covariate table from the same layout.
+        isolated_stage = os.path.join(
+            qtl_dir, "hcp_optimization_per_k", anc, f"k{k}", "work", anc)
+        serial_stage = os.path.join(hcp_opt_dir, anc)
+        flat_stage = hcp_opt_dir
+
+        candidates = [
+            ("isolated-per-k", isolated_stage),
+            ("legacy-serial", serial_stage),
+            ("legacy-flat", flat_stage),
+        ]
+
+        p = c = layout = None
+        attempted = []
+        for label, stage in candidates:
+            p_try = os.path.join(
+                stage, f"results_k{k}", f"{anc}_expression_cisqtl.parquet")
+            c_try = os.path.join(stage, f"{anc}_covariates_k{k}.tsv")
+            attempted.append((label, p_try, c_try))
+            if os.path.exists(p_try) and os.path.exists(c_try):
+                p, c, layout = p_try, c_try, label
+                break
+
+        if p is None:
+            msg = [f"ERROR: required 25a staging files not found for {anc} k={k}.",
+                   "Tried:"]
+            for label, p_try, c_try in attempted:
+                msg.append(f"  [{label}] parquet: {p_try}")
+                msg.append(f"  [{label}] covariates: {c_try}")
+            sys.exit("\n".join(msg))
+
+        print(f"  k={k}: using {layout} 25a staging")
+        print(f"    parquet:   {p}")
+        print(f"    covariates:{c}")
+
         d = pd.read_parquet(p)
         if not isinstance(d.index, pd.RangeIndex):
             d = d.reset_index()

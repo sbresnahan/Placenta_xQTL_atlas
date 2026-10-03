@@ -73,7 +73,8 @@ if [ -z "${DIAG_ANCESTRY:-}" ]; then
     n_sub=0
     for ANC in $ANCESTRIES; do
         job="diag29_${ANC}"
-        if bjobs -J "$job" >/dev/null 2>&1; then
+        if bjobs -noheader -J "$job" 2>/dev/null \
+            | awk '$3 ~ /^(PEND|RUN|PSUSP|USUSP|SSUSP|WAIT)$/ {found=1} END {exit !found}'; then
             echo "  skip ${ANC}: job '${job}' already running/pending"
             continue
         fi
@@ -82,12 +83,22 @@ if [ -z "${DIAG_ANCESTRY:-}" ]; then
             echo "  skip ${ANC}: validation_summary.tsv exists (FORCE=1 to redo)"
             continue
         fi
+        # Export the ancestry-specific worker flag and all resolved paths/options so
+        # `bsub -env all` passes clean values to the worker.  Resources remain
+        # explicitly defined on the bsub command as required by the cluster.
+        export DIAG_ANCESTRY="$ANC"
+        export CONFIG SCRIPTS_DIR QTL_DIR RESULTS_DIR DIAG_DIR HCP_OPT_DIR
+        export K_LOW K_HIGH CHOI_ANCESTRY QUEUE WALLTIME N_THREADS LOG_DIR
+        export CHOI_SUMSTATS CHOI_SIGNIFICANT BASELINE_DIR COHORT_A COHORT_B
+
         bsub -J "$job" -q "$QUEUE" -n "$N_THREADS" -W "$WALLTIME" \
             -M 32 -R "rusage[mem=32]" \
             -o "${LOG_DIR}/diag29_${ANC}.%J.out" \
             -e "${LOG_DIR}/diag29_${ANC}.%J.err" \
-            -env "CONFIG=\"${CONFIG}\",SCRIPTS_DIR=\"${SCRIPTS_DIR}\",DIAG_ANCESTRY=${ANC},QTL_DIR=\"${QTL_DIR}\",RESULTS_DIR=\"${RESULTS_DIR}\",DIAG_DIR=\"${DIAG_DIR}\",HCP_OPT_DIR=\"${HCP_OPT_DIR}\",K_LOW=${K_LOW},K_HIGH=${K_HIGH},CHOI_ANCESTRY=\"${CHOI_ANCESTRY}\",CHOI_SUMSTATS=\"${CHOI_SUMSTATS:-}\",CHOI_SIGNIFICANT=\"${CHOI_SIGNIFICANT:-}\",BASELINE_DIR=\"${BASELINE_DIR:-}\",COHORT_A=\"${COHORT_A:-}\",COHORT_B=\"${COHORT_B:-}\",N_THREADS=${N_THREADS}" \
+            -env all \
             < "${BASH_SOURCE[0]}"
+
+        unset DIAG_ANCESTRY
         n_sub=$((n_sub + 1))
         [ "${TEST:-0}" = "1" ] && { echo "TEST=1: submitted one job"; break; }
     done
