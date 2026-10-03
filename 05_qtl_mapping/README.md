@@ -1,15 +1,16 @@
 # 05_qtl_mapping
 
 Ancestry-stratified cis-xQTL mapping under GTEx conventions: cross-cohort
-pooling with QN + within-cohort INT (pooled QN first, then per-phenotype
-rank INT within each cohort; devBrain xQTL schema, Wen et al., Science
-2024, 384:eadh0829), cohort indicator covariates in the mapping model, HCP
-latent-factor
-estimation with per-modality k optimization, cohort-only genotype PCA,
-genotype x phenotype intersection with a minor-allele-count floor,
+pooling with modality-appropriate normalization. Gene and isoform
+expression use TMM -> VST, while ratio modalities use pooled QN followed
+by per-phenotype rank INT within each cohort (devBrain xQTL schema, Wen
+et al., Science 2024, 384:eadh0829). Mapping includes cohort indicator
+covariates, HCP latent-factor estimation with expression-specific (25a)
+and non-expression/combined (25b) k optimization, cohort-only genotype
+PCA, genotype x phenotype intersection with a minor-allele-count floor,
 PC-outlier exclusion, covariate assembly, tensorQTL mapping with Storey
-q-values, SuSHiE cross-ancestry fine-mapping, and functional enrichment of
-high-PIP variants.
+q-values, SuSHiE cross-ancestry fine-mapping, and functional enrichment
+of high-PIP variants.
 
 These scripts share `config.yml` / `config_get.py` with
 `../03_phenotyping/` (one scripts directory on seadragon).
@@ -19,6 +20,10 @@ These scripts share `config.yml` / `config_get.py` with
 - Stage-1 `{ANC}_pooled.pgen`, stage-3 modality BEDs + deconvolution
   proportions, stage-4 `rnaseq_to_array_id_map.csv`, cohort metadata
   (`rnaseq_id, array_id, ancestry, cohort, sex`)
+- If rebuilding stage-3 alt-TSS/polyA or stability BEDs manually, first
+  follow the per-sample intermediate preflight/recovery instructions in
+  `../03_phenotyping/README.md`; scripts 11/15 require complete stage-03
+  Salmon and stage-05 featureCounts intermediates.
 - Software: tensorqtl 1.0.10 (python-only conda env, installed by
   `21_install_tensorqtl.sh`), sushie >= 0.20 (dedicated conda env, see
   below), plink2, R 4.3.1 singularity image (qvalue, sva, Rhcpp,
@@ -49,18 +54,18 @@ Scripts 19-20 run once across ancestries; the rest run per ancestry.
 | # | Script(s) | Purpose |
 |---|---|---|
 | pre | `collapse_replicates.py` | Optional pre-step: collapse technical-replicate runs to one column per individual (see "Technical replicates" below) |
-| 19 | `19_hcp_factors.sh`, `19a_picard_sharded.sh`, `19b_fix_missing_metrics.sh` | HCP pipeline: Picard QC (`picard_qc.py`) -> pool metrics (`fix_missing_metrics.py`) -> pool expression within ancestry (`pool_expression_within_ancestry.py`) -> TPM > 0.1 in > 25% filter -> pooled QN -> per-cohort INT -> connectivity-outlier removal (bicor, z < -3; writes `{ANC}_expression_outliers.tsv`) -> HCP, provisional k=15 (`normalize_expression_hcp.R`, `peer_factors.py`) |
-| 20 | `20_normalize_modalities.sh` | Pool + QN + per-cohort INT, 7 non-expression modalities (`pool_modalities_within_ancestry.py`, `normalize_modalities.R`); devBrain filters (isoforms TPM > 0.1/>25%; others detected >= 40%); isoforms exclude expression outliers via `--exclude-samples`; splicing/IR via stage-17 pre-pooled BEDs. HCP factors from 19 are reused |
+| 19 | `19_hcp_factors.sh`, `19a_picard_sharded.sh`, `19b_fix_missing_metrics.sh` | HCP pipeline: Picard QC (`picard_qc.py`) -> pool metrics (`fix_missing_metrics.py`) -> pool expression within ancestry (`pool_expression_within_ancestry.py`) -> TPM > 0.1 in >= 25% filter -> TMM -> VST -> connectivity-outlier removal (bicor, z < -3; writes `{ANC}_expression_outliers.tsv`) -> provisional HCP (`normalize_expression_hcp.R`, `peer_factors.py`) |
+| 20 | `20_normalize_modalities.sh` | Pool non-expression modalities (`pool_modalities_within_ancestry.py`, union mode). `isoform_expression` uses pooled counts with TMM -> VST; ratio modalities use pooled QN -> within-cohort INT (`normalize_modalities.R`), with devBrain detection/no-variance/per-cohort guards. Splicing/IR use stage-17 pre-pooled BEDs. Final HCP counts are optimized later by 25b |
 | 21 | `21_install_tensorqtl.sh` | One-time setup: tensorqtl conda env + R `qvalue` + Storey-bridge smoke test |
 | 22 | `22_genotype_pca.sh` | Cohort-only genotype PCA: LD-prune (`--indep-pairwise 200 50 0.2`) -> `plink2 --pca 20 exact` -> `genotype_pca_format.py` -> `{ANC}_genotype_pcs.tsv` + scree (`PCA_scree.R`) |
 | 23 | `23_prepare_intersection.py` | Genotype x phenotype intersection on the RNA-to-DNA map; pgen filtered to intersection samples with MAC >= 5 (`--mac 5`; `--mac 0` disables); sample columns renamed rnaseq_id -> array_id |
 | 24 | `24_outlier_exclusion.py` | First-5-PC selection; 6-SD PC outliers removed from pgen/BED/HCP/deconvolution/metadata. Edits intersection files in place — always rerun 23 before 24 |
 | 25 | `25_build_covariates.py` | Covariates: PC1-5 + HCP_1-k + sex + cell types (dominant type as compositional reference) + cohort indicators (k-1 dummies from `{ANC}_metadata.tsv`, largest cohort as reference; skipped for single-cohort strata); `--exclude-covariates ct_Maternal` applied before \|r\| > 0.9 pruning; near-zero-variance pre-filter; pruning priority sex/cohort indicators > PCs > cell types > HCPs (pruned HCPs reduce effective k below nominal); no covariate cap. Technical-replicate sample columns (duplicate array_id) are averaged per covariate; discordant-sex replicates are excluded. `--hcp-file`/`--hcp-k`/`--out-suffix` support the 25a/25b optimization modules; the canonical per-modality run writes `{ANC}_covariates_{MOD}.tsv` |
-| 25a | `25a_optimize_hcp.sh`, `optimize_hcp_chr1.py` | Expression-only HCP-count optimization (devBrain section 4.2), run after 23/24 and before canonical 25: re-estimate HCP per k in {0,5,10,15,20,25,30}, map chr1 expression per k (1 Mb window, MAF >= 0.01), pick k\* maximizing eGenes at Storey q <= 0.05 (ties -> smaller k); installs k\* as `{ANC}_hcp_factors_harmonized.tsv` (provisional file backed up to `*.pre25a_backup.tsv`); writes `{ANC}_optimal_hcp.tsv` + `.png`. Every per-k model uses the same pruned fixed covariate set (`EXCLUDE_COVARIATES`, default `ct_Maternal`); HCPs lost to correlation pruning are reported (`n_hcp_used`/`n_hcp_dropped`) |
-| 25b | `25b_optimize_hcp_modalities.sh`, `optimize_hcp_modalities.py`, `hcp_from_matrix.R` | Per-modality HCP-count optimization: per ancestry x modality group (9 modalities + combined), HCP-only estimation from that group's harmonized BED per k (deterministic 40k-phenotype subsample caps cost for the combined arm), chr1-subset mapping (genome-wide when < 300 chr1 phenotypes), k\* = argmax eGenes at Storey q <= 0.05 (ties -> smaller k); installs `{ANC}_{MOD}_hcp_factors_optimized.tsv`, writes `{ANC}_{MOD}_optimal_hcp.tsv`/`.png` to `qtl_inputs/hcp_optimization_modalities/`. One LSF job per ancestry x modality; full procedure below |
+| 25a | `25a_submit_hcp_k_jobs.sh`, `25a_optimize_hcp.sh`, `optimize_hcp_chr1.py`, `finalize_hcp_k_grid.py` | Expression-only HCP-count optimization, run after 23/24 and before canonical 25: one resumable LSF worker per k (production grid 0..100 by 5), chr1 expression mapping per k, k\* maximizing eGenes at Storey q <= 0.05 (ties -> smaller k); installs k\* as `{ANC}_hcp_factors_harmonized.tsv`; supports `LAMBDA1` sensitivity sandboxes and finalization. Every per-k model uses the same pruned fixed covariate set (`EXCLUDE_COVARIATES`, default `ct_Maternal`); HCPs lost to correlation pruning are reported (`n_hcp_used`/`n_hcp_dropped`) |
+| 25b | `25b_submit_hcp_k_jobs.sh`, `25b_optimize_hcp_modalities.sh`, `optimize_hcp_modalities.py`, `hcp_from_matrix.R`, `finalize_hcp_k_grid.py` | HCP-count optimization for 8 non-expression modalities plus `combined` (9 arms per ancestry): one resumable LSF worker per k (production grid 0..100 by 5), HCP-only estimation from each harmonized BED, chr1-subset mapping (genome-wide when < 300 chr1 phenotypes), k\* = argmax eGenes at Storey q <= 0.05 (ties -> smaller k); installs `{ANC}_{MOD}_hcp_factors_optimized.tsv`; supports the same chosen `LAMBDA1` as 25a |
 | 26 | `26_harmonize_modalities.py` | Harmonize the 7 non-expression modality BEDs to the final array_id sample set (handles stage-17 namespaced IDs for splicing/IR) |
 | 30 | `30_combine_modalities.py` | Combined cross-modality BED (`{modality}__{id}` namespacing; cross-modality gene groups; modality sidecar TSV) |
-| 27 | `27_run_tensorqtl.sh` + `27_run_tensorqtl.py` | tensorQTL `cis.map_cis` per ancestry x modality (grouped, `group_s`, when `phenotype_groups.txt` exists); `--independent` stepwise conditional mode; Storey q-values via the `compute_qvalues.R` file bridge (`QVALUE_RSCRIPT`), `--qvalue-method bh` as fallback. Covariates default to `{ANC}_covariates_{MOD}.tsv` (25b), falling back to `{ANC}_covariates.tsv` with a warning; `COVARIATES_FILE` accepts `{ANC}` and `{MOD}` placeholders |
+| 27 | `27_run_tensorqtl.sh` + `27_run_tensorqtl.py` | tensorQTL `cis.map_cis` per ancestry x modality (grouped, `group_s`, when `phenotype_groups.txt` exists); `--independent` stepwise conditional mode; Storey q-values via the `compute_qvalues.R` file bridge (`QVALUE_RSCRIPT`), `--qvalue-method bh` as fallback. Covariates default to `{ANC}_covariates_{MOD}.tsv` (expression from 25a; non-expression/combined from 25b), falling back to `{ANC}_covariates.tsv` with a warning; `COVARIATES_FILE` accepts `{ANC}` and `{MOD}` placeholders |
 | 28 | `28_submit_modalities.sh` | Submission driver: one LSF job per ancestry x modality (`TEST=1` pilot; threads `QVALUE_METHOD`/`MAF_THRESHOLD`) |
 | 29 | `29_make_top_tables.py` | Rebuild sorted `*_cisqtl_top.tsv` from parquets (no tensorQTL rerun) |
 | 29b-f | `29b_expression_diagnostics.py`, `29c_choi_comparison.py`, `29d_cohort_heterogeneity.py`, `29e_plot_diagnostics.R`, `29f_run_diagnostics.sh` | Validation gate between mapping and fine-mapping: expression sample PCs + per-cohort residual-variance table + k=15-vs-45 lead stability (29b); Choi 2024 gene-top / exact-lead / significant-set retention vs the external SNUH study (29c); per-cohort scans + Cochran Q / I2 + genotype x cohort interaction for pooled-significant pairs (29d); figures + baseline-vs-rerun validation summary (29e); LSF driver (29f) |
@@ -165,61 +170,51 @@ awk 'NR==1 {print "smoke samples:", NF-1} END {print "smoke factors:", NR}' /tmp
 head -1 "$QTL_DIR/EAS_expression_harmonized.bed" | awk '{print "BED samples:", NF-4}'
 ```
 
-## Step 2: HCP optimization grid (25b; 20 LSF jobs)
+## Step 2: HCP optimization grids (25a expression; 25b non-expression + combined)
 
-One job per ancestry x modality group. isoform_expression and combined go
-to the long queue; the rest fit in medium. Expected wall time: ~14 h for
-the longest job (combined arm).
+Expression is optimized separately by 25a. Non-expression modalities and
+the combined phenotype are optimized by 25b. Both submitters are
+resumable and use one LSF worker per `k`; completed grid points are
+skipped. Use the same selected `LAMBDA1` for 25a and 25b.
 
-```bash
-for ANC in EAS EUR; do
-  for MOD in expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability combined; do
-    Q=medium; W=24:00
-    case "$MOD" in isoform_expression|combined) Q=long; W=48:00 ;; esac
-    bsub -J "hcpopt_${ANC}_${MOD}" -q "$Q" -n 4 -M 32 -R "rusage[mem=32]" -W "$W" \
-      -o "$LOG_DIR/hcpopt_${ANC}_${MOD}.%J.out" -e "$LOG_DIR/hcpopt_${ANC}_${MOD}.%J.err" \
-      -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,ANCESTRIES=$ANC,MODALITIES=$MOD" \
-      < "$SCRIPTS_DIR/25b_optimize_hcp_modalities.sh"
-  done
-done
-```
-
-Monitor with `bjobs -w | grep hcpopt`. If a job fails, fix the cause and
-resubmit that pair with `SKIP_EXISTING=1` appended to the `-env` list —
-completed k grid points are reused.
-
-Completion checks (both counts must be 20):
+Expression (25a):
 
 ```bash
-ls "$QTL_DIR"/hcp_optimization_modalities/*_optimal_hcp.tsv | wc -l
-ls "$QTL_DIR"/*_hcp_factors_optimized.tsv | wc -l
+export ANCESTRIES="EAS EUR"
+export K_GRID="0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100"
+bash 25a_submit_hcp_k_jobs.sh
 ```
 
-Chosen k\* per ancestry x modality:
+Continue after both expression finalizers finish and
+`hcp_optimization/{EAS,EUR}_optimal_hcp.tsv` plus
+`{EAS,EUR}_hcp_factors_harmonized.tsv` exist.
+
+Then harmonize all non-expression modality BEDs with script 26, build the
+combined phenotype with script 30, and submit 25b:
 
 ```bash
-for f in "$QTL_DIR"/hcp_optimization_modalities/*_optimal_hcp.tsv; do
-  awk -v f="$(basename "$f" _optimal_hcp.tsv)" '$NF=="True" {print f, "k*="$3, "eGenes="$4, "scope="$6}' "$f"
-done
+export MODALITIES="isoform_expression alt_polyA alt_TSS intron_retention isoforms RNA_editing splicing stability combined"
+bash 25b_submit_hcp_k_jobs.sh
 ```
 
-HCP parameters match script 19: lambda1 = 0.5, lambda2 = lambda3 = 1,
-QC |r| > 0.9 pruning; k grid {0,5,10,15,20,25,30} for every group. Per-k
-staging lives under `$QTL_DIR/hcp_optimization_modalities/{ANC}/{MOD}/`
-(logs, per-k HCPs, covariates, mapping parquets) — keep it until results
-are signed off; it is the audit trail for each k\* choice.
+A fresh production 25b grid is at most 378 workers (2 ancestries x 9
+arms x 21 k values), with one finalizer per ancestry x arm. Completion
+checks after all 18 finalizers:
 
-lambda1 is overridable via the `LAMBDA1` env var in 19, 25a, and 25b
-(default 0.5 everywhere). Non-default values run in a lambda-suffixed
-sandbox tree (`hcp_optimization_per_k_lam<LAMBDA1>/` /
-`hcp_optimization_modalities_per_k_lam<LAMBDA1>/`), never consult the
-lambda=0.5 legacy tree, and skip the canonical finalizer unless
-`FINALIZE=1` — so sensitivity scans cannot clobber the production run.
+```bash
+ls "$QTL_DIR"/hcp_optimization_modalities/*_optimal_hcp.tsv | wc -l   # 18
+ls "$QTL_DIR"/*_hcp_factors_optimized.tsv | wc -l                    # 18
+```
+
+`LAMBDA1` defaults to 0.5. If a non-default lambda wins the expression
+sensitivity check, pass that same value through the full 25a and 25b
+grids; non-default runs use suffixed sandbox trees until finalized.
 
 ## Step 3: canonical per-modality covariates (25)
 
-Builds `{ANC}_covariates_{MOD}.tsv` for all 10 groups per ancestry from
-the installed k\* HCP sets, then copies the expression set to the
+Builds `{ANC}_covariates_{MOD}.tsv` for all 10 groups per ancestry.
+Expression uses the winning 25a HCP set; the other eight modalities plus
+combined use their 25b winners. Then copy the expression set to the
 canonical `{ANC}_covariates.tsv` (kept for the report archive and other
 downstream consumers). Light enough for a login node; wrap in bsub if
 preferred (~1-2 min per modality).
@@ -229,8 +224,20 @@ source /etc/profile.d/modules.sh
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 conda activate tensorqtl
 
+MODS="isoform_expression alt_polyA alt_TSS intron_retention isoforms RNA_editing splicing stability combined"
+
 for ANC in EAS EUR; do
-  for MOD in expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability combined; do
+  # Expression winner installed by 25a.
+  python3 "$SCRIPTS_DIR/25_build_covariates.py" \
+    --qtl-dir "$QTL_DIR" \
+    --pcair-dir "$OUTPUT_BASE/genotype_pcs" \
+    --ancestries "$ANC" \
+    --out-suffix "_expression" \
+    --exclude-covariates ct_Maternal \
+    --cor-threshold 0.9 --min-sd 1e-8
+
+  # 25b winners: 8 non-expression modalities + combined.
+  for MOD in $MODS; do
     KSTAR=$(awk '$NF=="True" {print $3}' "$QTL_DIR/hcp_optimization_modalities/${ANC}_${MOD}_optimal_hcp.tsv")
     echo "== $ANC $MOD (k*=$KSTAR) =="
     python3 "$SCRIPTS_DIR/25_build_covariates.py" \
@@ -240,8 +247,10 @@ for ANC in EAS EUR; do
       --hcp-file "$QTL_DIR/${ANC}_${MOD}_hcp_factors_optimized.tsv" \
       --hcp-k "$KSTAR" \
       --out-suffix "_${MOD}" \
-      --exclude-covariates ct_Maternal
+      --exclude-covariates ct_Maternal \
+      --cor-threshold 0.9 --min-sd 1e-8
   done
+
   cp "$QTL_DIR/${ANC}_covariates_expression.tsv" "$QTL_DIR/${ANC}_covariates.tsv"
   cp "$QTL_DIR/${ANC}_covariate_pruning_expression.tsv" "$QTL_DIR/${ANC}_covariate_pruning.tsv"
   cp "$QTL_DIR/${ANC}_covariate_correlation_expression.png" "$QTL_DIR/${ANC}_covariate_correlation.png"
@@ -256,12 +265,9 @@ ls "$QTL_DIR"/*_covariates_*.tsv | wc -l
 head -3 "$QTL_DIR/EAS_covariates_splicing.tsv" | cut -f1-3
 ```
 
-Expected log output: each 25 run prints a NOTE line listing the
-technical-replicate samples it averages (4 EAS samples: SRR13696945,
-SRR13696964, SRR13696996, SRR13697029 — the same individuals processed in
-two cohort batches). A `WARN: discordant sex across technical replicates`
-line indicates a metadata inconsistency — investigate before proceeding
-if it appears.
+With the replicate-collapse workflow, the collapsed ancestry map should
+already yield one RNA run per individual by this point; duplicate-column
+handling remains a defensive fallback, not the expected production path.
 
 ## Step 4: xQTL mapping (three submission passes)
 
@@ -581,14 +587,13 @@ flag and handle case-by-case.
   `25_build_covariates.py --exclude-covariates` (and the
   `EXCLUDE_COVARIATES` env var in 25a) before correlation pruning; there
   is no covariate cap.
-- **`optimize_hcp_chr1.py` (25a) overwrites
-  `{ANC}_hcp_factors_harmonized.tsv`** with the k\* solution (the
-  provisional k=15 file is backed up to `*.pre25a_backup.tsv`). Always
-  rerun 25 after 25a. The per-modality module (25b) instead installs
-  `{ANC}_{MOD}_hcp_factors_optimized.tsv` per ancestry x modality group;
-  rerun the canonical 25 per modality (with
-  `--hcp-file {ANC}_{MOD}_hcp_factors_optimized.tsv --out-suffix _{MOD}`)
-  so every `{ANC}_covariates_{MOD}.tsv` matches its installed k\*.
+- **25a installs the expression HCP winner and 25b installs the
+  non-expression/combined winners.** `optimize_hcp_chr1.py` / the 25a
+  finalizer installs `{ANC}_hcp_factors_harmonized.tsv`; 25b installs
+  `{ANC}_{MOD}_hcp_factors_optimized.tsv` for the eight non-expression
+  modalities plus `combined`. Always rebuild canonical covariates after
+  HCP optimization so each `{ANC}_covariates_{MOD}.tsv` matches its
+  installed k\*.
 - **`picard` must resolve after 19/19a's env stack** — `picard_qc.py`
   calls the literal `picard` executable; if the `picard-2.27.4`
   activation does not put it on PATH (wrong env name/path, or a
@@ -649,9 +654,9 @@ Next: [../reports/README.md](../reports/README.md).
 
 ---
 
-*Schema-change note (2026-10-02): ComBat batch correction was dropped in
-favor of pooled QN + per-cohort rank INT + cohort indicator covariates
-(within-cohort INT schema). The last commit using the ComBat schema is
-`ea2b344ab9cd7cdf116b742d97f072d3f7597186` (main, 2026-10-02, "Remove stale
-files") — check out that commit to reproduce or revert to the ComBat-era
-pipeline.*
+*Schema-change notes: on 2026-10-02, ComBat batch correction was dropped
+in favor of cohort indicator covariates. On 2026-10-03, count modalities
+(gene and isoform expression) moved to pooled TMM -> VST, while ratio
+modalities retained pooled QN -> within-cohort rank INT. The last commit
+using the ComBat schema is `ea2b344ab9cd7cdf116b742d97f072d3f7597186`
+(main, 2026-10-02, "Remove stale files").*

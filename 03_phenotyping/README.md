@@ -7,9 +7,11 @@ long-read HPLRv2 transcript annotation. Generates 8 RNA-modality phenotype
 BEDs per cohort — expression, isoforms, alt_TSS, alt_polyA, splicing,
 intron retention, RNA editing, stability — unnormalized, bgzipped, and
 tabix-indexed, with `phenotype_groups.txt` gene groupings. Normalization
-(QN + INT) is applied once after ancestry-stratified pooling in stage 5
-(scripts 19/20), with the inverse-normal transform applied within each
-cohort (devBrain xQTL schema; Wen et al., Science 2024, 384:eadh0829).
+is applied once after ancestry-stratified pooling in stage 5 (scripts
+19/20): count modalities (gene and isoform expression) use TMM -> VST;
+ratio modalities use pooled quantile normalization followed by
+inverse-normal transformation within cohort (devBrain xQTL schema; Wen
+et al., Science 2024, 384:eadh0829).
 
 A standalone config-driven version of this module for general use is at
 [sbresnahan/pantry-seadragon](https://github.com/sbresnahan/pantry-seadragon);
@@ -94,6 +96,66 @@ bootstraps; Chen et al., NAR 2023, doi:10.1093/nar/gkad1167): isoform
 BEDs are built from the corrected counts, gene-level expression from the
 original Salmon counts.
 
+### Manual recovery / partial reruns
+
+Prefer `run_pipeline.py` for normal production runs. If a per-sample
+stage must be regenerated manually, the leaf scripts require the full
+positional argument lists below; omitting the final arguments causes an
+immediate usage/validation exit before the underlying tool runs.
+
+`03_salmon_alt_tss_polya.sh`:
+
+```text
+03_salmon_alt_tss_polya.sh CONFIG SCRIPTS_DIR COHORT SAMPLE GROUP POSITION
+GROUP    = grp_1 | grp_2
+POSITION = upstream | contained | downstream
+```
+
+Every sample therefore needs six txrevise `quant.sf` outputs (2 groups x
+3 positions) under
+`intermediate/alt_TSS_polyA/<group>.<position>/<sample>/quant.sf` before
+`11_aggregate_alt_tss_polya.sh` is submitted.
+
+`05_featureCounts.sh`:
+
+```text
+05_featureCounts.sh CONFIG SCRIPTS_DIR COHORT SAMPLE FEATURE_TYPE STRANDEDNESS
+FEATURE_TYPE = exonic | intronic
+STRANDEDNESS = 0 | 1 | 2   # featureCounts -s
+```
+
+For the placenta cohorts in the current config:
+
+```text
+cohort1  unstranded       -> 0
+cohort2  reverse_stranded -> 2
+cohort3  reverse_stranded -> 2
+cohort4  reverse_stranded -> 2
+```
+
+Stage 05 consumes canonical BAM paths
+`intermediate/bam/<sample>.bam`. If STAR outputs already exist only as
+`intermediate/star_out/<sample>.Aligned.sortedByCoord.out.bam`, expose
+them without copying the BAMs:
+
+```bash
+mkdir -p "$OUTPUT_BASE/$COHORT/intermediate/bam"
+while read -r SAMPLE; do
+  ln -sfn \
+    "$OUTPUT_BASE/$COHORT/intermediate/star_out/${SAMPLE}.Aligned.sortedByCoord.out.bam" \
+    "$OUTPUT_BASE/$COHORT/intermediate/bam/${SAMPLE}.bam"
+done < "$OUTPUT_BASE/$COHORT/samples.txt"
+```
+
+Before submitting scripts 11 or 15, verify that all expected per-sample
+inputs exist. Aggregators do not recreate missing stage-03/stage-05
+intermediates.
+
+When chaining a single aggregation job to a whole LSF array, use
+`-w "done(<array_job_id>)"`. Do not use `done(<array_job_id>[*])` for a
+scalar dependent job: `[*]` requests element-wise array dependency and
+LSF reports `Dependent job arrays must be the same size`.
+
 Run the driver once per cohort. On failure the driver reports the failed
 stage/sample and stranded dependents, then exits non-zero; fix the cause
 and rerun the same command.
@@ -158,6 +220,10 @@ normalization happens in stage 5.
 - Stage-3 `output/<modality>.bed.gz` files are unnormalized. Consumers
   that expect normalized per-cohort BEDs (e.g. `combine_modalities.sh`)
   must be pointed at stage-5 outputs instead.
+- `run_pipeline.py` should map config strandedness to featureCounts `-s`
+  using `unstranded -> 0`, `stranded -> 1`, `reverse_stranded -> 2`. Keep
+  those spellings exact; older revisions used the misspelled key
+  `unstrande`, which makes an `unstranded` cohort fail validation.
 - Submit 001/002/003 back-to-back (LSF job-name dependency resolution;
   see step 1).
 - The txrevise array range in `002_txrevise_array.sh` must equal
