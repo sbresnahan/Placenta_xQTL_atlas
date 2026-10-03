@@ -97,7 +97,41 @@ def prepare_loci(args):
         ind_path = Path(args.results_dir) / f"{anc}_{result_label}_cisqtl_independent_top.tsv"
         if not ind_path.exists():
             continue
-        ind = pd.read_csv(ind_path, sep="\t", usecols=["phenotype_id", "rank"])
+
+        # An empty independent-signal file is valid: it means tensorQTL did not
+        # identify any additional conditionally independent signals for this
+        # ancestry/modality.  Treat that as no extra signal-count information
+        # rather than aborting prepare-loci.
+        if ind_path.stat().st_size == 0:
+            print(f"  {anc}: independent-signal file is empty; "
+                  "using one-signal default where needed")
+            continue
+
+        try:
+            ind = pd.read_csv(
+                ind_path, sep="\t", usecols=["phenotype_id", "rank"])
+        except pd.errors.EmptyDataError:
+            print(f"  {anc}: independent-signal file has no parseable rows; "
+                  "using one-signal default where needed")
+            continue
+        except ValueError as e:
+            raise ValueError(
+                f"Malformed independent-signal file {ind_path}: expected "
+                "columns phenotype_id and rank"
+            ) from e
+
+        if ind.empty:
+            print(f"  {anc}: independent-signal table has 0 rows; "
+                  "using one-signal default where needed")
+            continue
+
+        ind["rank"] = pd.to_numeric(ind["rank"], errors="coerce")
+        ind = ind.dropna(subset=["phenotype_id", "rank"])
+        if ind.empty:
+            print(f"  {anc}: independent-signal table has no valid "
+                  "phenotype_id/rank rows; using one-signal default where needed")
+            continue
+
         per = ind.groupby("phenotype_id")["rank"].max()
         for ph, r in per.items():
             n_signals[ph] = max(n_signals.get(ph, 1), int(r))
