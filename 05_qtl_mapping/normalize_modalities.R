@@ -1,4 +1,6 @@
 #!/usr/bin/env Rscript
+# Lab R package library (edgeR/DESeq2/Rhcpp/tximport/...) -- must precede any library() call.
+.libPaths(c("/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1", .libPaths()))
 #
 # normalize_modalities.R — QN + within-cohort INT for non-expression RNA modalities
 # (formerly combat_normalize_modalities.R); TMM -> VST for isoform_expression

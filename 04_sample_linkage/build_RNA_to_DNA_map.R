@@ -1,3 +1,5 @@
+# Lab R package library (edgeR/DESeq2/Rhcpp/tximport/...) -- must precede any library() call.
+.libPaths(c("/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1", .libPaths()))
 .libPaths(c("/home/stbresnahan/R/ubuntu/4.3.1", .libPaths()))
 
 ## =============================================================================

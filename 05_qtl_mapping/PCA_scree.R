@@ -1,3 +1,5 @@
+# Lab R package library (edgeR/DESeq2/Rhcpp/tximport/...) -- must precede any library() call.
+.libPaths(c("/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1", .libPaths()))
 # =============================================================================
 # plot_genotype_pcs_scree.R — Scree plots for PC-AiR genotype PCs
 # =============================================================================

@@ -1,4 +1,6 @@
 #!/usr/bin/env Rscript
+# Lab R package library (edgeR/DESeq2/Rhcpp/tximport/...) -- must precede any library() call.
+.libPaths(c("/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1", .libPaths()))
 # =============================================================================
 # compute_qvalues.R — Storey q-values via the R qvalue package (GTEx convention)
 # =============================================================================
