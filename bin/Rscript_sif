@@ -2,6 +2,10 @@
 # Canonical Rscript for this pipeline: R 4.3.1 inside the RStudio singularity
 # container. The lab R package library (ubuntu/4.3.1) is built for R 4.3.1 and
 # requires a newer glibc than the bare compute nodes provide, so pipeline R
-# scripts must run inside this container. Override the image via XQTL_R_SIF.
+# scripts must run inside this container. R_LIBS_USER points at that library so
+# ad-hoc R snippets (which lack the in-script .libPaths line) also resolve it.
+# Override the image via XQTL_R_SIF.
 SIF="${XQTL_R_SIF:-/risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif}"
-exec singularity exec --bind /rsrch5 --bind /rsrch9 --bind /tmp "$SIF" Rscript "$@"
+exec singularity exec --bind /rsrch5 --bind /rsrch9 --bind /tmp \
+  --env R_LIBS_USER=/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1 \
+  "$SIF" Rscript "$@"
