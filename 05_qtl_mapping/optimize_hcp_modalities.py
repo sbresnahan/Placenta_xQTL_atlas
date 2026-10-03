@@ -56,7 +56,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import optimize_hcp_chr1 as base  # shared helpers: run, bgzip_tabix, write_empty_hcp, count_egenes
 
-plt.rcParams['font.family'] = ['Liberation Sans', 'Arimo', 'DejaVu Sans']
+plt.rcParams['font.family'] = 'Helvetica'
 
 ALL_MODALITIES = ("expression isoforms isoform_expression splicing "
                   "intron_retention alt_TSS alt_polyA RNA_editing stability combined")

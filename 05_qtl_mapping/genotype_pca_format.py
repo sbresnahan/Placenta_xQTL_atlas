@@ -24,7 +24,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-plt.rcParams["font.family"] = ["Liberation Sans", "Arimo", "DejaVu Sans"]
+plt.rcParams['font.family'] = 'Helvetica'
 
 
 def main():

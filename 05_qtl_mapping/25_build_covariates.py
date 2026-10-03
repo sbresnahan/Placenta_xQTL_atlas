@@ -68,7 +68,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-plt.rcParams['font.family'] = ['Liberation Sans', 'Arimo', 'DejaVu Sans']
+plt.rcParams['font.family'] = 'Helvetica'
 
 # Priority tiers for correlation pruning (lower = higher priority)
 TIER_DEMOGRAPHIC = 0   # sex, cohort indicators
