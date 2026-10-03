@@ -19,25 +19,24 @@ Collapse policy (per pair of runs, per modality):
     sum the underlying numerator/denominator counts and recompute the
     ratio. Ratios themselves are never averaged.
   * intron_retention:
-    MAJIQ PSI exposes no per-run counts at this stage, so the primary run
-    is kept and a warning is logged (action keep_primary_no_counts).
+    MAJIQ PSI exposes no per-run counts at this stage, so the per-run PSI
+    columns are averaged directly (same cohort -> identical feature set).
   * Cross-protocol pairs (runs from more than one cohort):
-    default keep-primary (--cross-protocol keep-primary): the primary run
-    represents the individual everywhere and non-primary runs are dropped
-    from every cohort file, so the individual stays single-column after
-    cross-cohort pooling. With '--cross-protocol average' the count-exact
-    collapse is applied across cohorts for the ratio modalities whose
-    values are recomputed from per-run source files (isoforms, alt_TSS,
-    alt_polyA, stability, RNA_editing); expression / isoform_expression
-    (summed from BED columns, only comparable within a cohort's feature
-    set), splicing (cohort-specific cluster definitions), and
-    intron_retention (no counts) stay keep-primary.
-  * Concordance gate:
+    default drop (--cross-protocol drop): a sample whose runs span
+    cohorts indicates a labeling error, so the individual is removed
+    entirely -- all runs dropped from every cohort file and from the
+    collapsed ancestry map (action dropped_cross_protocol). With
+    '--cross-protocol average' the count-exact collapse is applied across
+    cohorts for the ratio modalities whose values are recomputed from
+    per-run source files (isoforms, alt_TSS, alt_polyA, stability,
+    RNA_editing); other modalities still drop the individual.
+  * Concordance report (flag-only, never a veto):
     per pair x modality, Pearson and Spearman correlation between the two
-    runs over the cohort's unnorm BED. Spearman < --concordance-threshold
-    (default 0.9) means the pair is NOT collapsed for that modality; the
-    primary run is kept and the pair is flagged in the concordance report
-    for manual review.
+    runs over the cohort's unnorm BED. Pairs with Spearman <
+    --concordance-threshold (default 0.9) or too few features are flagged
+    in the concordance report for manual review, but ARE still collapsed:
+    technical replicates are always averaged. The only keep-primary case
+    is single_run_present -- one run genuinely absent from the modality.
 
 Primary-run rule: prefer the run present in the ancestry map, then
 lexicographic order.
@@ -52,7 +51,7 @@ Staging tree contract (under --out-dir):
           collapsed LeafCutter numerator counts (consumed by
           17_harmonize_within_ancestry.sh via --staging-dir).
       intermediate/intron_retention/retained_intron_psi.tsv.gz
-          primary-run-only MAJIQ PSI (consumed by the same step).
+          run-averaged MAJIQ PSI (consumed by the same step).
     Splicing and intron_retention per-cohort BEDs are NOT staged: those
     modalities flow through harmonize_within_ancestry.py from the staged
     intermediates, which re-derives the feature set.
@@ -66,8 +65,9 @@ Reports (under --out-dir/reports):
   replicate_concordance.tsv and {ANC}_replicate_concordance.tsv
       One row per individual x modality: Pearson/Spearman + review flag.
   ancestry_map_collapsed.tsv
-      Ancestry map with non-primary runs of replicate pairs removed
-      (drop-in replacement for downstream steps).
+      Ancestry map with non-primary runs of replicate pairs removed and
+      cross-protocol individuals removed entirely (drop-in replacement
+      for downstream steps).
 
 Usage:
   python3 collapse_replicates.py \
@@ -553,12 +553,15 @@ def main():
                    help="Normalized GTF (required when collapsing isoforms)")
     p.add_argument("--modalities", nargs="*", default=ALL_MODALITIES,
                    choices=ALL_MODALITIES, help="Default: all")
-    p.add_argument("--cross-protocol", choices=["keep-primary", "average"],
-                   default="keep-primary",
+    p.add_argument("--cross-protocol", choices=["drop", "average"],
+                   default="drop",
                    help="Policy for pairs whose runs come from >1 cohort "
-                        "(default: keep-primary)")
+                        "(default: drop -- the individual is removed "
+                        "entirely; 'average' collapses ratio modalities "
+                        "from per-run source files)")
     p.add_argument("--concordance-threshold", type=float, default=0.9,
-                   help="Spearman below this -> keep primary + flag for review")
+                   help="Spearman below this -> flag pair for review (collapse "
+                        "still proceeds; flag-only, never a veto)")
     p.add_argument("--concordance-min-features", type=int, default=100,
                    help="Minimum pairwise-complete features for concordance")
     p.add_argument("--dry-run", action="store_true",
@@ -709,27 +712,30 @@ def main():
                 note = ""
                 if not cross and info["primary"] not in runs_present:
                     note = f"primary {info['primary']} absent from BED; kept {rep}"
-                if cross and info["primary"] not in runs_present:
-                    note = (f"primary {info['primary']} not in this cohort's BED; "
-                            f"non-primary run(s) dropped here")
 
                 # ---- Decide action ----
                 pearson = spearman = np.nan
                 n_feat = 0
                 handler_runs = runs_present
                 if cross:
-                    # Cross-cohort averaging is only defined for modalities
-                    # whose collapsed values are recomputed from per-run
-                    # source files (Salmon quants, featureCounts, edit
-                    # matrix). expression / isoform_expression are summed
-                    # from BED columns, which are only comparable within a
-                    # cohort's feature set, so they stay keep-primary.
+                    # Cross-cohort individuals are labeling errors by
+                    # policy: the individual is removed entirely (all runs,
+                    # every cohort, and the collapsed ancestry map). The
+                    # '--cross-protocol average' escape hatch collapses only
+                    # the ratio modalities whose values are recomputed from
+                    # per-run source files (Salmon quants, featureCounts,
+                    # edit matrix); expression / isoform_expression are
+                    # summed from BED columns, only comparable within a
+                    # cohort's feature set.
                     can_average = (args.cross_protocol == "average"
                                    and modality in RATIO_BED_MODALITIES
                                    and rep in runs_present)
-                    action = "collapsed" if can_average else "keep_primary_cross_protocol"
+                    action = "collapsed" if can_average else "dropped_cross_protocol"
                     if can_average:
                         handler_runs = [r for r in info["runs"] if r in run2cohort]
+                    else:
+                        note = (note + "; " if note else "") + \
+                            "individual dropped: runs span >1 cohort"
                     if rep in runs_present:
                         # Record the cross-protocol pair once (from the
                         # representative's cohort) in the concordance report.
@@ -759,16 +765,13 @@ def main():
                         "n_features": n_feat, "pearson": pearson,
                         "spearman": spearman, "flag": flag,
                     })
-                    if modality == "intron_retention":
-                        action = "keep_primary_no_counts"
+                    # Technical replicates are always averaged;
+                    # concordance flags are for review in the report,
+                    # never a veto.
+                    action = "collapsed"
+                    if flag != "ok":
                         note = (note + "; " if note else "") + \
-                            "MAJIQ PSI exposes no per-run counts; kept primary run"
-                    elif flag == "discordant":
-                        action = "keep_primary_discordant"
-                    elif flag == "insufficient_data":
-                        action = "keep_primary_insufficient_data"
-                    else:
-                        action = "collapsed"
+                            f"concordance flag: {flag}"
 
                 # ---- Execute ----
                 if action == "collapsed" and stage_bed:
@@ -788,12 +791,14 @@ def main():
                     else:
                         vec = None
                     if vec is None:
-                        action = "keep_primary_counts_missing"
+                        # Per-run source files missing: average the BED
+                        # columns directly (same cohort -> identical
+                        # feature set) rather than discarding a run.
+                        vec = bed[runs_present].mean(axis=1).to_numpy()
                         note = (note + "; " if note else "") + \
-                            "per-run count sources missing; kept primary"
-                    else:
-                        bed[rep] = vec
-                        modified = True
+                            "per-run sources missing; averaged BED columns"
+                    bed[rep] = vec
+                    modified = True
 
                 # splicing collapse is realized at the numers level and
                 # intron_retention at the PSI level (sections below); for
@@ -801,12 +806,16 @@ def main():
                 # dropped here.
                 actions[(array_id, modality)] = action
                 if stage_bed:
-                    drop_cols = [r for r in runs_present if r != rep]
+                    if action == "dropped_cross_protocol":
+                        drop_cols = list(runs_present)  # individual removed
+                    else:
+                        drop_cols = [r for r in runs_present if r != rep]
                     if drop_cols:
                         bed = bed.drop(columns=drop_cols)
                         sample_cols = [c for c in sample_cols if c not in drop_cols]
                         modified = True
-                kept = rep if rep in runs_present else ""
+                kept = rep if (rep in runs_present
+                               and action != "dropped_cross_protocol") else ""
                 collapse_rows.append({**base_row, "action": action,
                                       "kept_column": kept,
                                       "spearman": spearman, "note": note})
@@ -832,8 +841,10 @@ def main():
                     if not runs_present:
                         continue
                     rep = representative_run(info, runs_present)
-                    action = actions.get((array_id, "splicing"),
-                                         "keep_primary_insufficient_data")
+                    action = actions.get((array_id, "splicing"), "collapsed")
+                    if action == "dropped_cross_protocol":
+                        drop.extend(runs_present)  # individual removed
+                        continue
                     if action == "collapsed" and not info["cross_protocol"]:
                         same_cohort_runs = [r for r in runs_present
                                             if run2cohort.get(r) == cohort]
@@ -853,7 +864,8 @@ def main():
                 print(f"  splicing numers: wrote staged file "
                       f"({mat_out.shape[1]} samples)")
 
-        # ---- Intron retention PSI (keep-primary: drop non-primary columns) ----
+        # ---- Intron retention PSI (averaged: MAJIQ exposes no per-run ----
+        # ---- counts, so same-cohort run PSI columns are averaged) ----
         if "intron_retention" in modalities:
             psi_path = os.path.join(cohort_dir, IR_PSI)
             if os.path.exists(psi_path) and not args.dry_run:
@@ -864,6 +876,16 @@ def main():
                     if not runs_present:
                         continue
                     rep = representative_run(info, runs_present)
+                    action = actions.get((array_id, "intron_retention"),
+                                         "collapsed")
+                    if action == "dropped_cross_protocol":
+                        drop.extend(runs_present)  # individual removed
+                        continue
+                    if action == "collapsed" and not info["cross_protocol"]:
+                        same_cohort_runs = [r for r in runs_present
+                                            if run2cohort.get(r) == cohort]
+                        if len(same_cohort_runs) >= 2:
+                            psi[rep] = psi[same_cohort_runs].mean(axis=1)
                     drop.extend([r for r in runs_present if r != rep])
                 psi = psi.drop(columns=list(dict.fromkeys(drop)))
                 out_psi = os.path.join(staging_cohort, IR_PSI)
@@ -871,7 +893,7 @@ def main():
                 psi.to_csv(out_psi, sep="\t", index=False,
                            float_format="%g", compression="gzip")
                 print(f"  intron_retention PSI: wrote staged file "
-                      f"(keep-primary; dropped {len(set(drop))} run column(s))")
+                      f"(dropped {len(set(drop))} run column(s))")
 
     # ---- Reports ----
     reports_dir = os.path.join(out_dir, "reports")
@@ -894,10 +916,14 @@ def main():
             grp.to_csv(os.path.join(reports_dir, f"{anc}_replicate_concordance.tsv"),
                        sep="\t", index=False)
 
-    # Collapsed ancestry map: drop non-primary runs of every pair
+    # Collapsed ancestry map: drop non-primary runs of same-cohort pairs;
+    # cross-protocol individuals are removed entirely under the drop policy.
     drop_runs = set()
     for info in pair_info.values():
-        drop_runs.update(r for r in info["runs"] if r != info["primary"])
+        if info["cross_protocol"] and args.cross_protocol == "drop":
+            drop_runs.update(info["runs"])
+        else:
+            drop_runs.update(r for r in info["runs"] if r != info["primary"])
     amap_out = amap[~amap["sample_id"].isin(drop_runs)].copy()
     amap_path = os.path.join(reports_dir, "ancestry_map_collapsed.tsv")
     amap_out.to_csv(amap_path, sep="\t", index=False)

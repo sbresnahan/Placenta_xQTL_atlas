@@ -40,7 +40,15 @@ OUTPUT_BASE="${OUTPUT_BASE}"
 # Use the NORMALIZED GTF (has gene_name, gene_biotype, gene features required
 # by assemble_bed.py), not the raw SQANTI3 GTF.
 REF_ANNO="${NORMALIZED_GTF}"
-PANTRY_SCRIPTS="${PANTRY_SCRIPTS}"
+# Helper scripts (assemble_bed.py) ship next to this script in the repo. The
+# config's pantry_scripts key predates the git-clone deployment and may still
+# point at the old flat-scripts dir -- self-locate; config is fallback.
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${_SELF_DIR}/assemble_bed.py" ]; then
+    PANTRY_SCRIPTS="${_SELF_DIR}"
+else
+    PANTRY_SCRIPTS="${PANTRY_SCRIPTS}"
+fi
 COHORT_DIR="${OUTPUT_BASE}/${COHORT}"
 INTERM_DIR="${COHORT_DIR}/intermediate"
 OUTPUT_DIR="${COHORT_DIR}/output"

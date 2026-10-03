@@ -4,8 +4,10 @@ test_collapse_replicates.py — Tests for collapse_replicates.py.
 
 Builds a synthetic three-cohort fixture with:
   * A1: same-cohort concordant pair (S1+S2 in cohortA) -> collapsed
-  * A3: same-cohort discordant pair (S7+S8 in cohortA) -> keep-primary
-  * A2: cross-protocol pair (S3 in cohortA, S5 in cohortB) -> keep-primary
+  * A3: same-cohort discordant pair (S7+S8 in cohortA) -> collapsed
+        (discordance flagged in the report; never a veto)
+  * A2: cross-protocol pair (S3 in cohortA, S5 in cohortB) -> dropped
+        entirely (both runs, all cohorts + collapsed ancestry map)
   * cohortC: no pairs -> symlinked, untouched
 
 Run: pytest test_collapse_replicates.py
@@ -360,14 +362,16 @@ def test_expression_count_sum(collapsed):
     bed = _staged_bed(out, "cohortA", "expression")
     assert "S2" not in bed.columns and "S8" not in bed.columns
     assert list(bed["S1"]) == [150, 30, 950, 65]          # summed
-    assert list(bed["S7"]) == [100, 50, 10, 5]            # discordant: primary
+    assert list(bed["S7"]) == [190, 2050, 13, 505]        # discordant: summed
     assert list(bed["S4"]) == [300, 60, 700, 45]          # untouched
+    assert "S3" not in bed.columns                        # cross-protocol: dropped
 
 
 def test_isoform_expression_count_sum(collapsed):
     _, out, _ = collapsed
     bed = _staged_bed(out, "cohortA", "isoform_expression")
     assert list(bed["S1"]) == [90, 60, 190]
+    assert list(bed["S7"]) == [60, 60, 60]                # discordant: summed
 
 
 def test_isoforms_ratio_recomputed_full_denominator(collapsed):
@@ -380,7 +384,9 @@ def test_isoforms_ratio_recomputed_full_denominator(collapsed):
     assert bed["S1"].iloc[0] == pytest.approx(3 / 11, rel=1e-5)
     assert bed["S1"].iloc[1] == pytest.approx(6 / 11, rel=1e-5)
     assert bed["S1"].iloc[2] == pytest.approx(1.0, rel=1e-5)
-    assert list(bed["S7"]) == [0.1, 0.5, 0.9]             # discordant: primary
+    # discordant: still collapsed; the fixture has no S7/S8 quants, so the
+    # fallback averages the BED ratio columns
+    assert list(bed["S7"]) == [0.5, 0.5, 0.5]
 
 
 def test_alt_tss_ratio_recomputed(collapsed):
@@ -390,13 +396,17 @@ def test_alt_tss_ratio_recomputed(collapsed):
     assert bed["S1"].iloc[1] == pytest.approx(65 / 200, rel=1e-5)
     assert bed["S1"].iloc[2] == pytest.approx(107 / 200, rel=1e-5)
     assert bed["S1"].iloc[3] == pytest.approx(93 / 200, rel=1e-5)
+    # discordant pair, no per-run group quants -> BED-column mean
+    assert list(bed["S7"]) == [0.5, 0.5, 0.5, 0.5]
 
 
-def test_alt_polyA_insufficient_data_keeps_primary(collapsed):
+def test_alt_polyA_insufficient_data_collapsed(collapsed):
+    """Too few features for concordance -> flagged, but still collapsed.
+    The fixture has no per-run downstream quants -> BED-column mean."""
     _, out, _ = collapsed
     bed = _staged_bed(out, "cohortA", "alt_polyA")
     assert "S2" not in bed.columns
-    assert list(bed["S1"]) == [0.8, 0.2]                  # unchanged
+    assert list(bed["S1"]) == [0.775, 0.225]              # mean of S1, S2
 
 
 def test_stability_floor_after_sum(collapsed):
@@ -408,6 +418,8 @@ def test_stability_floor_after_sum(collapsed):
     assert bed["S1"].iloc[1] == pytest.approx(385 / 165, rel=1e-5)
     assert bed["S1"].iloc[2] == pytest.approx(245 / 95, rel=1e-5)
     assert bed["S1"].iloc[3] == pytest.approx(65 / 60, rel=1e-5)
+    # discordant pair, no per-run featureCounts -> BED-column mean
+    assert list(bed["S7"]) == [2.25, 2.25, 1.625, 1.625]
 
 
 def test_rna_editing_recomputed(collapsed):
@@ -419,6 +431,11 @@ def test_rna_editing_recomputed(collapsed):
     e3_mean = np.mean([6.5 / 30.5, 3.5 / 15.5, 5.5 / 10.5, 0.5 / 20.5])
     assert bed["S1"].iloc[1] == pytest.approx(e3_mean, rel=1e-5)
     assert bed["S1"].iloc[2] == pytest.approx(16.5 / 64.5, rel=1e-5)
+    # discordant pair S7+S8: recomputed from the edit matrix
+    assert bed["S7"].iloc[0] == pytest.approx(
+        (10.5 / 20.5 + 11.5 / 30.5) / 2, rel=1e-5)
+    assert bed["S7"].iloc[1] == pytest.approx(5.5 / 30.5, rel=1e-5)
+    assert bed["S7"].iloc[2] == pytest.approx(10.5 / 20.5, rel=1e-5)
 
 
 def test_splicing_numers_collapsed(collapsed):
@@ -429,9 +446,9 @@ def test_splicing_numers_collapsed(collapsed):
         "leafcutter_perind_numers.counts.gz"
     assert num.exists()
     ids, row_ids, mat = cr.parse_numers(num)
-    assert ids == ["S1", "S3", "S4", "S7"]       # S2, S8 dropped
+    assert ids == ["S1", "S4", "S7"]  # S2/S8 collapsed away; S3 dropped (cross)
     assert list(mat["S1"]) == [120, 30, 75, 40, 100]
-    assert list(mat["S7"]) == [90, 10, 50, 10, 90]  # discordant: not summed
+    assert list(mat["S7"]) == [100, 100, 100, 20, 180]  # discordant: summed
     # samples-only header
     with gzip.open(num, "rt") as f:
         header = f.readline().strip().split(" ")
@@ -439,23 +456,24 @@ def test_splicing_numers_collapsed(collapsed):
     assert len(header) == len(first) - 1
 
 
-def test_intron_retention_keep_primary(collapsed):
+def test_intron_retention_averaged(collapsed):
     _, out, _ = collapsed
     assert not (out / "cohortA" / "output" / "unnorm" /
                 "intron_retention.bed").exists()
     psi = pd.read_csv(out / "cohortA" / "intermediate" / "intron_retention" /
                       "retained_intron_psi.tsv.gz", sep="\t")
     assert "S2" not in psi.columns and "S8" not in psi.columns
-    assert "S1" in psi.columns and "S7" in psi.columns
+    assert "S3" not in psi.columns                  # cross-protocol: dropped
+    assert list(psi["S1"]) == [0.125, 0.19]         # mean of S1, S2
+    assert list(psi["S7"]) == [0.5, 0.5]            # discordant: averaged
 
 
-def test_cross_protocol_keep_primary(collapsed):
-    """A2 (S3 in cohortA, S5 in cohortB): S3 kept in cohortA, S5 dropped
-    from cohortB so the individual stays single-column."""
+def test_cross_protocol_dropped(collapsed):
+    """A2 (S3 in cohortA, S5 in cohortB): a sample spanning cohorts is a
+    labeling error -- the individual is removed from every cohort file."""
     _, out, _ = collapsed
     bedA = _staged_bed(out, "cohortA", "expression")
-    assert "S3" in bedA.columns
-    assert list(bedA["S3"]) == [200, 40, 100, 60]         # unchanged
+    assert "S3" not in bedA.columns
     bedB = _staged_bed(out, "cohortB", "expression")
     assert "S5" not in bedB.columns
     assert "S6" in bedB.columns
@@ -486,14 +504,14 @@ def test_reports(collapsed):
     assert action("A1", "expression") == {"collapsed"}
     assert action("A1", "isoforms") == {"collapsed"}
     assert action("A1", "splicing") == {"collapsed"}
-    assert action("A1", "alt_polyA") == {"keep_primary_insufficient_data"}
-    assert action("A1", "intron_retention") == {"keep_primary_no_counts"}
-    assert action("A3", "expression") == {"keep_primary_discordant"}
-    assert action("A3", "splicing") == {"keep_primary_discordant"}
-    assert action("A2", "expression") == {"keep_primary_cross_protocol"}
-    # A2 kept column: S3 in cohortA, none in cohortB
+    assert action("A1", "alt_polyA") == {"collapsed"}   # insufficient: flag-only
+    assert action("A1", "intron_retention") == {"collapsed"}
+    assert action("A3", "expression") == {"collapsed"}  # discordant: flag-only
+    assert action("A3", "splicing") == {"collapsed"}
+    assert action("A2", "expression") == {"dropped_cross_protocol"}
+    # A2 kept column: none in either cohort (individual removed)
     a2 = coll[(coll.array_id == "A2") & (coll.modality == "expression")]
-    assert set(a2["kept_column"].fillna("")) == {"S3", ""}
+    assert set(a2["kept_column"].fillna("")) == {""}
 
     def flag(aid, mod):
         rows = conc[(conc.array_id == aid) & (conc.modality == mod)]
@@ -509,9 +527,10 @@ def test_reports(collapsed):
 
     # per-ancestry splits exist
     assert (out / "reports" / "EAS_replicate_collapses.tsv").exists()
-    # collapsed ancestry map drops non-primary runs (S5; S2/S8 not in map)
+    # collapsed ancestry map drops non-primary runs (S2/S8 not in map) and
+    # cross-protocol individuals entirely (S3 and S5)
     amap = pd.read_csv(out / "reports" / "ancestry_map_collapsed.tsv", sep="\t")
-    assert set(amap["sample_id"]) == {"S1", "S3", "S4", "S6", "S7", "S9"}
+    assert set(amap["sample_id"]) == {"S1", "S4", "S6", "S7", "S9"}
 
 
 def test_dry_run_writes_no_staging(fixture):
