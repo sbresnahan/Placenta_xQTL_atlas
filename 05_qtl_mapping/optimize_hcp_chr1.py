@@ -210,9 +210,11 @@ def main():
                         help="Staging dir (default: {qtl-dir}/hcp_optimization)")
     parser.add_argument("--fdr", type=float, default=0.05,
                         help="Storey q-value threshold for eGene counts (default: 0.05)")
-    parser.add_argument("--r-cmd", default="Rscript",
+    parser.add_argument("--r-cmd", default=os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "bin", "Rscript_sif"),
                         help="R command for HCP re-estimation (may be a "
-                             "singularity prefix; default: Rscript)")
+                             "singularity prefix; default: repo bin/Rscript_sif)")
     parser.add_argument("--lambda1", type=float, default=0.5,
                         help="HCP prior strength (default: 0.5, as in 19_hcp_factors.sh)")
     parser.add_argument("--lambda2", type=float, default=1.0)

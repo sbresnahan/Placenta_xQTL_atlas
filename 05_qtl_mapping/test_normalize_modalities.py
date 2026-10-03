@@ -27,6 +27,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 POOLER = HERE / "pool_modalities_within_ancestry.py"
 R_SCRIPT = HERE / "normalize_modalities.R"
+RSCRIPT_SIF = HERE.parent / "bin" / "Rscript_sif"
 
 BED_META = ["#chr", "start", "end", "phenotype_id"]
 
@@ -100,7 +101,7 @@ def test_detection_filter_and_int():
     out_dir.mkdir()
 
     r = run([
-        "Rscript", str(R_SCRIPT),
+        str(RSCRIPT_SIF), str(R_SCRIPT),
         "--input", str(bed_path),
         "--ancestry-map", str(anc_path),
         "--ancestry", "EUR",
@@ -347,7 +348,7 @@ def test_withincohort_int_endtoend():
         out_dir = tmp / f"out_{tag}"
         out_dir.mkdir()
         r = run([
-            "Rscript", str(R_SCRIPT),
+            str(RSCRIPT_SIF), str(R_SCRIPT),
             "--input", str(bed_path),
             "--ancestry-map", str(anc_path),
             "--ancestry", "EUR",
@@ -452,7 +453,7 @@ def test_single_sample_cohort():
     out_dir.mkdir()
 
     r = run([
-        "Rscript", str(R_SCRIPT),
+        str(RSCRIPT_SIF), str(R_SCRIPT),
         "--input", str(bed_path),
         "--ancestry-map", str(anc_path),
         "--ancestry", "EUR",

@@ -1,0 +1,7 @@
+#!/bin/bash
+# Canonical Rscript for this pipeline: R 4.3.1 inside the RStudio singularity
+# container. The lab R package library (ubuntu/4.3.1) is built for R 4.3.1 and
+# requires a newer glibc than the bare compute nodes provide, so pipeline R
+# scripts must run inside this container. Override the image via XQTL_R_SIF.
+SIF="${XQTL_R_SIF:-/risapps/singularity/repo/RStudio/4.3.1/rstudio_4.3.1.sif}"
+exec singularity exec --bind /rsrch5 --bind /rsrch9 --bind /tmp "$SIF" Rscript "$@"

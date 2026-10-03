@@ -269,7 +269,10 @@ def main():
         # 27_run_tensorqtl.sh points it at the singularity R container.
         import subprocess
         import tempfile
-        rscript_cmd = os.environ.get("QVALUE_RSCRIPT", "Rscript")
+        rscript_cmd = os.environ.get(
+            "QVALUE_RSCRIPT",
+            os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "bin", "Rscript_sif"))
         bridge = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "compute_qvalues.R")
         if not os.path.exists(bridge):

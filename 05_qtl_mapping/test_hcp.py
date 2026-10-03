@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+RSCRIPT_SIF = os.path.join(os.path.dirname(SCRIPTS_DIR), "bin", "Rscript_sif")
 
 
 # =============================================================================
@@ -282,9 +283,9 @@ def test_normalize_expression_hcp():
     print("\n--- test_normalize_expression_hcp ---")
 
     # Check if R is available
-    r_available = shutil.which("Rscript") is not None
+    r_available = os.path.exists(RSCRIPT_SIF) and shutil.which("singularity") is not None
     if not r_available:
-        print("  SKIPPED: Rscript not available")
+        print("  SKIPPED: bin/Rscript_sif or singularity not available")
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -339,7 +340,7 @@ def test_normalize_expression_hcp():
         # covered by test_connectivity_outliers).
         output_dir = os.path.join(tmpdir, "hcp_output")
         cmd = [
-            "Rscript", os.path.join(SCRIPTS_DIR, "normalize_expression_hcp.R"),
+            RSCRIPT_SIF, os.path.join(SCRIPTS_DIR, "normalize_expression_hcp.R"),
             "--expression", expr_path,
             "--mode", "int",
             "--qc-metrics", qc_path,
@@ -439,9 +440,9 @@ def test_connectivity_outliers():
     sample. Requires R + sva + Rhcpp."""
     print("\n--- test_connectivity_outliers ---")
 
-    r_available = shutil.which("Rscript") is not None
+    r_available = os.path.exists(RSCRIPT_SIF) and shutil.which("singularity") is not None
     if not r_available:
-        print("  SKIPPED: Rscript not available")
+        print("  SKIPPED: bin/Rscript_sif or singularity not available")
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -489,7 +490,7 @@ def test_connectivity_outliers():
 
         output_dir = os.path.join(tmpdir, "hcp_output")
         cmd = [
-            "Rscript", os.path.join(SCRIPTS_DIR, "normalize_expression_hcp.R"),
+            RSCRIPT_SIF, os.path.join(SCRIPTS_DIR, "normalize_expression_hcp.R"),
             "--expression", expr_path,
             "--mode", "int",
             "--qc-metrics", qc_path,

@@ -47,6 +47,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 EXPR_SCRIPT = HERE / "normalize_expression_hcp.R"
 MOD_SCRIPT = HERE / "normalize_modalities.R"
+RSCRIPT_SIF = HERE.parent / "bin" / "Rscript_sif"
 
 PASS = 0
 FAIL = 0
@@ -68,7 +69,7 @@ def run_rcode(code, cwd):
     """Run an R snippet; return CompletedProcess."""
     rfile = Path(cwd) / "verify.R"
     rfile.write_text(code)
-    return subprocess.run(["Rscript", "--vanilla", str(rfile)],
+    return subprocess.run([str(RSCRIPT_SIF), "--vanilla", str(rfile)],
                           capture_output=True, text=True, cwd=cwd)
 
 
@@ -184,12 +185,12 @@ def test_bridge_correctness():
     independent manual computation."""
     print("\n=== T1-T4: TMM->VST bridge (normalize_expression_hcp.R) ===")
     if not all(shutil_which_r()):
-        report("Rscript available", False, "Rscript not found")
+        report("Rscript available", False, "bin/Rscript_sif or singularity not found")
         return
     tmp = Path(tempfile.mkdtemp())
     write_expression_fixture(tmp)
     outdir = tmp / "out"
-    cmd = ["Rscript", str(EXPR_SCRIPT),
+    cmd = [str(RSCRIPT_SIF), str(EXPR_SCRIPT),
            "--expression", str(tmp / "EUR_pooled_expression.bed"),
            "--counts", str(tmp / "EUR_pooled_expression_counts.bed"),
            "--mode", "vst",
@@ -243,7 +244,7 @@ def test_bridge_correctness():
 
 def shutil_which_r():
     import shutil
-    return [shutil.which("Rscript") is not None]
+    return [RSCRIPT_SIF.exists() and shutil.which("singularity") is not None]
 
 
 def test_zero_library_guard():
@@ -256,7 +257,7 @@ def test_zero_library_guard():
         df = pd.read_csv(tmp / name, sep="\t")
         df["C1_S0"] = 0.0
         df.to_csv(tmp / name, sep="\t", index=False)
-    cmd = ["Rscript", str(EXPR_SCRIPT),
+    cmd = [str(RSCRIPT_SIF), str(EXPR_SCRIPT),
            "--expression", str(tmp / "EUR_pooled_expression.bed"),
            "--counts", str(tmp / "EUR_pooled_expression_counts.bed"),
            "--mode", "vst",
@@ -300,7 +301,7 @@ def test_modalities_vst_path():
                  ).to_csv(tmp / "anc_map.tsv", sep="\t", index=False)
 
     outdir = tmp / "out"
-    cmd = ["Rscript", str(MOD_SCRIPT),
+    cmd = [str(RSCRIPT_SIF), str(MOD_SCRIPT),
            "--input", str(tmp / "EUR_isoform_expression_pooled.bed"),
            "--counts-input", str(tmp / "EUR_isoform_expression_counts_pooled.bed"),
            "--ancestry-map", str(tmp / "anc_map.tsv"),
@@ -356,7 +357,7 @@ def test_hcp_cohort_dummies():
     print("\n=== T6: cohort dummies in HCP Z (VST mode) ===")
     tmp = Path(tempfile.mkdtemp())
     write_expression_fixture(tmp)
-    cmd = ["Rscript", str(EXPR_SCRIPT),
+    cmd = [str(RSCRIPT_SIF), str(EXPR_SCRIPT),
            "--expression", str(tmp / "EUR_pooled_expression.bed"),
            "--counts", str(tmp / "EUR_pooled_expression_counts.bed"),
            "--mode", "vst",

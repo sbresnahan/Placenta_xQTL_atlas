@@ -44,7 +44,7 @@ ANC = {"ANC1": 100, "ANC2": 80}
 
 SUSHIE_BIN = shutil.which("sushie") or str(
     Path(sys.executable).parent / "sushie")
-RSCRIPT = shutil.which("Rscript") or "/opt/conda/bin/Rscript"
+RSCRIPT = str(Path(__file__).resolve().parent.parent / "bin" / "Rscript_sif")
 
 needs_tools = pytest.mark.skipif(
     not (shutil.which("plink2") and shutil.which("bgzip")
