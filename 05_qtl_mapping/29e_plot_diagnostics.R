@@ -32,6 +32,8 @@
 # validation_summary.tsv (metric, baseline, rerun, target, pass).
 # =============================================================================
 
+.libPaths(c("/home/stbresnahan/R/ubuntu/4.3.1", .libPaths()))
+
 suppressPackageStartupMessages({
   library(ggplot2)
   library(dplyr)

@@ -36,8 +36,11 @@ Runs in the tensorqtl conda env. Example:
 """
 
 import argparse
+import glob
+import inspect
 import os
 import sys
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -120,12 +123,19 @@ def reconcile_chr(pheno_pos, variant_df):
 
 
 def run_nominal(cis, genotype_df, variant_df, pheno, pheno_pos, cov,
-                maf_threshold, interaction_df=None):
-    """map_nominal with write_output=False; returns the full pair table."""
+                maf_threshold, interaction_df=None, cis_window=1000000):
+    """Run tensorQTL nominal mapping and return the full pair table.
+
+    Supports both the local/older API that accepts ``write_output=False`` and
+    the upstream API that requires ``prefix`` and writes per-chromosome parquet
+    files controlled by ``write_stats`` / ``write_top``.
+    """
     tag = " + interaction" if interaction_df is not None else ""
     print(f"    map_nominal: {pheno.shape[0]} phenotypes x "
           f"{pheno.shape[1]} samples{tag}")
-    res = cis.map_nominal(
+
+    params = inspect.signature(cis.map_nominal).parameters
+    common = dict(
         genotype_df=genotype_df,
         variant_df=variant_df,
         phenotype_df=pheno,
@@ -133,10 +143,50 @@ def run_nominal(cis, genotype_df, variant_df, pheno, pheno_pos, cov,
         covariates_df=cov,
         interaction_df=interaction_df,
         maf_threshold=maf_threshold,
-        write_output=False,
         verbose=False,
     )
-    return res
+    if "window" in params:
+        common["window"] = cis_window
+
+    if "write_output" in params:
+        common["write_output"] = False
+        res = cis.map_nominal(**common)
+        if not isinstance(res, pd.DataFrame):
+            raise RuntimeError(
+                "tensorQTL map_nominal(write_output=False) did not return a DataFrame"
+            )
+        return res
+
+    with tempfile.TemporaryDirectory(prefix="diag29_nominal_") as tmpdir:
+        prefix = "diag29"
+        if "output_dir" in params:
+            common["output_dir"] = tmpdir
+        if "write_stats" in params:
+            common["write_stats"] = True
+        if "write_top" in params:
+            common["write_top"] = False
+        if "prefix" in params:
+            common["prefix"] = prefix
+
+        res = cis.map_nominal(**common)
+
+        parquet_files = sorted(glob.glob(
+            os.path.join(tmpdir, f"{prefix}.cis_qtl_pairs.*.parquet")
+        ))
+        if parquet_files:
+            return pd.concat(
+                [pd.read_parquet(p) for p in parquet_files],
+                axis=0,
+                ignore_index=True,
+            )
+
+        if isinstance(res, pd.DataFrame):
+            return res
+
+        raise RuntimeError(
+            "tensorQTL map_nominal produced neither a returned DataFrame nor "
+            f"full-statistics parquet files in {tmpdir}"
+        )
 
 
 def extract_pairs(nominal_df, pairs, prefix):
@@ -266,7 +316,7 @@ def main():
         cov_sub = prep_covariates(cov_path, samples)
         res = run_nominal(cis, genotype_df[samples], variant_df,
                           pheno[samples], pheno_pos, cov_sub,
-                          args.maf_threshold)
+                          args.maf_threshold, cis_window=args.cis_window)
         ext, n_hit = extract_pairs(res, pairs, tag)
         per_cohort[tag] = ext.set_index(["phenotype_id", "variant_id"])
         print(f"    exact pairs recovered: {n_hit} / {len(pairs)}")
@@ -312,7 +362,8 @@ def main():
         index=samples_ab)
     res_gxc = run_nominal(cis, genotype_df[samples_ab], variant_df,
                           pheno[samples_ab], pheno_pos, cov_ab,
-                          args.maf_threshold, interaction_df=interaction)
+                          args.maf_threshold, interaction_df=interaction,
+                          cis_window=args.cis_window)
     pcol_i = find_interaction_pcol(res_gxc.columns)
     if pcol_i is None:
         print(f"  WARN: no interaction p-value column found in map_nominal "
@@ -371,7 +422,7 @@ def main():
             cov_sub = prep_covariates(cov_path, samples)
             res = run_nominal(cis, genotype_df[samples], variant_df,
                               pheno_b[samples], pos_b, cov_sub,
-                              args.maf_threshold)
+                              args.maf_threshold, cis_window=args.cis_window)
             ext, n_hit = extract_pairs(res, extra.reset_index(drop=True),
                                        tag)
             out_b = out_b.merge(ext,

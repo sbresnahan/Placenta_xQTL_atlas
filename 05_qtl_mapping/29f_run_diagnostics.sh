@@ -38,6 +38,10 @@
 #                   <BASELINE_DIR>/baseline_metrics.tsv when present
 #   QUEUE         — default medium; WALLTIME — default 12:00
 #   N_THREADS     — default 8
+#
+# Restart behavior:
+#   Each worker checks expected outputs from 29b, 29c, 29d, and 29e.
+#   Completed stages are reused and only incomplete downstream stages run.
 # =============================================================================
 
 set -eo pipefail
@@ -123,11 +127,30 @@ echo "  RESULTS_DIR: $RESULTS_DIR"
 echo "  OUT:         $OUT"
 echo "==================================================================="
 
+# Small helper: a stage is complete only when every expected output exists and
+# is non-empty.
+all_nonempty() {
+    local f
+    for f in "$@"; do
+        [ -s "$f" ] || return 1
+    done
+    return 0
+}
+
 # ---- 29b: expression diagnostics (tensorqtl env for the k-comparison) ----
 conda activate tensorqtl
-python3 "${SCRIPTS_DIR}/29b_expression_diagnostics.py" \
-    --qtl-dir "$QTL_DIR" --ancestry "$ANC" --output-dir "$OUT" \
-    --hcp-opt-dir "$HCP_OPT_DIR" --k-low "$K_LOW" --k-high "$K_HIGH"
+B29_PCS="${OUT}/${ANC}_expression_sample_PCs.tsv"
+B29_VAR="${OUT}/${ANC}_gene_residual_variance_by_cohort.tsv.gz"
+B29_HCP="${OUT}/${ANC}_expression_hcp${K_LOW}_vs_hcp${K_HIGH}_exact_pairs.tsv.gz"
+
+if all_nonempty "$B29_PCS" "$B29_VAR" "$B29_HCP"; then
+    echo "  29b complete: reusing existing outputs"
+else
+    echo "  29b incomplete: running expression diagnostics"
+    python3 "${SCRIPTS_DIR}/29b_expression_diagnostics.py" \
+        --qtl-dir "$QTL_DIR" --ancestry "$ANC" --output-dir "$OUT" \
+        --hcp-opt-dir "$HCP_OPT_DIR" --k-low "$K_LOW" --k-high "$K_HIGH"
+fi
 
 # ---- 29c: Choi comparison (reference ancestry only) ----
 CHOI_PREFIX="${OUT}/Choi_vs_pooled_${ANC}"
@@ -137,11 +160,23 @@ if [ "$ANC" = "$CHOI_ANCESTRY" ]; then
         echo "ERROR: CHOI_ANCESTRY=${ANC} but CHOI_SUMSTATS/CHOI_SIGNIFICANT unset" >&2
         exit 1
     }
-    python3 "${SCRIPTS_DIR}/29c_choi_comparison.py" --ancestry "$ANC" \
-        --choi "$CHOI_SUMSTATS" --choi-significant "$CHOI_SIGNIFICANT" \
-        --top-table "${RESULTS_DIR}/${ANC}_expression_cisqtl_top.tsv" \
-        --out-prefix "$CHOI_PREFIX"
-    EXTRA_PAIRS_ARG="--extra-pairs ${CHOI_PREFIX}.choi_defined_pairs.tsv"
+
+    C29_GENE="${CHOI_PREFIX}.gene_top_comparison.tsv.gz"
+    C29_EXACT="${CHOI_PREFIX}.exact_${ANC}_lead_comparison.tsv.gz"
+    C29_RET="${CHOI_PREFIX}.Choi_significant_retention.tsv.gz"
+    C29_CAT="${CHOI_PREFIX}.common_tested_catalog.tsv.gz"
+    C29_PAIRS="${CHOI_PREFIX}.choi_defined_pairs.tsv"
+
+    if all_nonempty "$C29_GENE" "$C29_EXACT" "$C29_RET" "$C29_CAT" "$C29_PAIRS"; then
+        echo "  29c complete: reusing existing Choi comparison outputs"
+    else
+        echo "  29c incomplete: running Choi comparison"
+        python3 "${SCRIPTS_DIR}/29c_choi_comparison.py" --ancestry "$ANC" \
+            --choi "$CHOI_SUMSTATS" --choi-significant "$CHOI_SIGNIFICANT" \
+            --top-table "${RESULTS_DIR}/${ANC}_expression_cisqtl_top.tsv" \
+            --out-prefix "$CHOI_PREFIX"
+    fi
+    EXTRA_PAIRS_ARG="--extra-pairs ${C29_PAIRS}"
 else
     echo "  29c skipped: no external reference for ${ANC} (CHOI_ANCESTRY='${CHOI_ANCESTRY}')"
 fi
@@ -150,32 +185,58 @@ fi
 COHORT_ARGS=""
 [ -n "${COHORT_A:-}" ] && [ -n "${COHORT_B:-}" ] && \
     COHORT_ARGS="--cohorts ${COHORT_A},${COHORT_B}"
-python3 "${SCRIPTS_DIR}/29d_cohort_heterogeneity.py" \
-    --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --ancestry "$ANC" \
-    --output-dir "$OUT" $COHORT_ARGS $EXTRA_PAIRS_ARG
+
+D29_MAIN="${OUT}/${ANC}_expression_cohort_heterogeneity.tsv.gz"
+D29_SUM="${OUT}/${ANC}_expression_cohort_heterogeneity_summary.tsv"
+D29_EXTRA="${OUT}/${ANC}_expression_extra_pairs_withincohort.tsv.gz"
+
+D29_COMPLETE=0
+if [ "$ANC" = "$CHOI_ANCESTRY" ]; then
+    all_nonempty "$D29_MAIN" "$D29_SUM" "$D29_EXTRA" && D29_COMPLETE=1
+else
+    all_nonempty "$D29_MAIN" "$D29_SUM" && D29_COMPLETE=1
+fi
+
+if [ "$D29_COMPLETE" -eq 1 ]; then
+    echo "  29d complete: reusing existing cohort-heterogeneity outputs"
+else
+    echo "  29d incomplete: running cohort heterogeneity"
+    python3 "${SCRIPTS_DIR}/29d_cohort_heterogeneity.py" \
+        --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --ancestry "$ANC" \
+        --output-dir "$OUT" $COHORT_ARGS $EXTRA_PAIRS_ARG
+fi
 
 # ---- 29e: figures + validation summary (R) ----
-R_ARGS=(--ancestry "$ANC" --outdir "$OUT"
-        --pcs "${OUT}/${ANC}_expression_sample_PCs.tsv"
-        --variance "${OUT}/${ANC}_gene_residual_variance_by_cohort.tsv.gz"
-        --hcp "${OUT}/${ANC}_expression_hcp${K_LOW}_vs_hcp${K_HIGH}_exact_pairs.tsv.gz"
-        --heterogeneity "${OUT}/${ANC}_expression_cohort_heterogeneity.tsv.gz"
-        --top-table "${RESULTS_DIR}/${ANC}_expression_cisqtl_top.tsv")
-[ -n "$COHORT_ARGS" ] && R_ARGS+=(--cohort-a "$COHORT_A" --cohort-b "$COHORT_B")
-if [ "$ANC" = "$CHOI_ANCESTRY" ]; then
-    R_ARGS+=(--gene-top "${CHOI_PREFIX}.gene_top_comparison.tsv.gz"
-             --exact-pairs "${CHOI_PREFIX}.exact_${ANC}_lead_comparison.tsv.gz"
-             --retention "${CHOI_PREFIX}.Choi_significant_retention.tsv.gz"
-             --catalog "${CHOI_PREFIX}.common_tested_catalog.tsv.gz"
-             --extra-pairs "${OUT}/${ANC}_expression_extra_pairs_withincohort.tsv.gz")
+E29_SUMMARY="${OUT}/diagnostic_summary_stats.tsv"
+E29_VALID="${OUT}/validation_summary.tsv"
+
+if all_nonempty "$E29_SUMMARY" "$E29_VALID"; then
+    echo "  29e complete: validation outputs already exist"
+else
+    echo "  29e incomplete: generating figures and validation summary"
+    R_ARGS=(--ancestry "$ANC" --outdir "$OUT"
+            --pcs "$B29_PCS"
+            --variance "$B29_VAR"
+            --hcp "$B29_HCP"
+            --heterogeneity "$D29_MAIN"
+            --top-table "${RESULTS_DIR}/${ANC}_expression_cisqtl_top.tsv")
+    [ -n "$COHORT_ARGS" ] && R_ARGS+=(--cohort-a "$COHORT_A" --cohort-b "$COHORT_B")
+    if [ "$ANC" = "$CHOI_ANCESTRY" ]; then
+        R_ARGS+=(--gene-top "$C29_GENE"
+                 --exact-pairs "$C29_EXACT"
+                 --retention "$C29_RET"
+                 --catalog "$C29_CAT"
+                 --extra-pairs "$D29_EXTRA")
+    fi
+    if [ -n "${BASELINE_DIR:-}" ]; then
+        [ -f "${BASELINE_DIR}/${ANC}/diagnostic_summary_stats.tsv" ] && \
+            R_ARGS+=(--baseline-summary "${BASELINE_DIR}/${ANC}/diagnostic_summary_stats.tsv")
+        [ -f "${BASELINE_DIR}/baseline_metrics.tsv" ] && \
+            R_ARGS+=(--baseline-metrics "${BASELINE_DIR}/baseline_metrics.tsv")
+    fi
+
+    $SING_R "${SCRIPTS_DIR}/29e_plot_diagnostics.R" "${R_ARGS[@]}"
 fi
-if [ -n "${BASELINE_DIR:-}" ]; then
-    [ -f "${BASELINE_DIR}/${ANC}/diagnostic_summary_stats.tsv" ] && \
-        R_ARGS+=(--baseline-summary "${BASELINE_DIR}/${ANC}/diagnostic_summary_stats.tsv")
-    [ -f "${BASELINE_DIR}/baseline_metrics.tsv" ] && \
-        R_ARGS+=(--baseline-metrics "${BASELINE_DIR}/baseline_metrics.tsv")
-fi
-$SING_R "${SCRIPTS_DIR}/29e_plot_diagnostics.R" "${R_ARGS[@]}"
 
 echo "==================================================================="
 echo "29b-29e done for ${ANC}. Review ${OUT}/validation_summary.tsv"
