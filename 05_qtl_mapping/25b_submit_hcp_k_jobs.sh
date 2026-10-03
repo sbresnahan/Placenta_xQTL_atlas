@@ -10,7 +10,13 @@
 #
 # Required env: CONFIG, SCRIPTS_DIR, OUTPUT_BASE, LOGS_DIR
 # Optional: QTL_DIR, ANCESTRIES, MODALITIES, K_GRID, FDR, CHR1_MIN,
-#           MAX_HCP_PHENOTYPES, EXCLUDE_COVARIATES
+#           MAX_HCP_PHENOTYPES, EXCLUDE_COVARIATES, LAMBDA1, FINALIZE
+#   LAMBDA1 — HCP prior strength passed to optimize_hcp_modalities.py
+#   (default 0.5). When LAMBDA1 != 0.5 the per-k sandboxes live in a
+#   lambda-suffixed tree (hcp_optimization_modalities_per_k_lam<LAMBDA1>/),
+#   the lambda=0.5 legacy tree is never consulted, job names carry a
+#   _lam<LAMBDA1> suffix, and the canonical finalizer is SKIPPED unless
+#   FINALIZE=1 is set explicitly.
 # =============================================================================
 
 set -euo pipefail
@@ -26,7 +32,18 @@ MODALITIES="${MODALITIES:-isoform_expression alt_polyA alt_TSS intron_retention 
 K_GRID="${K_GRID:-0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100}"
 FDR="${FDR:-0.05}"
 CHR1_MIN="${CHR1_MIN:-300}"
+LAMBDA1="${LAMBDA1:-0.5}"
+FINALIZE="${FINALIZE:-0}"
 mkdir -p "$LOGS_DIR"
+
+# Lambda-suffixed sandbox tree + job-name suffix for non-default lambda1.
+SANDBOX_SUFFIX=""
+JOB_SUFFIX=""
+if [ "$LAMBDA1" != "0.5" ]; then
+  SANDBOX_SUFFIX="_lam${LAMBDA1}"
+  JOB_SUFFIX="_lam${LAMBDA1}"
+fi
+echo "lambda1: $LAMBDA1 (sandbox tree: hcp_optimization_modalities_per_k${SANDBOX_SUFFIX})"
 
 valid_parquet() {
   local f="$1" head tail
@@ -55,6 +72,9 @@ summary_has_grid() {
 }
 
 legacy_done() {
+  # Legacy serial tree holds lambda1=0.5 results only — never reuse it for
+  # non-default-lambda runs.
+  [ -z "$SANDBOX_SUFFIX" ] || return 1
   local anc="$1" mod="$2" k="$3"
   local stage="$REAL_QTL_DIR/hcp_optimization_modalities/$anc/$mod"
   [ -s "$stage/${anc}_${mod}_hcp_k${k}.tsv" ] || return 1
@@ -62,7 +82,7 @@ legacy_done() {
 }
 
 sandbox_root() {
-  echo "$REAL_QTL_DIR/hcp_optimization_modalities_per_k/$1/$2/k$3"
+  echo "$REAL_QTL_DIR/hcp_optimization_modalities_per_k${SANDBOX_SUFFIX}/$1/$2/k$3"
 }
 
 sandbox_done() {
@@ -108,7 +128,9 @@ for ANC in $ANCESTRIES; do
     canonical_summary="$REAL_QTL_DIR/hcp_optimization_modalities/${ANC}_${MOD}_optimal_hcp.tsv"
     canonical_hcp="$REAL_QTL_DIR/${ANC}_${MOD}_hcp_factors_optimized.tsv"
 
-    if summary_has_grid "$canonical_summary" && [ -s "$canonical_hcp" ]; then
+    # Canonical outputs belong to the production lambda; sensitivity runs
+    # (non-default LAMBDA1) never consult them.
+    if [ -z "$SANDBOX_SUFFIX" ] && summary_has_grid "$canonical_summary" && [ -s "$canonical_hcp" ]; then
       echo "[$ANC $MOD] already finalized for the full k grid; nothing to submit."
       continue
     fi
@@ -136,7 +158,7 @@ for ANC in $ANCESTRIES; do
         continue
       fi
 
-      JOBNAME="hcp25b_${ANC}_${MOD}_k${K}"
+      JOBNAME="hcp25b_${ANC}_${MOD}_k${K}${JOB_SUFFIX}"
       mapfile -t ACTIVE < <(active_job_ids "$JOBNAME")
       if [ "${#ACTIVE[@]}" -gt 0 ]; then
         echo "  ACTIVE k=$K (${JOBNAME}: ${ACTIVE[*]}); not resubmitting"
@@ -164,6 +186,7 @@ for ANC in $ANCESTRIES; do
         export QTL_DIR="$JOB_QTL"
         export WORK_DIR="$JOB_WORK"
         export FDR CHR1_MIN
+        export EXTRA_ARGS="--lambda1 ${LAMBDA1}"
         bsub -J "$JOBNAME" \
           -q "$Q" -n 4 -M 32 -R "rusage[mem=32]" -W "$W" \
           -o "$LOGS_DIR/${JOBNAME}.%J.out" \
@@ -176,7 +199,15 @@ for ANC in $ANCESTRIES; do
       deps+=("$JID")
     done
 
-    FINAL_NAME="hcp25b_${ANC}_${MOD}_finalize"
+    # Sensitivity runs (non-default LAMBDA1) skip the canonical finalizer
+    # unless FINALIZE=1 is set explicitly (lambda promoted to production).
+    if [ -n "$SANDBOX_SUFFIX" ] && [ "$FINALIZE" != "1" ]; then
+      echo "  Sensitivity mode (lambda1=$LAMBDA1): per-k jobs submitted;"
+      echo "  finalizer skipped for $ANC $MOD."
+      continue
+    fi
+
+    FINAL_NAME="hcp25b_${ANC}_${MOD}_finalize${JOB_SUFFIX}"
     mapfile -t ACTIVE_FINAL < <(active_job_ids "$FINAL_NAME")
     if [ "${#ACTIVE_FINAL[@]}" -gt 0 ]; then
       echo "  Finalizer already active (${FINAL_NAME}: ${ACTIVE_FINAL[*]}); not resubmitting"
@@ -199,6 +230,7 @@ for ANC in $ANCESTRIES; do
       export ANCESTRY="$ANC"
       export MODALITY="$MOD"
       export K_GRID FDR CHR1_MIN
+      export SANDBOX_SUFFIX
       "${BSUB[@]}" -env all < "$SCRIPTS_DIR/25_hcp_k_finalize.sh"
     )
     echo "  $OUT"

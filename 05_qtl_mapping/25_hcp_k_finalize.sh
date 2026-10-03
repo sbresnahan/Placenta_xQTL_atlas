@@ -6,7 +6,10 @@
 #   SCRIPTS_DIR, REAL_QTL_DIR, HCP_FINALIZE_MODE, ANCESTRY
 #   HCP_FINALIZE_MODE=expression or modality
 # For modality mode: MODALITY is also required.
-# Optional: K_GRID, FDR, CHR1_MIN
+# Optional: K_GRID, FDR, CHR1_MIN, SANDBOX_SUFFIX
+#   SANDBOX_SUFFIX — per-k sandbox tree suffix (e.g. "_lam5" reads
+#   hcp_optimization_per_k_lam5/); set by 25a/25b submitters when LAMBDA1!=0.5.
+#   Canonical outputs are always written to the standard locations.
 # =============================================================================
 #BSUB -q medium
 #BSUB -n 2
@@ -36,6 +39,7 @@ ARGS=(
   --k-grid "$K_GRID"
   --fdr "$FDR"
   --chr1-min "$CHR1_MIN"
+  --sandbox-suffix "${SANDBOX_SUFFIX:-}"
 )
 
 if [ "$HCP_FINALIZE_MODE" = "modality" ]; then

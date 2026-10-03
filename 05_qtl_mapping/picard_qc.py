@@ -1,10 +1,24 @@
 #!/usr/bin/env python3
 """
-picard_qc.py — Collect curated PicardTools sequencing QC metrics per sample.
+picard_qc.py — Collect PicardTools sequencing QC metrics per sample.
 
 Standalone script that finds pre-shrink STAR BAMs and runs a curated subset of
 PicardTools Collect* tools to produce the HCP prior matrix F (sequencing QC
 metrics used as priors for Hidden Covariates with Prior estimation).
+
+Metric panel: devBrain-style full field set — every numeric field of each
+tool's summary table is emitted as `Tool.FIELD`, dropping only
+identifier/categorical columns (QC_EXCLUDE_FIELDS, mirroring devBrain's
+picard_merge_metrics.R). Multi-row tables (AlignmentSummaryMetrics) emit the
+library-level PAIR row unsuffixed and other categories suffixed
+(.FIRST_OF_PAIR / .SECOND_OF_PAIR). The original 24 column names are
+preserved (FIELD_RENAME maps Picard >=2.27 PF_* names back), but
+AlignMetrics.* values are now library-level (PAIR row) rather than
+FIRST_OF_PAIR. Downstream zero-variance + |r|>0.9 pruning in
+hcp_from_matrix.R handles redundancy.
+
+Raw Picard outputs persist under <output dir>/raw/<sample>/ so the panel can
+be re-extracted later with --parse-only (no BAM access needed).
 
 Also computes two subject-specific covariates from the original HCP paper
 (Mostafavi et al. 2013):
@@ -44,7 +58,7 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
+# tempfile no longer needed: raw Picard outputs persist under --raw-dir
 from collections import defaultdict
 
 import numpy as np
@@ -100,6 +114,106 @@ def coerce_numeric(val):
 
 
 # =============================================================================
+# Full-panel extraction (devBrain-style)
+# =============================================================================
+# The original pipeline extracted a 24-metric whitelist. The devBrain schema
+# (picard_merge_metrics.R) instead keeps the full MultiQC-style field set,
+# dropping only identifier/categorical columns and letting downstream
+# zero-variance + |r|>0.9 pruning handle redundancy. We mirror that here:
+# every numeric field of each tool's summary table is emitted as
+# `Tool.FIELD`, with the exclusions below.
+
+QC_EXCLUDE_FIELDS = {
+    "SAMPLE", "LIBRARY", "READ_GROUP", "CATEGORY",
+    "ACCUMULATION_LEVEL", "READS_USED", "PAIR_ORIENTATION",
+}
+
+# Picard >= 2.27 renamed these fields; map the new raw names back to the
+# column names the pipeline has always emitted (applied to the primary row
+# only, so the original 24 column names are preserved).
+FIELD_RENAME = {
+    "PF_READS_ALIGNED": "READS_ALIGNED",
+    "PCT_PF_READS_ALIGNED": "PCT_READS_ALIGNED",
+}
+
+
+def parse_picard_metrics_all(metrics_file):
+    """Parse a PicardTools metrics file into a list of {column: value} dicts,
+    one per data row. Multi-row tables (e.g. AlignmentSummaryMetrics) carry
+    one row per CATEGORY. Parsing stops at the end of the metrics table
+    (blank line or the next ## section, e.g. a HISTOGRAM_CLASS block)."""
+    if not os.path.exists(metrics_file):
+        return []
+
+    with open(metrics_file) as f:
+        lines = f.readlines()
+
+    metrics_start = None
+    for i, line in enumerate(lines):
+        if line.startswith("## METRICS CLASS"):
+            metrics_start = i
+            break
+
+    if metrics_start is None or metrics_start + 2 >= len(lines):
+        return []
+
+    header = lines[metrics_start + 1].strip().split("\t")
+    rows = []
+    for line in lines[metrics_start + 2:]:
+        if not line.strip() or line.startswith("#"):
+            break
+        data = line.strip().split("\t")
+        if len(data) < len(header):
+            data.extend([""] * (len(header) - len(data)))
+        rows.append(dict(zip(header, data)))
+    return rows
+
+
+def extract_full_panel(rows, prefix):
+    """Flatten ALL numeric fields of a Picard metrics table into
+    `prefix.FIELD` columns (devBrain-style full panel).
+
+    - ID/categorical columns in QC_EXCLUDE_FIELDS are dropped.
+    - The primary row (CATEGORY=PAIR when present, else UNPAIRED, else the
+      first row) is emitted unsuffixed; additional rows (e.g.
+      FIRST_OF_PAIR / SECOND_OF_PAIR, or extra LIBRARY rows) are suffixed
+      with their category value.
+    - FIELD_RENAME maps Picard >= 2.27 names back to the pipeline's
+      historical column names on the primary row.
+
+    NOTE: for multi-category tables the primary row is the library-level
+    PAIR row. The legacy whitelist read the FIRST data row (FIRST_OF_PAIR
+    for paired-end BAMs), so AlignMetrics.* values are library-level now —
+    column names are unchanged.
+    """
+    if not rows:
+        return {}
+    cats = [r.get("CATEGORY", "") for r in rows]
+    primary_idx = 0
+    for want in ("PAIR", "UNPAIRED"):
+        if want in cats:
+            primary_idx = cats.index(want)
+            break
+    multi = len(rows) > 1
+    out = {}
+    for i, row in enumerate(rows):
+        suffix = ""
+        if multi and i != primary_idx:
+            cat = row.get("CATEGORY") or row.get("LIBRARY") or f"ROW{i + 1}"
+            suffix = f".{cat}"
+        for field, val in row.items():
+            if field in QC_EXCLUDE_FIELDS:
+                continue
+            num = coerce_numeric(val)
+            if num is None:
+                continue
+            if not suffix:
+                field = FIELD_RENAME.get(field, field)
+            out[f"{prefix}.{field}{suffix}"] = num
+    return out
+
+
+# =============================================================================
 # PicardTools Collect* tool runners
 # =============================================================================
 
@@ -127,61 +241,39 @@ def run_picard(cmd, label, sample):
         return False
 
 
-def collect_alignment_summary(picard_cmd, bam, out_dir, sample):
-    """CollectAlignmentSummaryMetrics -> alignment_metrics.txt"""
+def collect_alignment_summary(picard_cmd, bam, out_dir, sample, parse_only=False):
+    """CollectAlignmentSummaryMetrics -> alignment_metrics.txt (full panel)"""
     out_file = os.path.join(out_dir, "alignment_metrics.txt")
     cmd = [picard_cmd, "CollectAlignmentSummaryMetrics", f"I={bam}", f"O={out_file}"]
-    if run_picard(cmd, "AlignSummary", sample):
-        m = parse_picard_metrics(out_file)
-        return {
-            "AlignMetrics.TOTAL_READS": coerce_numeric(m.get("TOTAL_READS")),
-            # Picard >= 2.27 renamed these to PF_*; fall back to old names
-            "AlignMetrics.READS_ALIGNED": coerce_numeric(m.get("PF_READS_ALIGNED", m.get("READS_ALIGNED"))),
-            "AlignMetrics.MEAN_READ_LENGTH": coerce_numeric(m.get("MEAN_READ_LENGTH")),
-            "AlignMetrics.STRAND_BALANCE": coerce_numeric(m.get("STRAND_BALANCE")),
-            "AlignMetrics.PCT_READS_ALIGNED": coerce_numeric(m.get("PCT_PF_READS_ALIGNED", m.get("PCT_READS_ALIGNED"))),
-        }
+    if parse_only or run_picard(cmd, "AlignSummary", sample):
+        return extract_full_panel(parse_picard_metrics_all(out_file), "AlignMetrics")
     return {}
 
 
-def collect_insert_size(picard_cmd, bam, out_dir, sample):
-    """CollectInsertSizeMetrics -> insert_size_metrics.txt"""
+def collect_insert_size(picard_cmd, bam, out_dir, sample, parse_only=False):
+    """CollectInsertSizeMetrics -> insert_size_metrics.txt (full panel)"""
     out_file = os.path.join(out_dir, "insert_size_metrics.txt")
     hist_file = os.path.join(out_dir, "insert_size_histogram.pdf")
     cmd = [picard_cmd, "CollectInsertSizeMetrics",
            f"I={bam}", f"O={out_file}", f"H={hist_file}"]
-    if run_picard(cmd, "InsertSize", sample):
-        m = parse_picard_metrics(out_file)
-        return {
-            "InsertSize.MEAN_INSERT_SIZE": coerce_numeric(m.get("MEAN_INSERT_SIZE")),
-            "InsertSize.STANDARD_DEVIATION": coerce_numeric(m.get("STANDARD_DEVIATION")),
-            "InsertSize.MEDIAN_INSERT_SIZE": coerce_numeric(m.get("MEDIAN_INSERT_SIZE")),
-        }
+    if parse_only or run_picard(cmd, "InsertSize", sample):
+        return extract_full_panel(parse_picard_metrics_all(out_file), "InsertSize")
     return {}
 
 
-def collect_rna_seq_metrics(picard_cmd, bam, out_dir, sample, refflat):
-    """CollectRnaSeqMetrics -> rna_metrics.txt"""
+def collect_rna_seq_metrics(picard_cmd, bam, out_dir, sample, refflat,
+                            parse_only=False):
+    """CollectRnaSeqMetrics -> rna_metrics.txt (full panel)"""
     out_file = os.path.join(out_dir, "rna_metrics.txt")
     cmd = [picard_cmd, "CollectRnaSeqMetrics",
            f"I={bam}", f"O={out_file}", f"REF_FLAT={refflat}", "STRAND=NONE"]
-    if run_picard(cmd, "RnaSeqMetrics", sample):
-        m = parse_picard_metrics(out_file)
-        return {
-            "RnaMetrics.PCT_RIBOSOMAL_BASES": coerce_numeric(m.get("PCT_RIBOSOMAL_BASES")),
-            "RnaMetrics.PCT_CODING_BASES": coerce_numeric(m.get("PCT_CODING_BASES")),
-            "RnaMetrics.PCT_UTR_BASES": coerce_numeric(m.get("PCT_UTR_BASES")),
-            "RnaMetrics.PCT_INTRONIC_BASES": coerce_numeric(m.get("PCT_INTRONIC_BASES")),
-            "RnaMetrics.PCT_INTERGENIC_BASES": coerce_numeric(m.get("PCT_INTERGENIC_BASES")),
-            "RnaMetrics.MEDIAN_5PRIME_BIAS": coerce_numeric(m.get("MEDIAN_5PRIME_BIAS")),
-            "RnaMetrics.MEDIAN_3PRIME_BIAS": coerce_numeric(m.get("MEDIAN_3PRIME_BIAS")),
-            "RnaMetrics.MEDIAN_5PRIME_TO_3PRIME_BIAS": coerce_numeric(
-                m.get("MEDIAN_5PRIME_TO_3PRIME_BIAS")),
-        }
+    if parse_only or run_picard(cmd, "RnaSeqMetrics", sample):
+        return extract_full_panel(parse_picard_metrics_all(out_file), "RnaMetrics")
     return {}
 
 
-def collect_gc_bias(picard_cmd, bam, out_dir, sample, fasta=None):
+def collect_gc_bias(picard_cmd, bam, out_dir, sample, fasta=None,
+                    parse_only=False):
     """CollectGcBiasMetrics -> gc_bias_metrics.txt (+ summary)
 
     R= (reference FASTA) is a REQUIRED argument for CollectGcBiasMetrics;
@@ -196,31 +288,20 @@ def collect_gc_bias(picard_cmd, bam, out_dir, sample, fasta=None):
            f"I={bam}", f"O={out_file}", f"S={summary_file}", f"CHART={chart_file}"]
     if fasta:
         cmd.append(f"R={fasta}")
-    if run_picard(cmd, "GcBias", sample):
-        m = parse_picard_metrics(summary_file)
-        return {
-            "GcBias.AT_DROPOUT": coerce_numeric(m.get("AT_DROPOUT")),
-            "GcBias.GC_DROPOUT": coerce_numeric(m.get("GC_DROPOUT")),
-            "GcBias.MEAN_COVERAGE": coerce_numeric(m.get("MEAN_COVERAGE")),
-        }
+    if parse_only or run_picard(cmd, "GcBias", sample):
+        return extract_full_panel(parse_picard_metrics_all(summary_file), "GcBias")
     return {}
 
 
-def mark_duplicates(picard_cmd, bam, out_dir, sample):
+def mark_duplicates(picard_cmd, bam, out_dir, sample, parse_only=False):
     """MarkDuplicates -> dup_metrics.txt (metrics only; temp BAM discarded)"""
     out_file = os.path.join(out_dir, "dup_metrics.txt")
     tmp_bam = os.path.join(out_dir, "tmp_dedup.bam")
     cmd = [picard_cmd, "MarkDuplicates",
            f"I={bam}", f"O={tmp_bam}", f"M={out_file}",
            "ASSUME_SORTED=true", "VALIDATION_STRINGENCY=LENIENT"]
-    if run_picard(cmd, "MarkDup", sample):
-        m = parse_picard_metrics(out_file)
-        result = {
-            "DupMetrics.PERCENT_DUPLICATION": coerce_numeric(m.get("PERCENT_DUPLICATION")),
-            "DupMetrics.UNPAIRED_READ_DUPLICATES": coerce_numeric(
-                m.get("UNPAIRED_READ_DUPLICATES")),
-            "DupMetrics.READ_PAIR_DUPLICATES": coerce_numeric(m.get("READ_PAIR_DUPLICATES")),
-        }
+    if parse_only or run_picard(cmd, "MarkDup", sample):
+        result = extract_full_panel(parse_picard_metrics_all(out_file), "DupMetrics")
         if os.path.exists(tmp_bam):
             os.remove(tmp_bam)
         return result
@@ -548,6 +629,14 @@ def main():
                         help="Generate gene GC/length table and exit")
     parser.add_argument("--gtf", help="GTF file (for --generate-refflat/--generate-gene-annot)")
     parser.add_argument("--fasta", help="Genome FASTA (for --generate-gene-annot)")
+    parser.add_argument("--raw-dir",
+                        help="Directory for persisted per-sample raw Picard outputs "
+                             "(default: <output dir>/raw). Raw outputs are kept so the "
+                             "metric panel can be re-extracted later with --parse-only "
+                             "without re-running Picard on the BAMs.")
+    parser.add_argument("--parse-only", action="store_true",
+                        help="Do not run Picard; re-extract metrics from the persisted "
+                             "raw outputs under --raw-dir (BAMs not required).")
     args = parser.parse_args()
 
     # ---- Subcommand: generate refFlat ----
@@ -604,7 +693,43 @@ def main():
     missing_bams = []
     shrunk_bams = []
 
+    # Raw Picard outputs persist per sample so the metric panel can be
+    # re-extracted later (--parse-only) without re-running Picard on BAMs.
+    raw_root = args.raw_dir or os.path.join(
+        os.path.dirname(os.path.abspath(args.output)), "raw")
+    if not args.parse_only:
+        os.makedirs(raw_root, exist_ok=True)
+
     for i, sample in enumerate(samples):
+        sample_dir = os.path.join(raw_root, sample)
+
+        if args.parse_only:
+            if not os.path.isdir(sample_dir):
+                sys.stderr.write(
+                    f"  [{i+1}/{len(samples)}] {sample}: no raw metrics at "
+                    f"{sample_dir}, skipping\n")
+                missing_bams.append(sample)
+                continue
+            print(f"  [{i+1}/{len(samples)}] {sample} (parse-only)")
+            sample_metrics = {"sample": sample}
+            sample_metrics.update(
+                collect_alignment_summary(args.picard_cmd, None, sample_dir, sample,
+                                          parse_only=True))
+            sample_metrics.update(
+                collect_insert_size(args.picard_cmd, None, sample_dir, sample,
+                                    parse_only=True))
+            sample_metrics.update(
+                collect_rna_seq_metrics(args.picard_cmd, None, sample_dir, sample,
+                                        args.refflat, parse_only=True))
+            sample_metrics.update(
+                collect_gc_bias(args.picard_cmd, None, sample_dir, sample,
+                                parse_only=True))
+            sample_metrics.update(
+                mark_duplicates(args.picard_cmd, None, sample_dir, sample,
+                                parse_only=True))
+            all_metrics.append(sample_metrics)
+            continue
+
         bam_path, bam_type = find_bam(sample, star_out_dir, bam_dir)
 
         if bam_path is None:
@@ -617,20 +742,20 @@ def main():
 
         print(f"  [{i+1}/{len(samples)}] {sample} ({bam_type} BAM)")
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            sample_metrics = {"sample": sample}
-            sample_metrics.update(
-                collect_alignment_summary(args.picard_cmd, bam_path, tmpdir, sample))
-            sample_metrics.update(
-                collect_insert_size(args.picard_cmd, bam_path, tmpdir, sample))
-            sample_metrics.update(
-                collect_rna_seq_metrics(args.picard_cmd, bam_path, tmpdir, sample, args.refflat))
-            sample_metrics.update(
-                collect_gc_bias(args.picard_cmd, bam_path, tmpdir, sample,
-                                fasta=args.fasta))
-            sample_metrics.update(
-                mark_duplicates(args.picard_cmd, bam_path, tmpdir, sample))
-            all_metrics.append(sample_metrics)
+        os.makedirs(sample_dir, exist_ok=True)
+        sample_metrics = {"sample": sample}
+        sample_metrics.update(
+            collect_alignment_summary(args.picard_cmd, bam_path, sample_dir, sample))
+        sample_metrics.update(
+            collect_insert_size(args.picard_cmd, bam_path, sample_dir, sample))
+        sample_metrics.update(
+            collect_rna_seq_metrics(args.picard_cmd, bam_path, sample_dir, sample, args.refflat))
+        sample_metrics.update(
+            collect_gc_bias(args.picard_cmd, bam_path, sample_dir, sample,
+                            fasta=args.fasta))
+        sample_metrics.update(
+            mark_duplicates(args.picard_cmd, bam_path, sample_dir, sample))
+        all_metrics.append(sample_metrics)
 
     if not all_metrics:
         sys.stderr.write("ERROR: no samples had collectible metrics\n")

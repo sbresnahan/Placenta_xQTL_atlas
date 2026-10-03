@@ -65,8 +65,8 @@ def atomic_tsv(df: pd.DataFrame, dst: Path) -> None:
     os.replace(tmp, dst)
 
 
-def sandbox_expression(qtl_dir: Path, anc: str, k: int):
-    root = qtl_dir / "hcp_optimization_per_k" / anc / f"k{k}"
+def sandbox_expression(qtl_dir: Path, anc: str, k: int, sandbox_suffix: str = ""):
+    root = qtl_dir / f"hcp_optimization_per_k{sandbox_suffix}" / anc / f"k{k}"
     summary = root / "work" / f"{anc}_optimal_hcp.tsv"
     hcp = root / "qtl_inputs" / f"{anc}_hcp_factors_harmonized.tsv"
     if not (summary.is_file() and summary.stat().st_size > 0 and hcp.is_file() and hcp.stat().st_size > 0):
@@ -101,8 +101,8 @@ def legacy_expression(qtl_dir: Path, anc: str, k: int, fdr: float):
     return rec, hcp, "legacy"
 
 
-def sandbox_modality(qtl_dir: Path, anc: str, mod: str, k: int):
-    root = qtl_dir / "hcp_optimization_modalities_per_k" / anc / mod / f"k{k}"
+def sandbox_modality(qtl_dir: Path, anc: str, mod: str, k: int, sandbox_suffix: str = ""):
+    root = qtl_dir / f"hcp_optimization_modalities_per_k{sandbox_suffix}" / anc / mod / f"k{k}"
     summary = root / "work" / f"{anc}_{mod}_optimal_hcp.tsv"
     hcp = root / "qtl_inputs" / f"{anc}_{mod}_hcp_factors_optimized.tsv"
     if not (summary.is_file() and summary.stat().st_size > 0 and hcp.is_file() and hcp.stat().st_size > 0):
@@ -161,8 +161,9 @@ def finalize_expression(args, k_grid, expr_driver):
     hcp_by_k = {}
     source_by_k = {}
     for k in k_grid:
-        item = sandbox_expression(qtl, args.ancestry, k)
-        if item is None:
+        item = sandbox_expression(qtl, args.ancestry, k, args.sandbox_suffix)
+        if item is None and not args.sandbox_suffix:
+            # legacy trees are lambda1=0.5 artifacts; skip for suffixed runs
             item = legacy_expression(qtl, args.ancestry, k, args.fdr)
         if item is None:
             raise RuntimeError(f"missing completed grid point: {args.ancestry} expression k={k}")
@@ -206,8 +207,9 @@ def finalize_modality(args, k_grid, mod_driver):
     hcp_by_k = {}
     source_by_k = {}
     for k in k_grid:
-        item = sandbox_modality(qtl, args.ancestry, args.modality, k)
-        if item is None:
+        item = sandbox_modality(qtl, args.ancestry, args.modality, k, args.sandbox_suffix)
+        if item is None and not args.sandbox_suffix:
+            # legacy trees are lambda1=0.5 artifacts; skip for suffixed runs
             item = legacy_modality(qtl, args.ancestry, args.modality, k, args.fdr, args.chr1_min)
         if item is None:
             raise RuntimeError(f"missing completed grid point: {args.ancestry} {args.modality} k={k}")
@@ -258,6 +260,10 @@ def main():
     p.add_argument("--k-grid", default="0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100")
     p.add_argument("--fdr", type=float, default=0.05)
     p.add_argument("--chr1-min", type=int, default=300)
+    p.add_argument("--sandbox-suffix", default="",
+                   help="Suffix for the per-k sandbox tree dir names "
+                        "(e.g. '_lam5' reads hcp_optimization_per_k_lam5/). "
+                        "Used by non-default-lambda1 sensitivity/production runs.")
     args = p.parse_args()
 
     if args.mode == "modality" and not args.modality:

@@ -60,6 +60,10 @@ if [ ! -f "$CONFIG_GET" ]; then
 fi
 NCHUNKS="${NCHUNKS:-16}"
 IDX="${LSB_JOBINDEX:-1}"
+# PARSE_ONLY=1: skip Picard execution and re-extract metrics from the
+# persisted raw outputs under ${QC_DIR}/raw/${COHORT}/<sample>/ (written by
+# earlier runs). Used to widen the metric panel without re-running Picard.
+PARSE_ONLY="${PARSE_ONLY:-0}"
 
 # ---- Global init (same as 19_hcp_factors.sh) ----
 source /etc/profile.d/modules.sh
@@ -177,7 +181,7 @@ conda activate --stack samtools-1.16.1
 source /rsrch5/home/epi/bhattacharya_lab/software/MAJIQ/bin/activate
 
 # ---- Verify picard is reachable (same check as 19_hcp_factors.sh) -----------
-if ! command -v picard >/dev/null 2>&1; then
+if [ "$PARSE_ONLY" != "1" ] && ! command -v picard >/dev/null 2>&1; then
     echo "ERROR: 'picard' not on PATH after env stack (module load picard +"
     echo "  conda activate picard-2.27.4 + samtools + MAJIQ venv). State:"
     echo "  CONDA_PREFIX=${CONDA_PREFIX:-unset}"
@@ -186,6 +190,11 @@ if ! command -v picard >/dev/null 2>&1; then
     echo "  env bin/ contents: $(ls "${CONDA_PREFIX:-/nonexistent}"/bin 2>/dev/null | grep -i -m3 picard || echo 'no picard* in $CONDA_PREFIX/bin')"
     echo "Fix the activation (env name/path) — do not shim around it."
     exit 1
+fi
+
+PARSE_FLAG=""
+if [ "$PARSE_ONLY" = "1" ]; then
+    PARSE_FLAG="--parse-only"
 fi
 
 python3 "${SCRIPTS_DIR}/picard_qc.py" \
@@ -198,7 +207,9 @@ python3 "${SCRIPTS_DIR}/picard_qc.py" \
     --salmon-dir "${OUTPUT_BASE}/${COHORT}/intermediate/expression" \
     --gtf "$NORMALIZED_GTF" \
     --fasta "$FASTA" \
-    --gene-annot "$GENE_ANNOT"
+    --gene-annot "$GENE_ANNOT" \
+    --raw-dir "${QC_DIR}/raw/${COHORT}" \
+    $PARSE_FLAG
 
 echo "[$(date)] Done: cohort=${COHORT} chunk=${IDX}"
 echo "Output: ${QC_DIR}/${COHORT}.chunk${IDX}.qcmetrics.tsv"

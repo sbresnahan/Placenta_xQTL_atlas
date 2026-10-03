@@ -14,7 +14,14 @@
 # optimal_hcp TSV and sandbox-installed HCP file.
 #
 # Required env: CONFIG, SCRIPTS_DIR, OUTPUT_BASE, ANCESTRY_MAP, LOGS_DIR
-# Optional: QTL_DIR, ANCESTRIES, K_GRID, FDR, EXCLUDE_COVARIATES
+# Optional: QTL_DIR, ANCESTRIES, K_GRID, FDR, EXCLUDE_COVARIATES, LAMBDA1, FINALIZE
+#   LAMBDA1 — HCP prior strength passed to optimize_hcp_chr1.py (default 0.5).
+#   When LAMBDA1 != 0.5 the per-k sandboxes live in a lambda-suffixed tree
+#   (hcp_optimization_per_k_lam<LAMBDA1>/), the lambda=0.5 legacy tree is
+#   never consulted, job names carry a _lam<LAMBDA1> suffix, and the
+#   canonical finalizer is SKIPPED unless FINALIZE=1 is set explicitly
+#   (sensitivity scans read per-k parquets directly; set FINALIZE=1 when a
+#   non-default lambda becomes the production choice).
 # =============================================================================
 
 set -euo pipefail
@@ -29,7 +36,18 @@ REAL_QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
 ANCESTRIES="${ANCESTRIES:-EAS EUR}"
 K_GRID="${K_GRID:-0 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100}"
 FDR="${FDR:-0.05}"
+LAMBDA1="${LAMBDA1:-0.5}"
+FINALIZE="${FINALIZE:-0}"
 mkdir -p "$LOGS_DIR"
+
+# Lambda-suffixed sandbox tree + job-name suffix for non-default lambda1.
+SANDBOX_SUFFIX=""
+JOB_SUFFIX=""
+if [ "$LAMBDA1" != "0.5" ]; then
+  SANDBOX_SUFFIX="_lam${LAMBDA1}"
+  JOB_SUFFIX="_lam${LAMBDA1}"
+fi
+echo "lambda1: $LAMBDA1 (sandbox tree: hcp_optimization_per_k${SANDBOX_SUFFIX})"
 
 valid_parquet() {
   local f="$1" head tail
@@ -58,6 +76,9 @@ summary_has_grid() {
 }
 
 legacy_done() {
+  # Legacy serial tree holds lambda1=0.5 results only — never reuse it for
+  # non-default-lambda runs.
+  [ -z "$SANDBOX_SUFFIX" ] || return 1
   local anc="$1" k="$2"
   local stage="$REAL_QTL_DIR/hcp_optimization/$anc"
   [ -s "$stage/${anc}_hcp_k${k}_harmonized.tsv" ] || return 1
@@ -65,7 +86,7 @@ legacy_done() {
 }
 
 sandbox_root() {
-  echo "$REAL_QTL_DIR/hcp_optimization_per_k/$1/k$2"
+  echo "$REAL_QTL_DIR/hcp_optimization_per_k${SANDBOX_SUFFIX}/$1/k$2"
 }
 
 sandbox_done() {
@@ -105,7 +126,9 @@ for ANC in $ANCESTRIES; do
   canonical_summary="$REAL_QTL_DIR/hcp_optimization/${ANC}_optimal_hcp.tsv"
   canonical_hcp="$REAL_QTL_DIR/${ANC}_hcp_factors_harmonized.tsv"
 
-  if summary_has_grid "$canonical_summary" && [ -s "$canonical_hcp" ]; then
+  # Canonical outputs belong to the production lambda; sensitivity runs
+  # (non-default LAMBDA1) never consult them.
+  if [ -z "$SANDBOX_SUFFIX" ] && summary_has_grid "$canonical_summary" && [ -s "$canonical_hcp" ]; then
     echo "[$ANC] already finalized for the full k grid; nothing to submit."
     continue
   fi
@@ -123,7 +146,7 @@ for ANC in $ANCESTRIES; do
       continue
     fi
 
-    JOBNAME="hcp25a_${ANC}_k${K}"
+    JOBNAME="hcp25a_${ANC}_k${K}${JOB_SUFFIX}"
     mapfile -t ACTIVE < <(active_job_ids "$JOBNAME")
     if [ "${#ACTIVE[@]}" -gt 0 ]; then
       echo "  ACTIVE k=$K (${JOBNAME}: ${ACTIVE[*]}); not resubmitting"
@@ -143,6 +166,7 @@ for ANC in $ANCESTRIES; do
       export QTL_DIR="$JOB_QTL"
       export WORK_DIR="$JOB_WORK"
       export FDR
+      export EXTRA_ARGS="--lambda1 ${LAMBDA1}"
       bsub -J "$JOBNAME" \
         -q long -n 4 -M 32 -R "rusage[mem=32]" -W 48:00 \
         -o "$LOGS_DIR/${JOBNAME}.%J.out" \
@@ -155,7 +179,19 @@ for ANC in $ANCESTRIES; do
     deps+=("$JID")
   done
 
-  FINAL_NAME="hcp25a_${ANC}_finalize"
+  # Sensitivity runs (non-default LAMBDA1) skip the canonical finalizer
+  # unless FINALIZE=1 is set explicitly (i.e. this lambda is being promoted
+  # to production).
+  if [ -n "$SANDBOX_SUFFIX" ] && [ "$FINALIZE" != "1" ]; then
+    echo "  Sensitivity mode (lambda1=$LAMBDA1): per-k jobs submitted;"
+    echo "  finalizer skipped. Compare per-k parquets under"
+    echo "    $REAL_QTL_DIR/hcp_optimization_per_k${SANDBOX_SUFFIX}/${ANC}/"
+    echo "  against the production tree, then re-run with FINALIZE=1 if this"
+    echo "  lambda is adopted."
+    continue
+  fi
+
+  FINAL_NAME="hcp25a_${ANC}_finalize${JOB_SUFFIX}"
   mapfile -t ACTIVE_FINAL < <(active_job_ids "$FINAL_NAME")
   if [ "${#ACTIVE_FINAL[@]}" -gt 0 ]; then
     echo "  Finalizer already active (${FINAL_NAME}: ${ACTIVE_FINAL[*]}); not resubmitting"
@@ -177,6 +213,7 @@ for ANC in $ANCESTRIES; do
     export HCP_FINALIZE_MODE=expression
     export ANCESTRY="$ANC"
     export K_GRID FDR
+    export SANDBOX_SUFFIX
     "${BSUB[@]}" -env all < "$SCRIPTS_DIR/25_hcp_k_finalize.sh"
   )
   echo "  $OUT"

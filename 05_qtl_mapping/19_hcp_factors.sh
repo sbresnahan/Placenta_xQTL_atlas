@@ -263,7 +263,8 @@ for COHORT in $COHORT_LIST; do
         --salmon-dir "$SALMON_DIR" \
         --gtf "$NORMALIZED_GTF" \
         --gene-annot "$GENE_ANNOT" \
-        --fasta "$FASTA"
+        --fasta "$FASTA" \
+        --raw-dir "${QC_DIR}/raw/${COHORT}"
 done
 
 conda deactivate 2>/dev/null || true
@@ -374,7 +375,7 @@ for ANCESTRY in $ANCESTRY_LIST; do
         --k "$K" \
         --output-dir "$HCP_DIR" \
         --qc-cor-threshold 0.9 \
-        --lambda1 0.5 \
+        --lambda1 "${LAMBDA1:-0.5}" \
         --lambda2 1 \
         --lambda3 1
 done

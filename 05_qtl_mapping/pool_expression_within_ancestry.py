@@ -121,7 +121,7 @@ def load_config_cohorts(config_path):
 
 
 def pool_ancestry_stratum(ancestry, ancestry_samples, cohort_dirs, modality,
-                          output_dir):
+                          output_dir, pool_mode="union"):
     """Pool expression BEDs for one ancestry stratum.
 
     Args:
@@ -130,6 +130,9 @@ def pool_ancestry_stratum(ancestry, ancestry_samples, cohort_dirs, modality,
         cohort_dirs: dict cohort -> cohort_dir
         modality: which unnorm BED to pool
         output_dir: where to write the pooled BED
+        pool_mode: "union" (default; devBrain-style — pooled detection
+            filters at normalization decide the final feature set) or
+            "intersection" (legacy behavior)
 
     Returns:
         dict with pooling statistics
@@ -184,36 +187,56 @@ def pool_ancestry_stratum(ancestry, ancestry_samples, cohort_dirs, modality,
             for s in missing:
                 print(f"    {s}")
 
-    # Take gene intersection across all cohorts
+    # Feature set: union (default) or legacy intersection across cohorts.
+    # Union is the devBrain-style schema: per-cohort prefilters no longer
+    # decide the pooled feature set; the pooled detection filters at the
+    # normalization stage (TPM>0.1 in >=25% / >=40% non-NA + no-variance +
+    # per-cohort >=2 non-NA guards) decide. Features absent from a cohort
+    # get NaN for that cohort's samples (ratio modalities only — expression
+    # BEDs share the GTF feature space, so union == intersection there once
+    # per-cohort prefilters are skipped).
     gene_intersection = set.intersection(*gene_sets.values())
+    gene_union = set.union(*gene_sets.values())
     n_genes_per_cohort = {c: len(g) for c, g in gene_sets.items()}
     print(f"  Genes per cohort: {n_genes_per_cohort}")
     print(f"  Gene intersection: {len(gene_intersection)}")
+    print(f"  Gene union: {len(gene_union)} "
+          f"(+{len(gene_union) - len(gene_intersection)} vs intersection)")
 
-    # Merge: align on phenotype_id, keep metadata from first cohort
+    feature_set = gene_union if pool_mode == "union" else gene_intersection
+    union_sorted = sorted(feature_set)
+
+    # Merge: reindex every cohort to the pooled feature set; metadata
+    # (#chr/start/end) come from the first cohort in which the feature
+    # appears (combine_first).
     all_samples = []
     merged_meta = None
     merged_data = []
+    n_na_cells = 0
 
     for cohort, df in cohort_dfs.items():
-        df_filtered = df[df["phenotype_id"].isin(gene_intersection)].copy()
-        df_filtered = df_filtered.sort_values("phenotype_id").reset_index(drop=True)
+        df_idx = df.set_index("phenotype_id")
+        df_re = df_idx.reindex(union_sorted)
 
+        meta_c = df_re[["#chr", "start", "end"]]
         if merged_meta is None:
-            merged_meta = df_filtered[BED_META_COLS].copy()
+            merged_meta = meta_c.copy()
         else:
-            # Verify metadata alignment (same gene order)
-            assert merged_meta["phenotype_id"].equals(
-                df_filtered["phenotype_id"]), \
-                f"Gene ID mismatch when merging cohort {cohort}"
+            merged_meta = merged_meta.combine_first(meta_c)
 
-        sample_cols = [c for c in df_filtered.columns if c not in BED_META_COLS]
-        merged_data.append(df_filtered[sample_cols])
+        sample_cols = [c for c in df.columns if c not in BED_META_COLS]
+        n_na_cells += int(df_re[sample_cols].isna().sum().sum())
+        merged_data.append(df_re[sample_cols])
         all_samples.extend(sample_cols)
 
-    # Concatenate sample columns
-    pooled_data = pd.concat(merged_data, axis=1)
-    pooled = pd.concat([merged_meta, pooled_data], axis=1)
+    # All frames are indexed by phenotype_id here; concat aligns on it.
+    pooled = pd.concat([merged_meta] + merged_data, axis=1)
+    pooled = pooled.reset_index()  # phenotype_id back as a column
+    pooled = pooled[BED_META_COLS + all_samples]
+    if n_na_cells:
+        print(f"  NaN cells introduced by union pooling: {n_na_cells} "
+              f"(features absent from a cohort; imputed/filtered at "
+              f"normalization)")
 
     # Verify column count
     assert len(pooled.columns) == 4 + len(all_samples), \
@@ -228,7 +251,12 @@ def pool_ancestry_stratum(ancestry, ancestry_samples, cohort_dirs, modality,
     return {
         "ancestry": ancestry,
         "n_samples": len(all_samples),
-        "n_genes": len(gene_intersection),
+        "n_genes": len(feature_set),
+        "n_genes_intersection": len(gene_intersection),
+        "n_genes_union": len(gene_union),
+        "n_gained_vs_intersection": len(gene_union) - len(gene_intersection),
+        "n_na_cells_union": n_na_cells,
+        "pool_mode": pool_mode,
         "n_cohorts": len(cohort_dfs),
         "genes_per_cohort": n_genes_per_cohort,
         "samples_per_cohort": {c: len(s) for c, s in samples_found.items()},
@@ -253,6 +281,11 @@ def main():
                         help="Output directory for pooled matrices")
     parser.add_argument("--ancestries", nargs="*",
                         help="Subset of ancestries to process (default: all)")
+    parser.add_argument("--pool-mode", choices=["union", "intersection"],
+                        default="union",
+                        help="Feature pooling across cohorts: union (default, "
+                             "devBrain-style; pooled detection filters decide) "
+                             "or intersection (legacy)")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -295,7 +328,8 @@ def main():
             print(f"\nNo samples for ancestry {ancestry}, skipping")
             continue
         stats = pool_ancestry_stratum(
-            ancestry, stratum_samples, cohort_dirs, args.modality, args.output_dir)
+            ancestry, stratum_samples, cohort_dirs, args.modality, args.output_dir,
+            pool_mode=args.pool_mode)
         if stats:
             all_stats.append(stats)
 
@@ -319,7 +353,12 @@ def main():
                 "ancestry": s["ancestry"],
                 "cohort": cohort,
                 "n_samples": n,
-                "n_genes_intersection": s["n_genes"],
+                "n_genes_pooled": s["n_genes"],
+                "n_genes_intersection": s["n_genes_intersection"],
+                "n_genes_union": s["n_genes_union"],
+                "n_gained_vs_intersection": s["n_gained_vs_intersection"],
+                "n_na_cells_union": s["n_na_cells_union"],
+                "pool_mode": s["pool_mode"],
                 "n_missing": s["missing_samples"].get(cohort, 0),
             })
     pd.DataFrame(summary_rows).to_csv(summary_path, sep="\t", index=False)

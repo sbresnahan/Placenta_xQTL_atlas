@@ -116,7 +116,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
     --samples "$SAMPLES_FILE" \
     --input-dir "$EXPR_DIR" \
     --ref-anno "$REF_ANNO" \
-    --output-expression "${UNNORM_DIR}/expression.bed"
+    --output-expression "${UNNORM_DIR}/expression.bed" \
+    --skip-feature-filter
 
 # ---- QU correction for isoforms (edgeR::catchSalmon) ----
 # Skip only when EVERY sample has an adjusted quant.sf (a first-sample-only
@@ -154,7 +155,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" expression \
     --ref-anno "$REF_ANNO" \
     --units tpm_from_counts \
     --output-isoforms "${UNNORM_DIR}/isoforms.bed" \
-    --output-isoform-expr "${UNNORM_DIR}/isoform_expression.bed"
+    --output-isoform-expr "${UNNORM_DIR}/isoform_expression.bed" \
+    --skip-feature-filter
 
 # ---- Count-scale BEDs for TMM->VST normalization (PsychENCODE/isoTWAS) ----
 # Gene-level: tximport countsFromAbundance="lengthScaledTPM" from the ORIGINAL

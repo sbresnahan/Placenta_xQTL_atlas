@@ -135,9 +135,12 @@ echo "  k grid:       $K_GRID"
 echo "  FDR:          $FDR"
 echo "  Exclude:      ${EXCLUDE_COVARIATES:-<none>}"
 
-EXTRA_ARGS=""
+# EXTRA_ARGS may be injected by the caller (e.g. 25a_submit_hcp_k_jobs.sh
+# exports EXTRA_ARGS="--lambda1 5" when LAMBDA1 != 0.5); flags set here are
+# appended so the injected value survives.
+EXTRA_ARGS="${EXTRA_ARGS:-}"
 if [ "$SKIP_EXISTING" = "1" ]; then
-    EXTRA_ARGS="--skip-existing"
+    EXTRA_ARGS="$EXTRA_ARGS --skip-existing"
 fi
 if [ -n "$EXCLUDE_COVARIATES" ]; then
     EXTRA_ARGS="$EXTRA_ARGS --exclude-covariates $EXCLUDE_COVARIATES"

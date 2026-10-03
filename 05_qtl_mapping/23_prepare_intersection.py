@@ -26,6 +26,7 @@ import argparse
 import os
 import subprocess
 import sys
+from collections import Counter
 import pandas as pd
 import numpy as np
 
@@ -94,6 +95,51 @@ def read_tsv_samples(tsv_path, id_col='sample_id'):
         return df[id_col].tolist()
     # Try first column
     return df.iloc[:, 0].tolist()
+
+
+def backmap_rnaseq_ids(rna_to_array, final_array):
+    """Return ALL rnaseq_ids whose array_id is in final_array.
+
+    Multiple rnaseq_ids may map to the same array_id (technical replicates).
+    They must all be kept so the downstream rename+average guards collapse
+    them to one column per individual. A dict inversion ({v: k ...}) here
+    would silently keep a single, hash-order-dependent survivor per array_id
+    (set iteration order varies across processes), discarding replicate data.
+    """
+    return {r for r, a in rna_to_array.items() if a in final_array}
+
+
+def average_duplicate_columns(df):
+    """Average duplicate sample columns (technical replicates) row-wise.
+
+    Returns (df, duplicated_names). Use BEFORE writing: pandas mangles
+    duplicate headers on re-read (id -> id.1), which would make downstream
+    steps silently drop the second column instead of averaging it.
+    """
+    if not df.columns.duplicated().any():
+        return df, []
+    dup = df.columns[df.columns.duplicated()].unique().tolist()
+    df = df.T.groupby(level=0).mean().T
+    return df, dup
+
+
+def average_duplicate_rows(df, id_col):
+    """Average rows sharing the same id_col value (technical replicates).
+
+    Numeric columns are averaged; non-numeric columns take the first value.
+    Returns (df, n_duplicate_rows_removed).
+    """
+    if not df[id_col].duplicated().any():
+        return df, 0
+    n_dup = int(df[id_col].duplicated().sum())
+    col_order = list(df.columns)
+    agg = {}
+    for c in df.columns:
+        if c == id_col:
+            continue
+        agg[c] = 'mean' if pd.api.types.is_numeric_dtype(df[c]) else 'first'
+    df = df.groupby(id_col, as_index=False).agg(agg)[col_order]
+    return df, n_dup
 
 
 def rename_bed_columns(bed_path, out_path, id_map):
@@ -316,9 +362,16 @@ def main():
         # DNA side: intersection with genotype
         final_array = array_intersection & set(geno_samples)
         
-        # Back-map to rnaseq_id for filtering
-        final_rnaseq = {v: k for k, v in rna_to_array.items()}
-        final_rnaseq = {final_rnaseq[a] for a in final_array if a in final_rnaseq}
+        # Back-map to rnaseq_id for filtering — keep ALL runs whose array_id
+        # survives the DNA intersection (technical replicates are averaged
+        # downstream by the rename guards, not silently dropped here).
+        final_rnaseq = backmap_rnaseq_ids(rna_to_array, final_array)
+        run_counts = Counter(rna_to_array[r] for r in final_rnaseq)
+        replicated = {a: n for a, n in run_counts.items() if n > 1}
+        if replicated:
+            print(f"    Technical replicates: {len(replicated)} individual(s) with "
+                  f">1 RNA-seq run in the final intersection; their duplicate "
+                  f"sample columns are averaged after the rnaseq_id->array_id rename")
         
         print(f"\n  Intersection:")
         print(f"    RNA samples (expr ∩ HCP ∩ deconv ∩ meta): {len(rna_intersection)}")
@@ -393,6 +446,14 @@ def main():
                 drop_cols.append(c)
         hcp_df = hcp_df.drop(columns=drop_cols)
         hcp_df = hcp_df.rename(columns=new_cols)
+        # Average technical-replicate columns BEFORE writing (pandas would
+        # mangle duplicate headers on re-read: id -> id.1).
+        hcp_df, hcp_dups = average_duplicate_columns(hcp_df)
+        if hcp_dups:
+            print(f"    NOTE: averaged {len(hcp_dups)} duplicate HCP sample "
+                  f"column(s) (technical replicates): {hcp_dups[:5]}")
+        if not hcp_df.columns.is_unique:
+            sys.exit(f"  ERROR: duplicate sample columns remain in {hcp_out}")
         hcp_df.to_csv(hcp_out, sep='\t')
         print(f"    Renamed {len(new_cols)} columns, dropped {len(drop_cols)} samples")
         print(f"    Written: {hcp_out}")
@@ -407,15 +468,53 @@ def main():
             # Rename sample column
             deconv_df['sample'] = deconv_df['sample'].map(final_id_map)
             deconv_df = deconv_df.rename(columns={'sample': 'sample_id'})
+            # Average technical-replicate rows so every harmonized file is
+            # one row per individual (25_build_covariates.py would otherwise
+            # have to average duplicate columns itself).
+            deconv_df, n_deconv_dup = average_duplicate_rows(deconv_df, 'sample_id')
+            if n_deconv_dup:
+                print(f"    NOTE: averaged {n_deconv_dup} duplicate deconvolution "
+                      f"row(s) (technical replicates)")
+            if not deconv_df['sample_id'].is_unique:
+                sys.exit(f"  ERROR: duplicate sample_id rows remain in {deconv_out}")
             deconv_df.to_csv(deconv_out, sep='\t', index=False)
             print(f"    {len(deconv_df)} samples, written: {deconv_out}")
         
         # ---- Save metadata subset ----
+        # NOTE: metadata stays row-per-run by design — a replicated individual
+        # appears once per rnaseq_id. 25_build_covariates.py averages duplicate
+        # covariate columns from these rows (and excludes discordant-sex pairs);
+        # 26_harmonize_modalities.py needs both rows for its rnaseq_id->array_id
+        # map. Duplicate array_ids here are expected, not an error.
         meta_out = os.path.join(output_dir, f"{anc}_metadata.tsv")
         anc_meta_final = anc_meta[anc_meta['array_id'].isin(final_array)]
         anc_meta_final.to_csv(meta_out, sep='\t', index=False)
-        print(f"  Metadata subset: {len(anc_meta_final)} samples, written: {meta_out}")
+        print(f"  Metadata subset: {len(anc_meta_final)} rows "
+              f"({anc_meta_final['array_id'].nunique()} unique individuals), "
+              f"written: {meta_out}")
         
+        # ---- Reconciliation report + hard assertions ----
+        # Every harmonized file must carry exactly one column/row per
+        # individual, and the expression BED sample set must equal the final
+        # intersection. Fail loudly rather than propagate a silent replicate
+        # or sample-set mismatch into QTL mapping.
+        with open(expr_out) as f:
+            out_header = f.readline().strip().split('\t')
+        out_samples = [c for c in out_header
+                       if c not in ('#chr', 'start', 'end', 'phenotype_id', 'chr')]
+        n_bed_dup = len(out_samples) - len(set(out_samples))
+        print(f"\n  Replicate reconciliation ({anc}):")
+        print(f"    Individuals with >1 run in final intersection: {len(replicated)}")
+        print(f"    Expression BED: {len(out_samples)} sample columns "
+              f"({n_bed_dup} duplicates), {len(set(out_samples))} unique individuals")
+        if n_bed_dup:
+            sys.exit(f"  ERROR: {expr_out} has duplicate sample columns after "
+                     f"replicate averaging: "
+                     f"{sorted({c for c in out_samples if out_samples.count(c) > 1})[:5]}")
+        if set(out_samples) != set(final_array):
+            sys.exit(f"  ERROR: {expr_out} sample set ({len(out_samples)}) != "
+                     f"final intersection ({len(final_array)})")
+
         print(f"\n  Done: {anc} — {len(final_array)} samples ready for QTL mapping")
 
 

@@ -120,7 +120,10 @@ STAB_DIR = os.path.join("intermediate", "stability")
 EDIT_MATRIX = os.path.join("intermediate", "RNA_editing", "edit_site_matrix.tsv")
 EDIT_SITE_MAP = os.path.join("output", "RNA_editing.site_to_phenotype.tsv")
 
-STAB_MIN_COUNT = 10  # per-feature floor, matching assemble_bed.load_featureCounts
+STAB_MIN_COUNT = 10  # per-VALUE floor, matching assemble_bed.load_featureCounts
+# (values below the floor become NaN; this is per-observation, not a
+# per-feature filter, so it is kept under union pooling — feature-level
+# filtering happens once, on the pooled matrix, at the normalization stage)
 
 
 # ---------------------------------------------------------------------------

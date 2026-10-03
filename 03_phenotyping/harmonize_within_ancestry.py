@@ -360,6 +360,9 @@ def harmonize_splicing(config: dict, cohorts: list, ancestry_samples: dict,
         "--input", str(pooled_counts_path),
         "--ref-anno", ref_anno,
         "--output", str(splicing_bed),
+        # Union pooling: keep every quantified junction; the pooled devBrain
+        # detection filter at normalization decides the final feature set.
+        "--skip-feature-filter",
     ]
     print(f"[INFO] Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)

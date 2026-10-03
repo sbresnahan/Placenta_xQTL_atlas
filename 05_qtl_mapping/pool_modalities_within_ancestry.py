@@ -198,11 +198,17 @@ def load_cohort_bed(cohort_dir, modality):
 
 
 def pool_intersection_stratum(ancestry, ancestry_samples, cohort_dirs,
-                              modality, output_dir):
-    """Pool per-cohort BEDs for one ancestry stratum by phenotype_id intersection.
+                              modality, output_dir, pool_mode="union"):
+    """Pool per-cohort BEDs for one ancestry stratum by phenotype_id.
 
     Used for isoforms, isoform_expression, alt_TSS, alt_polyA, RNA_editing,
     stability.
+
+    pool_mode: "union" (default; devBrain-style — per-cohort prefilters no
+    longer decide the pooled feature set; the pooled detection filters at
+    the normalization stage decide) or "intersection" (legacy behavior).
+    Features absent from a cohort get NaN for that cohort's samples under
+    union pooling.
     """
     samples_by_cohort = defaultdict(list)
     for _, row in ancestry_samples.iterrows():
@@ -210,7 +216,7 @@ def pool_intersection_stratum(ancestry, ancestry_samples, cohort_dirs,
 
     print(f"\n{'='*60}")
     print(f"Ancestry stratum: {ancestry} (N={len(ancestry_samples)})")
-    print(f"  Modality: {modality} (intersection pooling)")
+    print(f"  Modality: {modality} ({pool_mode} pooling)")
     print(f"  Cohorts: {dict(samples_by_cohort)}")
 
     cohort_dfs = {}
@@ -249,30 +255,46 @@ def pool_intersection_stratum(ancestry, ancestry_samples, cohort_dirs,
             print(f"  Missing samples in {cohort}: {len(missing)}")
 
     feature_intersection = set.intersection(*feature_sets.values())
+    feature_union = set.union(*feature_sets.values())
     n_per_cohort = {c: len(g) for c, g in feature_sets.items()}
     print(f"  Features per cohort: {n_per_cohort}")
     print(f"  Feature intersection: {len(feature_intersection)}")
+    print(f"  Feature union: {len(feature_union)} "
+          f"(+{len(feature_union) - len(feature_intersection)} vs intersection)")
 
+    feature_set = feature_union if pool_mode == "union" else feature_intersection
+    union_sorted = sorted(feature_set)
+
+    # Reindex every cohort to the pooled feature set; metadata come from the
+    # first cohort in which the feature appears (combine_first).
     all_samples = []
     merged_meta = None
     merged_data = []
+    n_na_cells = 0
 
     for cohort, df in cohort_dfs.items():
-        df_f = df[df["phenotype_id"].isin(feature_intersection)].copy()
-        df_f = df_f.sort_values("phenotype_id").reset_index(drop=True)
+        df_idx = df.set_index("phenotype_id")
+        df_re = df_idx.reindex(union_sorted)
 
+        meta_c = df_re[["#chr", "start", "end"]]
         if merged_meta is None:
-            merged_meta = df_f[BED_META_COLS].copy()
+            merged_meta = meta_c.copy()
         else:
-            assert merged_meta["phenotype_id"].equals(df_f["phenotype_id"]), \
-                f"phenotype_id mismatch when merging cohort {cohort}"
+            merged_meta = merged_meta.combine_first(meta_c)
 
-        sample_cols = [c for c in df_f.columns if c not in BED_META_COLS]
-        merged_data.append(df_f[sample_cols])
+        sample_cols = [c for c in df.columns if c not in BED_META_COLS]
+        n_na_cells += int(df_re[sample_cols].isna().sum().sum())
+        merged_data.append(df_re[sample_cols])
         all_samples.extend(sample_cols)
 
-    pooled_data = pd.concat(merged_data, axis=1)
-    pooled = pd.concat([merged_meta, pooled_data], axis=1)
+    # All frames are indexed by phenotype_id here; concat aligns on it.
+    pooled = pd.concat([merged_meta] + merged_data, axis=1)
+    pooled = pooled.reset_index()  # phenotype_id back as a column
+    pooled = pooled[BED_META_COLS + all_samples]
+    if n_na_cells:
+        print(f"  NaN cells introduced by union pooling: {n_na_cells} "
+              f"(features absent from a cohort; imputed/filtered at "
+              f"normalization)")
 
     assert len(pooled.columns) == 4 + len(all_samples)
 
@@ -284,9 +306,13 @@ def pool_intersection_stratum(ancestry, ancestry_samples, cohort_dirs,
     return {
         "ancestry": ancestry,
         "modality": modality,
-        "pooling": "intersection",
+        "pooling": pool_mode,
         "n_samples": len(all_samples),
-        "n_features": len(feature_intersection),
+        "n_features": len(feature_set),
+        "n_features_intersection": len(feature_intersection),
+        "n_features_union": len(feature_union),
+        "n_gained_vs_intersection": len(feature_union) - len(feature_intersection),
+        "n_na_cells_union": n_na_cells,
         "n_cohorts": len(cohort_dfs),
         "features_per_cohort": n_per_cohort,
         "samples_per_cohort": {c: len(s) for c, s in samples_found.items()},
@@ -420,6 +446,12 @@ def main():
                         help="Output directory for pooled matrices")
     parser.add_argument("--ancestries", nargs="*",
                         help="Subset of ancestries to process (default: all)")
+    parser.add_argument("--pool-mode", choices=["union", "intersection"],
+                        default="union",
+                        help="Feature pooling across cohorts: union (default, "
+                             "devBrain-style; pooled detection filters decide) "
+                             "or intersection (legacy). Ignored for pre-pooled "
+                             "modalities (splicing/intron_retention).")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -482,7 +514,7 @@ def main():
         else:
             stats = pool_intersection_stratum(
                 ancestry, stratum_samples, cohort_dirs,
-                args.modality, args.output_dir)
+                args.modality, args.output_dir, pool_mode=args.pool_mode)
         if stats:
             all_stats.append(stats)
 
@@ -509,6 +541,10 @@ def main():
                 "n_samples": n,
                 "n_features": s["n_features"],
                 "pooling": s["pooling"],
+                "n_features_intersection": s.get("n_features_intersection"),
+                "n_features_union": s.get("n_features_union"),
+                "n_gained_vs_intersection": s.get("n_gained_vs_intersection"),
+                "n_na_cells_union": s.get("n_na_cells_union"),
                 "n_missing": s["missing_samples"].get(cohort, 0),
             })
     pd.DataFrame(summary_rows).to_csv(summary_path, sep="\t", index=False)

@@ -163,7 +163,7 @@ def load_salmon(sample_ids: list, salmon_dir: Path, units: str) -> pd.DataFrame:
 # Keep a backward-compatible alias in case any code references the old name
 load_kallisto = load_salmon
 
-def assemble_alt_TSS_polyA(sample_ids: list, group1_dir: Path, group2_dir: Path, units: str, ref_anno: Path, bed: Path, min_frac: float = 0.05, max_frac: float = 0.95):
+def assemble_alt_TSS_polyA(sample_ids: list, group1_dir: Path, group2_dir: Path, units: str, ref_anno: Path, bed: Path, min_frac: float = 0.05, max_frac: float = 0.95, skip_feature_filter: bool = False):
     """Assemble txrevise-based Salmon outputs into BED file
 
     By default, txrevise produces two sets of annotations per annotation type.
@@ -180,14 +180,22 @@ def assemble_alt_TSS_polyA(sample_ids: list, group1_dir: Path, group2_dir: Path,
     # Calculate proportion of each transcript in each gene_id:
     gene_ids = df1['gene_id'] # groupby/apply removes gene_id, so save it to add back
     df1 = df1.groupby('gene_id', group_keys=False).apply(lambda x: x / x.sum(axis=0))
-    # Remove sites with mean relative usage < `min_frac` or > `max_frac`:
-    df1 = df1[(df1.mean(axis=1) >= min_frac) & (df1.mean(axis=1) <= max_frac)]
+    if skip_feature_filter:
+        # Union pooling: keep every quantified site; drop only all-zero rows.
+        # The pooled devBrain detection filter decides at normalization.
+        df1 = df1[df1.fillna(0).sum(axis=1) > 0]
+    else:
+        # Remove sites with mean relative usage < `min_frac` or > `max_frac`:
+        df1 = df1[(df1.mean(axis=1) >= min_frac) & (df1.mean(axis=1) <= max_frac)]
     df1 = df1.join(gene_ids, how='left')
 
     gene_ids = df2['gene_id']
     df2 = df2.groupby('gene_id', group_keys=False).apply(lambda x: x / x.sum(axis=0))
-    # Remove sites with mean relative usage < `min_frac` or > `max_frac`:
-    df2 = df2[(df2.mean(axis=1) >= min_frac) & (df2.mean(axis=1) <= max_frac)]
+    if skip_feature_filter:
+        df2 = df2[df2.fillna(0).sum(axis=1) > 0]
+    else:
+        # Remove sites with mean relative usage < `min_frac` or > `max_frac`:
+        df2 = df2[(df2.mean(axis=1) >= min_frac) & (df2.mean(axis=1) <= max_frac)]
     df2 = df2.join(gene_ids, how='left')
 
     df = pd.concat([df1, df2], axis=0)
@@ -205,7 +213,7 @@ def assemble_alt_TSS_polyA(sample_ids: list, group1_dir: Path, group2_dir: Path,
     df = df[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
     df.to_csv(bed, sep='\t', index=False, float_format='%g')
 
-def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno: Path, bed_iso: Path, bed_gene: Path, min_count: int = 10, min_frac: float = 0.05, max_frac: float = 0.95, log2_expr: bool = False, bed_iso_expr: Path = None):
+def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno: Path, bed_iso: Path, bed_gene: Path, min_count: int = 10, min_frac: float = 0.05, max_frac: float = 0.95, log2_expr: bool = False, bed_iso_expr: Path = None, skip_feature_filter: bool = False):
     """Assemble Salmon TPM or NumReads outputs into isoform- and gene-level BED files
 
     Isoform values are normalized to relative abundance in each gene. Isoforms
@@ -242,7 +250,13 @@ def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno
         df_counts = df_iso
     else:
         df_counts = load_salmon(sample_ids, salmon_dir, 'est_counts')
-    iso_enough_counts = df_counts[df_counts.mean(axis=1) >= min_count].index
+    if skip_feature_filter:
+        # Union pooling: keep every isoform with any reads; drop only
+        # all-zero rows. The pooled devBrain detection filter decides at
+        # normalization.
+        iso_enough_counts = df_counts[df_counts.fillna(0).sum(axis=1) > 0].index
+    else:
+        iso_enough_counts = df_counts[df_counts.mean(axis=1) >= min_count].index
 
     df_iso.index = df_iso.index.rename('transcript_id')
     gene_map = transcript_to_gene_map(ref_anno).set_index('transcript_id')
@@ -263,8 +277,9 @@ def assemble_expression(sample_ids: list, salmon_dir: Path, units: str, ref_anno
     df_iso = df_iso.groupby('gene_id', group_keys=False).apply(lambda x: x / x.sum(axis=0))
     # Remove isoforms with mean read count < `min_count`:
     df_iso = df_iso[df_iso.index.isin(iso_enough_counts)]
-    # Remove isoforms with mean relative abundance < `min_frac` or > `max_frac`:
-    df_iso = df_iso[(df_iso.mean(axis=1) >= min_frac) & (df_iso.mean(axis=1) <= max_frac)]
+    if not skip_feature_filter:
+        # Remove isoforms with mean relative abundance < `min_frac` or > `max_frac`:
+        df_iso = df_iso[(df_iso.mean(axis=1) >= min_frac) & (df_iso.mean(axis=1) <= max_frac)]
     # groupby/apply removes gene_id, so add them back
     df_iso = df_iso.join(gene_map, how='left')
 
@@ -309,14 +324,19 @@ def assemble_RNA_editing(data: Path, ref_anno: Path, bed: Path):
     df = df[['#chr', 'start', 'end', 'phenotype_id'] + sample_ids]
     df.to_csv(bed, sep='\t', index=False, float_format='%g')
 
-def assemble_splicing(counts: Path, ref_anno: Path, bed: Path, min_frac: float = 0.05, max_frac: float = 0.95):
+def assemble_splicing(counts: Path, ref_anno: Path, bed: Path, min_frac: float = 0.05, max_frac: float = 0.95, skip_feature_filter: bool = False):
     """Convert leafcutter output into splicing BED file"""
     df = pd.read_csv(counts, sep=' ')
     sample_ids = list(df.columns)
     cluster = df.index.str.extract(r'clu_(\d+)_', expand=False)
     df = df.groupby(cluster, group_keys=False).apply(lambda g: g / g.sum(axis=0))
-    # Remove junctions with mean relative usage < `min_frac` or > `max_frac`:
-    df = df[(df.mean(axis=1) >= min_frac) & (df.mean(axis=1) <= max_frac)]
+    if skip_feature_filter:
+        # Union pooling: keep every quantified junction; drop only all-zero
+        # rows. The pooled devBrain detection filter decides at normalization.
+        df = df[df.fillna(0).sum(axis=1) > 0]
+    else:
+        # Remove junctions with mean relative usage < `min_frac` or > `max_frac`:
+        df = df[(df.mean(axis=1) >= min_frac) & (df.mean(axis=1) <= max_frac)]
     df['cluster'] = df.index.str.extract(r'clu_(\d+)_', expand=False)
     df.index = df.index.rename('intron')
     df = df.reset_index()
@@ -374,7 +394,7 @@ def load_featureCounts(sample_ids: list, counts_dir: Path, feature: str, min_cou
         counts.append(d)
     return pd.concat(counts, axis=1)
 
-def assemble_stability(sample_ids: list, stab_dir: Path, ref_anno: Path, bed: Path):
+def assemble_stability(sample_ids: list, stab_dir: Path, ref_anno: Path, bed: Path, skip_feature_filter: bool = False):
     """Assemble exon to intron read ratios into mRNA stability BED file"""
     exon = load_featureCounts(sample_ids, stab_dir, 'exonic')
     intron = load_featureCounts(sample_ids, stab_dir, 'intronic')
@@ -382,7 +402,12 @@ def assemble_stability(sample_ids: list, stab_dir: Path, ref_anno: Path, bed: Pa
     assert exon.loc[genes, :].index.equals(intron.loc[genes, :].index)
     assert exon.columns.equals(intron.columns)
     df = exon.loc[genes, :] / intron.loc[genes, :]
-    df = df[df.isnull().mean(axis=1) <= 0.5]
+    if skip_feature_filter:
+        # Union pooling: drop only features with no quantification at all;
+        # the pooled >=40% detection filter decides at normalization.
+        df = df[df.notnull().any(axis=1)]
+    else:
+        df = df[df.isnull().mean(axis=1) <= 0.5]
 
     anno = load_tss(ref_anno)
     anno = anno.rename(columns={'gene_id': 'phenotype_id'})
@@ -406,6 +431,10 @@ def main():
     p_tss.add_argument('--output', type=Path, required=True, help='Output BED file')
     p_tss.add_argument('--min-frac', type=float, default=0.05, help='Minimum mean fraction for TSS/polyA site to be included')
     p_tss.add_argument('--max-frac', type=float, default=0.95, help='Maximum mean fraction for TSS/polyA site to be included')
+    p_tss.add_argument('--skip-feature-filter', action='store_true',
+                        help=('Union-pooling mode: emit all quantified features (drop only '
+                              'all-zero/all-NaN rows) and let the pooled devBrain detection '
+                              'filters at the normalization stage decide the final feature set'))
 
     # expression
     p_expr = sub.add_parser('expression', help='Assemble isoform- and gene-level expression')
@@ -425,6 +454,10 @@ def main():
                              "NumReads and EffectiveLength instead")
     p_expr.add_argument('--log2-expr', action='store_true',
                         help='If set, gene-level expression values are log2 transformed (log2(x + 1)) before being written to BED file')
+    p_expr.add_argument('--skip-feature-filter', action='store_true',
+                        help=('Union-pooling mode: emit all quantified features (drop only '
+                              'all-zero/all-NaN rows) and let the pooled devBrain detection '
+                              'filters at the normalization stage decide the final feature set'))
 
     # latent
     p_lat = sub.add_parser('latent', help='Assemble latent RNA PCs')
@@ -445,6 +478,10 @@ def main():
     p_sp.add_argument('--output', type=Path, required=True, help='Output BED file')
     p_sp.add_argument('--min-frac', type=float, default=0.05, help='Minimum mean fraction for junction to be included')
     p_sp.add_argument('--max-frac', type=float, default=0.95, help='Maximum mean fraction for junction to be included')
+    p_sp.add_argument('--skip-feature-filter', action='store_true',
+                        help=('Union-pooling mode: emit all quantified features (drop only '
+                              'all-zero/all-NaN rows) and let the pooled devBrain detection '
+                              'filters at the normalization stage decide the final feature set'))
 
     # intron retention
     p_ir = sub.add_parser('intron-retention', help='Assemble MAJIQ retained-intron PSI phenotypes')
@@ -458,6 +495,10 @@ def main():
     p_stab.add_argument('--input-dir', type=Path, required=True, help='Directory containing {sample}.exonic.counts.txt and {sample}.intronic.counts.txt files')
     p_stab.add_argument('--ref-anno', dest='ref_anno', type=Path, required=True, help='Reference annotation GTF file')
     p_stab.add_argument('--output', type=Path, required=True, help='Output BED file')
+    p_stab.add_argument('--skip-feature-filter', action='store_true',
+                        help=('Union-pooling mode: emit all quantified features (drop only '
+                              'all-zero/all-NaN rows) and let the pooled devBrain detection '
+                              'filters at the normalization stage decide the final feature set'))
 
     args = parser.parse_args()
 
@@ -465,7 +506,8 @@ def main():
         samples = _load_samples(args.samples)
         assemble_alt_TSS_polyA(samples, args.group1_dir, args.group2_dir, 'tpm',
                                args.ref_anno, args.output,
-                               min_frac=args.min_frac, max_frac=args.max_frac)
+                               min_frac=args.min_frac, max_frac=args.max_frac,
+                               skip_feature_filter=args.skip_feature_filter)
     elif args.cmd == 'expression':
         samples = _load_samples(args.samples)
         if args.output_isoforms is None and args.output_expression is None and args.output_isoform_expr is None:
@@ -475,7 +517,8 @@ def main():
                             min_count=args.min_count,
                             min_frac=args.min_frac, max_frac=args.max_frac,
                             log2_expr=args.log2_expr,
-                            bed_iso_expr=args.output_isoform_expr)
+                            bed_iso_expr=args.output_isoform_expr,
+                            skip_feature_filter=args.skip_feature_filter)
     elif args.cmd == 'intron-retention':
         assemble_intron_retention(args.input, args.ref_anno, args.output)
     elif args.cmd == 'latent':
@@ -484,10 +527,12 @@ def main():
         assemble_RNA_editing(args.input, args.ref_anno, args.output)
     elif args.cmd == 'splicing':
         assemble_splicing(args.input, args.ref_anno, args.output,
-                          min_frac=args.min_frac, max_frac=args.max_frac)
+                          min_frac=args.min_frac, max_frac=args.max_frac,
+                          skip_feature_filter=args.skip_feature_filter)
     elif args.cmd == 'stability':
         samples = _load_samples(args.samples)
-        assemble_stability(samples, args.input_dir, args.ref_anno, args.output)
+        assemble_stability(samples, args.input_dir, args.ref_anno, args.output,
+                           skip_feature_filter=args.skip_feature_filter)
 
 if __name__ == '__main__':
     main()

@@ -62,7 +62,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" alt-tss-polya \
     --group1-dir "${ALT_DIR}/grp_1.upstream" \
     --group2-dir "${ALT_DIR}/grp_2.upstream" \
     --ref-anno "$REF_ANNO" \
-    --output "${UNNORM_DIR}/alt_TSS.bed"
+    --output "${UNNORM_DIR}/alt_TSS.bed" \
+    --skip-feature-filter
 
 # Canonical BED = unnorm (normalization applied in stage 5)
 cp "${UNNORM_DIR}/alt_TSS.bed" "${OUTPUT_DIR}/alt_TSS.bed"
@@ -73,7 +74,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" alt-tss-polya \
     --group1-dir "${ALT_DIR}/grp_1.downstream" \
     --group2-dir "${ALT_DIR}/grp_2.downstream" \
     --ref-anno "$REF_ANNO" \
-    --output "${UNNORM_DIR}/alt_polyA.bed"
+    --output "${UNNORM_DIR}/alt_polyA.bed" \
+    --skip-feature-filter
 
 # Canonical BED = unnorm (normalization applied in stage 5)
 cp "${UNNORM_DIR}/alt_polyA.bed" "${OUTPUT_DIR}/alt_polyA.bed"

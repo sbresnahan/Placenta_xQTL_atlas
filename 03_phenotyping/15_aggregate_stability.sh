@@ -60,7 +60,8 @@ python3 "${PANTRY_SCRIPTS}/assemble_bed.py" stability \
     --samples "$SAMPLES_FILE" \
     --input-dir "$STAB_DIR" \
     --ref-anno "$REF_ANNO" \
-    --output "${UNNORM_DIR}/stability.bed"
+    --output "${UNNORM_DIR}/stability.bed" \
+    --skip-feature-filter
 
 # ---- Canonical BED = unnorm (normalization applied in stage 5) ----
 cp "${UNNORM_DIR}/stability.bed" "${OUTPUT_DIR}/stability.bed"
