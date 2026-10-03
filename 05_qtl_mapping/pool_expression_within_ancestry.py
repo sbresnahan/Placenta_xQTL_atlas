@@ -5,8 +5,11 @@ across cohorts within each ancestry stratum.
 
 Reads the unnorm gene-level expression BED files produced by the PANTRY
 pipeline (step 10_aggregate_expression.sh writes output/unnorm/expression.bed)
-and pools them within ancestry strata, taking the gene intersection across
-cohorts. The output is the input for QN + within-cohort INT + HCP estimation.
+and pools them within ancestry strata, taking the gene union across cohorts
+by default (NaN-filled where a cohort lacks a feature; the pooled detection
+filters at the normalization stage decide the final feature set).
+`--pool-mode intersection` restores the legacy behavior. The output is the
+input for QN + within-cohort INT + HCP estimation.
 
 Usage:
   python3 pool_expression_within_ancestry.py \

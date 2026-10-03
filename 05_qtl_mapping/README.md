@@ -209,6 +209,13 @@ staging lives under `$QTL_DIR/hcp_optimization_modalities/{ANC}/{MOD}/`
 (logs, per-k HCPs, covariates, mapping parquets) — keep it until results
 are signed off; it is the audit trail for each k\* choice.
 
+lambda1 is overridable via the `LAMBDA1` env var in 19, 25a, and 25b
+(default 0.5 everywhere). Non-default values run in a lambda-suffixed
+sandbox tree (`hcp_optimization_per_k_lam<LAMBDA1>/` /
+`hcp_optimization_modalities_per_k_lam<LAMBDA1>/`), never consult the
+lambda=0.5 legacy tree, and skip the canonical finalizer unless
+`FINALIZE=1` — so sensitivity scans cannot clobber the production run.
+
 ## Step 3: canonical per-modality covariates (25)
 
 Builds `{ANC}_covariates_{MOD}.tsv` for all 10 groups per ancestry from
@@ -590,6 +597,24 @@ flag and handle case-by-case.
   wrappers fail fast with diagnostics — fix the activation. Stage 19
   skips existing `{COHORT}_qc_metrics.tsv`, so delete tainted QC outputs
   before resubmitting.
+- **Picard QC extracts the full MultiQC-style field set** (all rows of
+  all five collectors; primary row = `CATEGORY=PAIR` else `UNPAIRED`
+  else first, unsuffixed; other rows suffixed e.g. `.FIRST_OF_PAIR`).
+  The 24 legacy column names are unchanged, but `AlignMetrics.*` values
+  now come from the library-level PAIR row (the legacy whitelist read
+  the FIRST_OF_PAIR row for paired-end data). Raw Picard outputs persist
+  under `hcp/qc_metrics/raw/{COHORT}/`; `picard_qc.py --parse-only`
+  (or `PARSE_ONLY=1` in 19a) re-extracts metrics from cached raw output
+  without re-running Picard.
+- **Pooling takes the feature union within each ancestry stratum**
+  (`--pool-mode union`, default, in `pool_expression_within_ancestry.py`
+  and `pool_modalities_within_ancestry.py`): per-cohort BEDs are
+  reindexed to the union feature set and NaN-filled where a cohort lacks
+  a feature, so per-cohort prefilters no longer decide the pooled
+  feature set — the NaN-aware pooled detection filters at the
+  normalization stage do. `--pool-mode intersection` restores the legacy
+  behavior. Pooling summary TSVs report
+  intersection/union/gained/NaN-cell counts per stratum.
 - **`bsub < script` requires an explicit `SCRIPTS_DIR` export** — LSF
   executes a spool copy of the submitted script, so
   `${BASH_SOURCE[0]}` self-location resolves to the spool directory. The

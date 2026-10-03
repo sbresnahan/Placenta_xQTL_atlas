@@ -147,6 +147,14 @@ normalization happens in stage 5.
   bundled original in the PANTRY scripts directory on deployment. Bundled
   PANTRY scripts used unmodified ship in `txrevise/`, `RNA_editing/`,
   `intron_retention/`.
+- `assemble_bed.py --skip-feature-filter` relaxes the per-cohort feature
+  prefilters to drop-only-all-zero/all-NaN (expression: skips the
+  mean-count >= 10 and usage [0.05, 0.95] isoform filters; stability:
+  skips the > 50%-missing filter; per-VALUE floors are kept). The
+  aggregation drivers 10/11/15 and the pooled splicing call in
+  `harmonize_within_ancestry.py` pass it, so feature-set decisions are
+  deferred to the NaN-aware pooled detection filters at the
+  normalization stage (union pooling schema).
 - Stage-3 `output/<modality>.bed.gz` files are unnormalized. Consumers
   that expect normalized per-cohort BEDs (e.g. `combine_modalities.sh`)
   must be pointed at stage-5 outputs instead.

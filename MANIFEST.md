@@ -179,7 +179,9 @@ fine-mapping, and annotation enrichment.
 | 33_aggregate_finemap.py | Aggregate per-locus SuSHiE outputs (PIPs, credible sets, locus summary) |
 | 34_pip_annotation_enrichment.py | fastVEP consequence + cCRE/OCR enrichment of high-PIP variants |
 | 35_extract_report_extras.py | Targeted extractions for DevBrain-style report panels (cross-ancestry/cross-modality lead lookups, showcase-locus scans, lead-variant annotations, gnomAD constraint, PC-AiR staging) and QC summaries (before/after phenotype values/PCAs, genotype stage counts, Picard metrics) |
-| test_build_covariates.py, test_collapse_replicates.py, test_normalize_modalities.py, test_hcp.py, test_optimize_hcp.py, test_optimize_hcp_modalities.py, test_extract_report_extras.py | Unit tests |
+| 25a_submit_hcp_k_jobs.sh, 25b_submit_hcp_k_jobs.sh | Restart-safe one-job-per-k HCP grid submitters (25a expression, 25b modalities + combined); `LAMBDA1` selects the HCP prior strength (non-default values use a lambda-suffixed sandbox tree and skip finalization unless `FINALIZE=1`) |
+| 25_hcp_k_finalize.sh, finalize_hcp_k_grid.py | Per-ancestry/arm grid finalizers: combine completed k points, select k\\*, install canonical HCP factors |
+| test_build_covariates.py, test_collapse_replicates.py, test_normalize_modalities.py, test_hcp.py, test_optimize_hcp.py, test_optimize_hcp_modalities.py, test_extract_report_extras.py, test_prepare_intersection.py, test_picard_qc_fullpanel.py, test_union_pooling.py | Unit tests |
 | test_sushie_finemap.py | End-to-end fine-mapping fixture (locus prep, SuSHiE recovery, aggregation, enrichment, report render) |
 
 ## reports/

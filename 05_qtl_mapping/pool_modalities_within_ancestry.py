@@ -16,8 +16,10 @@ Two input conventions are supported:
   1. Per-cohort unnorm BEDs (default):
      <cohort_dir>/output/unnorm/<modality>.bed
      Sample columns use ORIGINAL sample IDs. Features are pooled by
-     phenotype_id INTERSECTION across cohorts (all cohorts share the HPLRv2
-     reference, so IDs are directly comparable). Used for:
+     phenotype_id UNION across cohorts by default (NaN-filled where a cohort
+     lacks a feature; `--pool-mode intersection` restores the legacy
+     behavior). All cohorts share the HPLRv2 reference, so IDs are directly
+     comparable. Used for:
        isoforms, isoform_expression, alt_TSS, alt_polyA, RNA_editing, stability
 
   2. Pre-pooled BEDs (splicing, intron_retention):
@@ -75,8 +77,9 @@ import pandas as pd
 
 BED_META_COLS = ["#chr", "start", "end", "phenotype_id"]
 
-# Modalities whose unnorm BEDs are produced per-cohort and pooled here by
-# phenotype_id intersection (original sample IDs).
+# Modalities whose unnorm BEDs are produced per-cohort and pooled here
+# (original sample IDs; union by default, legacy intersection via
+# --pool-mode).
 # isoform_expression_counts is the QU-corrected counts BED written per cohort
 # by tximport_counts.R — the TMM->VST input for isoform_expression.
 INTERSECTION_MODALITIES = {
@@ -178,7 +181,7 @@ def load_cohorts(config_path):
 
 
 # ---------------------------------------------------------------------------
-# Per-cohort pooling (phenotype_id intersection)
+# Per-cohort pooling (phenotype_id union by default; legacy intersection)
 # ---------------------------------------------------------------------------
 
 def load_cohort_bed(cohort_dir, modality):
