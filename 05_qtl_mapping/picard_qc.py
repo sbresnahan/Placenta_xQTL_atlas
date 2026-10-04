@@ -637,6 +637,13 @@ def main():
     parser.add_argument("--parse-only", action="store_true",
                         help="Do not run Picard; re-extract metrics from the persisted "
                              "raw outputs under --raw-dir (BAMs not required).")
+    parser.add_argument("--no-impute", action="store_true",
+                        help="Skip column-median imputation of missing values. "
+                             "Used by sample-parallel jobs (19a worker mode): a "
+                             "1-sample run has a degenerate median that would fill "
+                             "failed-tool cells with 0.0. Imputation instead happens "
+                             "at merge time (picard_persample.py merge) with "
+                             "cohort-level medians.")
     args = parser.parse_args()
 
     # ---- Subcommand: generate refFlat ----
@@ -785,18 +792,25 @@ def main():
         print("\nSkipping subject-specific bias (need --salmon-dir and --gene-annot)")
 
     # ---- Impute missing values (column median) ----
-    numeric_cols = qc_df.select_dtypes(include=[np.number]).columns
-    for col in numeric_cols:
-        n_missing = qc_df[col].isna().sum()
-        if n_missing > 0:
-            median_val = qc_df[col].median()
-            if pd.isna(median_val):
-                median_val = 0.0
-            qc_df[col] = qc_df[col].fillna(median_val)
-            if n_missing > len(qc_df) * 0.5:
-                sys.stderr.write(
-                    f"  WARN: {col} had {n_missing}/{len(qc_df)} missing values "
-                    f"(>50%), imputed with median\n")
+    # Skipped under --no-impute (sample-parallel worker mode): with a single
+    # sample the column median is degenerate and failed-tool cells would be
+    # filled with 0.0. Merge (picard_persample.py) imputes at cohort level.
+    if args.no_impute:
+        print("\nSkipping imputation (--no-impute); missing cells stay NaN "
+              "and are imputed at merge time")
+    else:
+        numeric_cols = qc_df.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            n_missing = qc_df[col].isna().sum()
+            if n_missing > 0:
+                median_val = qc_df[col].median()
+                if pd.isna(median_val):
+                    median_val = 0.0
+                qc_df[col] = qc_df[col].fillna(median_val)
+                if n_missing > len(qc_df) * 0.5:
+                    sys.stderr.write(
+                        f"  WARN: {col} had {n_missing}/{len(qc_df)} missing values "
+                        f"(>50%), imputed with median\n")
 
     # ---- Report ----
     print(f"\nQC metrics collected: {len(qc_df)} samples x {len(qc_df.columns)} metrics")
