@@ -80,6 +80,37 @@ def load_config(config_path: str, scripts_dir: str) -> dict:
     return cfg
 
 
+def resolve_pantry_scripts(config: dict, scripts_dir: str) -> str:
+    """Locate the directory containing assemble_bed.py.
+
+    Resolution order:
+      1. scripts_dir (--scripts-dir; in this repo layout assemble_bed.py
+         ships in 03_phenotyping/ alongside harmonize_within_ancestry.py)
+      2. config pantry_scripts, as-is
+      3. config pantry_scripts + "/03_phenotyping" — tolerates a config that
+         points at the deployment root (…/phenotyping/scripts) instead of
+         the stage directory
+
+    Raises FileNotFoundError listing every directory tried.
+    """
+    candidates = [scripts_dir]
+    cfg = config.get("PANTRY_SCRIPTS", "")
+    if cfg:
+        candidates.append(cfg)
+        candidates.append(os.path.join(cfg, "03_phenotyping"))
+    for cand in candidates:
+        if cand and os.path.isfile(os.path.join(cand, "assemble_bed.py")):
+            if cfg and os.path.realpath(cand) != os.path.realpath(cfg):
+                print(f"[WARN] assemble_bed.py not found in config pantry_scripts "
+                      f"({cfg}); using {cand}")
+            return cand
+    raise FileNotFoundError(
+        "assemble_bed.py not found. Tried:\n  - " + "\n  - ".join(candidates)
+        + "\nFix pantry_scripts in config.yml to name the directory containing "
+          "assemble_bed.py (the 03_phenotyping/ stage directory)."
+    )
+
+
 def load_cohorts(config_path: str) -> list:
     """Extract cohort names from config.yml (the 'cohorts:' block)."""
     import re
@@ -203,7 +234,7 @@ def harmonize_splicing(config: dict, cohorts: list, ancestry_samples: dict,
                        ref_anno: str) -> None:
     """Harmonize splicing across cohorts within an ancestry stratum."""
     output_base = config["OUTPUT_BASE"]
-    pantry_scripts = config["PANTRY_SCRIPTS"]
+    pantry_scripts = resolve_pantry_scripts(config, scripts_dir)
 
     intermediate_dir = output_dir / "intermediate"
     unnorm_dir = output_dir / "unnorm"
@@ -383,7 +414,7 @@ def harmonize_intron_retention(config: dict, cohorts: list,
                                scripts_dir: str, ref_anno: str) -> None:
     """Harmonize intron retention across cohorts within an ancestry stratum."""
     output_base = config["OUTPUT_BASE"]
-    pantry_scripts = config["PANTRY_SCRIPTS"]
+    pantry_scripts = resolve_pantry_scripts(config, scripts_dir)
 
     intermediate_dir = output_dir / "intermediate"
     unnorm_dir = output_dir / "unnorm"

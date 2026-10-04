@@ -51,13 +51,17 @@ reference_dir: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY/refere
 output_base: /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY
 
 # Pantry bundled scripts directory (original PANTRY scripts, used unmodified
-# except assemble_bed.py which is replaced with the modified version)
-pantry_scripts: /rsrch5/home/epi/bhattacharya_lab/software/Pantry/phenotyping/scripts
+# except assemble_bed.py which is replaced with the modified version).
+# Must name the 03_phenotyping stage directory — assemble_bed.py,
+# leafcutter_cluster_regtools_py3.py, RNA_editing/, txrevise/, and
+# intron_retention/ all live there in this repo layout. Pointing at the
+# deployment root (…/phenotyping/scripts) breaks every assemble_bed.py call.
+pantry_scripts: /rsrch5/home/epi/bhattacharya_lab/software/Pantry/phenotyping/scripts/03_phenotyping
 
 # Seadragon-specific scripts directory (this package: run_pipeline.py,
 # config_get.py, prep_PANTRY_gtf.R, qu_correct_salmon.R, rediportal_preprocess.py,
 # and all the .sh stage scripts)
-seadragon_scripts: /rsrch5/home/epi/bhattacharya_lab/software/Pantry/phenotyping/scripts
+seadragon_scripts: /rsrch5/home/epi/bhattacharya_lab/software/Pantry/phenotyping/scripts/03_phenotyping
 
 # txrevise batch count (must match the #BSUB -J "txrevise[1-N]" array range
 # in 002_txrevise_array.sh, which is parsed at LSF submission time and cannot

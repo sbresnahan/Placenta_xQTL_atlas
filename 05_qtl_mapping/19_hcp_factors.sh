@@ -41,7 +41,7 @@
 #BSUB -n 4
 #BSUB -M 32
 #BSUB -R "rusage[mem=32]"
-#BSUB -W 24:00
+#BSUB -W 25:00
 #BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/hcp.%J.out
 #BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/hcp.%J.err
 

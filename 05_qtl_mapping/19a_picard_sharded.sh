@@ -65,7 +65,7 @@
 #BSUB -n 1
 #BSUB -M 12
 #BSUB -R "rusage[mem=12]"
-#BSUB -W 2:00
+#BSUB -W 25:00
 #BSUB -o /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/picard.%J.%I.out
 #BSUB -e /rsrch5/home/epi/stbresnahan/scratch/Placenta_QTL/PANTRY/logs/picard.%J.%I.err
 
