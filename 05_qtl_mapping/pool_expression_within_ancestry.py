@@ -245,6 +245,19 @@ def pool_ancestry_stratum(ancestry, ancestry_samples, cohort_dirs, modality,
     assert len(pooled.columns) == 4 + len(all_samples), \
         f"Column count mismatch: {len(pooled.columns)} vs {4 + len(all_samples)}"
 
+    # Union reindexing pads absent features with NaN, leaving start/end as
+    # float64; float_format="%g" would then write large coordinates in
+    # scientific notation (e.g. 1.0064e+08), which breaks downstream readers
+    # expecting integer BED coordinates. combine_first guarantees every
+    # pooled feature has metadata from >=1 cohort, so cast back to int.
+    for coord in ("start", "end"):
+        if pooled[coord].isna().any():
+            bad = pooled.loc[pooled[coord].isna(), "phenotype_id"].head(5).tolist()
+            raise ValueError(
+                f"Missing {coord} metadata for {int(pooled[coord].isna().sum())} "
+                f"features (e.g. {bad}); cannot write integer BED coordinates")
+        pooled[coord] = pooled[coord].astype(int)
+
     # Write output
     out_path = os.path.join(output_dir, f"{ancestry}_pooled_{modality}.bed")
     pooled.to_csv(out_path, sep="\t", index=False, float_format="%g")

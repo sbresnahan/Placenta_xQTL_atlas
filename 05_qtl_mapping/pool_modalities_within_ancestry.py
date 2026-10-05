@@ -301,6 +301,19 @@ def pool_intersection_stratum(ancestry, ancestry_samples, cohort_dirs,
 
     assert len(pooled.columns) == 4 + len(all_samples)
 
+    # Union reindexing pads absent features with NaN, leaving start/end as
+    # float64; float_format="%g" would then write large coordinates in
+    # scientific notation (e.g. 1.0064e+08), which breaks downstream readers
+    # expecting integer BED coordinates. combine_first guarantees every
+    # pooled feature has metadata from >=1 cohort, so cast back to int.
+    for coord in ("start", "end"):
+        if pooled[coord].isna().any():
+            bad = pooled.loc[pooled[coord].isna(), "phenotype_id"].head(5).tolist()
+            raise ValueError(
+                f"Missing {coord} metadata for {int(pooled[coord].isna().sum())} "
+                f"features (e.g. {bad}); cannot write integer BED coordinates")
+        pooled[coord] = pooled[coord].astype(int)
+
     out_path = os.path.join(output_dir, f"{ancestry}_{modality}_pooled.bed")
     pooled.to_csv(out_path, sep="\t", index=False, float_format="%g")
     print(f"  Output: {out_path}")
@@ -336,7 +349,11 @@ def find_prepooled_bed(pre_pooled_dir, ancestry, modality):
     """
     candidates = [
         os.path.join(pre_pooled_dir, ancestry, modality, "unnorm", f"{modality}.bed"),
+        # 17_harmonize_within_ancestry.sh bgzip+tabix-indexes its unnorm BEDs
+        # after writing them, so the .bed.gz form is what actually exists.
+        os.path.join(pre_pooled_dir, ancestry, modality, "unnorm", f"{modality}.bed.gz"),
         os.path.join(pre_pooled_dir, ancestry, modality, f"{modality}.bed"),
+        os.path.join(pre_pooled_dir, ancestry, modality, f"{modality}.bed.gz"),
     ]
     for c in candidates:
         if os.path.exists(c):
