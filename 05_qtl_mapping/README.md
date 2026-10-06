@@ -65,8 +65,10 @@ Scripts 19-20 run once across ancestries; the rest run per ancestry.
 | 25b | `25b_submit_hcp_k_jobs.sh`, `25b_optimize_hcp_modalities.sh`, `optimize_hcp_modalities.py`, `hcp_from_matrix.R`, `finalize_hcp_k_grid.py` | HCP-count optimization for 8 non-expression modalities plus `combined` (9 arms per ancestry): one resumable LSF worker per k (production grid 0..100 by 5), HCP-only estimation from each harmonized BED, chr1-subset mapping (genome-wide when < 300 chr1 phenotypes), k\* = argmax eGenes at Storey q <= 0.05 (ties -> smaller k); installs `{ANC}_{MOD}_hcp_factors_optimized.tsv`; supports the same chosen `LAMBDA1` as 25a |
 | 26 | `26_harmonize_modalities.py` | Harmonize the 7 non-expression modality BEDs to the final array_id sample set (handles stage-17 namespaced IDs for splicing/IR) |
 | 30 | `30_combine_modalities.py` | Combined cross-modality BED (`{modality}__{id}` namespacing; cross-modality gene groups; modality sidecar TSV) |
-| 27 | `27_run_tensorqtl.sh` + `27_run_tensorqtl.py` | tensorQTL `cis.map_cis` per ancestry x modality (grouped, `group_s`, when `phenotype_groups.txt` exists); `--independent` stepwise conditional mode; Storey q-values via the `compute_qvalues.R` file bridge (`QVALUE_RSCRIPT`), `--qvalue-method bh` as fallback. Covariates default to `{ANC}_covariates_{MOD}.tsv` (expression from 25a; non-expression/combined from 25b), falling back to `{ANC}_covariates.tsv` with a warning; `COVARIATES_FILE` accepts `{ANC}` and `{MOD}` placeholders |
-| 28 | `28_submit_modalities.sh` | Submission driver: one LSF job per ancestry x modality (`TEST=1` pilot; threads `QVALUE_METHOD`/`MAF_THRESHOLD`) |
+| 27 | `27_run_tensorqtl.sh` + `27_run_tensorqtl.py` | tensorQTL `cis.map_cis` per ancestry x modality (grouped, `group_s`, when `phenotype_groups.txt` exists); `--independent` stepwise conditional mode; `--independent-only` + `--chunk-index`/`--chunk-size` run one ~100-gene chunk of the stepwise scan from the saved map_cis parquet (full `cis_df` is passed so the significance threshold matches the monolithic run; bit-identical with `--seed`); Storey q-values via the `compute_qvalues.R` file bridge (`QVALUE_RSCRIPT`), `--qvalue-method bh` as fallback. Covariates default to `{ANC}_covariates_{MOD}.tsv` (expression from 25a; non-expression/combined from 25b), falling back to `{ANC}_covariates.tsv` with a warning; `COVARIATES_FILE` accepts `{ANC}` and `{MOD}` placeholders |
+| 27b/c | `27b_independent_chunk.sh`, `27c_merge_independent.py` | Chunked stepwise layer: 27b runs one array task (`--chunk-index $LSB_JOBINDEX`) -> `independent_chunks/{ANC}_{label}/chunk_KKKK.parquet` (+ `.json` parameter sidecar); 27c verifies completeness/parameters and merges chunks into the same `{ANC}_{label}_cisqtl_independent.parquet`/`_top.tsv` the monolithic mode writes |
+| 28 | `28_submit_modalities.sh` | Submission driver: one LSF job per ancestry x modality (`TEST=1` pilot; threads `QVALUE_METHOD`/`MAF_THRESHOLD`). `INDEPENDENT=1` no longer runs the stepwise scan in-job; it hands off to 28b after the map_cis submissions |
+| 28b | `28b_submit_independent.sh` | Chunked independent-scan submitter: sizes a `inqtl_*` job array from the number of FDR-significant rows (`CHUNK_SIZE`, default 100 genes), submits it (CPU, or `GPU=1` -> `GPU_QUEUE`/`GPU_OPTS`), and submits a dependent `inqtlm_*` merge job. Chains on running/newly-submitted map_cis jobs when the parquet is missing; `CHUNK_INDICES="3,17"` re-runs failed chunks; skip-if-done/running guards |
 | 29 | `29_make_top_tables.py` | Rebuild sorted `*_cisqtl_top.tsv` from parquets (no tensorQTL rerun) |
 | 29b-f | `29b_expression_diagnostics.py`, `29c_choi_comparison.py`, `29d_cohort_heterogeneity.py`, `29e_plot_diagnostics.R`, `29f_run_diagnostics.sh` | Validation gate between mapping and fine-mapping: expression sample PCs + per-cohort residual-variance table + k=15-vs-45 lead stability (29b); Choi 2024 gene-top / exact-lead / significant-set retention vs the external SNUH study (29c); per-cohort scans + Cochran Q / I2 + genotype x cohort interaction for pooled-significant pairs (29d); figures + baseline-vs-rerun validation summary (29e); LSF driver (29f) |
 | 31 | `31_sushie_finemap.py` | Cross-ancestry fine-mapping: `prepare-loci` builds per-modality locus lists (union of q <= 0.05 grouped-layer lead phenotypes across ancestries; tested windows from the mapping parquets; L = min(10, max(5, n_independent + 2)) from the stepwise layer); `run` fine-maps one shard of loci jointly across ancestries with SuSHiE (individual-level mode, in-sample LD from the intersected pgens; purity 0.5; phenotypes missing from an ancestry's BED drop that ancestry for the locus; per-locus `.ancestries`/`.done` markers + per-shard diagnostics) |
@@ -273,24 +275,62 @@ handling remains a defensive fallback, not the expected production path.
 
 `28_submit_modalities.sh` skips combos with existing results or running
 jobs, so all three passes can be rerun freely. Each mapping job picks up
-`{ANC}_covariates_{MOD}.tsv` automatically. Expected wall time: ~1 day.
+`{ANC}_covariates_{MOD}.tsv` automatically. Expected wall time: ~1 h per
+map_cis job.
+
+With `INDEPENDENT=1`, the stepwise (conditionally independent) scan no
+longer runs inside the mapping job (that took >24 h per ancestry x
+modality). Instead, 28 hands off to `28b_submit_independent.sh`, which
+submits the scan as a chunked LSF job array (~`CHUNK_SIZE` genes per
+chunk, default 100) plus a dependent merge job; chunk arrays chain on the
+map_cis jobs automatically when the map_cis parquet is not yet on disk.
+Merged outputs are the same `{ANC}_{MOD}[_ungrouped]_cisqtl_independent.*`
+files as before, statistically identical to the monolithic scan (the full
+map_cis table is passed to every chunk so tensorQTL's internal
+significance threshold is unchanged; bit-identical with a fixed `SEED`).
 
 ```bash
 cd "$SCRIPTS_DIR"
 
-# Pass 1: grouped + stepwise (independent) layer, all 9 modalities
+# Pass 1: grouped + chunked stepwise (independent) layer, all 9 modalities
 MAF_THRESHOLD=0.01 INDEPENDENT=1 \
   MODALITIES="expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability" \
   bash 28_submit_modalities.sh
 
-# Pass 2: ungrouped layer (per-phenotype lead variants) + stepwise
+# Pass 2: ungrouped layer (per-phenotype lead variants) + chunked stepwise
 # (independent) scan, 8 non-expression modalities
 MAF_THRESHOLD=0.01 GROUPED=0 INDEPENDENT=1 bash 28_submit_modalities.sh
 
-# Pass 3: combined cross-modality arm (long queue)
+# Pass 3: combined cross-modality arm (long queue for the map_cis job)
 MAF_THRESHOLD=0.01 INDEPENDENT=1 MODALITIES=combined \
   QUEUE=long WALLTIME=48:00 bash 28_submit_modalities.sh
 ```
+
+The independent layer can also be (re)submitted on its own — e.g. to reuse
+the map_cis parquets of a killed monolithic run, or to use GPU nodes
+(tensorQTL auto-uses CUDA; typically 10-50x faster per chunk, so a larger
+`CHUNK_SIZE` is worthwhile):
+
+```bash
+# Chunked independent scans only, from existing map_cis parquets
+MAF_THRESHOLD=0.01 ANCESTRIES=EAS MODALITIES="combined splicing" \
+  bash 28b_submit_independent.sh
+
+# GPU chunks on seadragon's gpu queue
+MAF_THRESHOLD=0.01 GPU=1 GPU_QUEUE=gpu CHUNK_SIZE=500 \
+  bash 28b_submit_independent.sh
+
+# Retry failed chunks (the merge job's log lists the missing indices),
+# then re-merge automatically
+CHUNK_INDICES="3,17" MAF_THRESHOLD=0.01 MODALITIES=combined \
+  bash 28b_submit_independent.sh
+```
+
+Per-chunk outputs land in `qtl_results/independent_chunks/{ANC}_{label}/`
+(with `.json` parameter sidecars; the merge refuses to mix chunks computed
+with different `CHUNK_SIZE`/`INDEPENDENT_FDR`). If a map_cis job chained
+by 28b fails, the planner job never runs — fix the failure and rerun the
+same 28b command.
 
 Completion check (expect 36 primary + 36 independent parquets: per
 ancestry, 9 grouped + 8 ungrouped + 1 combined primary, and 9 grouped +

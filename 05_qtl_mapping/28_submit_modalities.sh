@@ -21,10 +21,18 @@
 #                  driver resolution: which isoform/junction/site carries
 #                  each signal). Outputs {ANC}_{MOD}_ungrouped_cisqtl.*
 #                  Default: GROUPED=1 (one lead variant per gene).
-#   INDEPENDENT=1 — after map_cis, run cis.map_independent stepwise
-#                  regression (PANTRY-style conditionally independent
-#                  xQTLs). Outputs {ANC}_{MOD}[_ungrouped]_cisqtl_independent.*
-#                  Default: 0.
+#   INDEPENDENT=1 — after map_cis, run the cis.map_independent stepwise
+#                  regression (PANTRY-style conditionally independent xQTLs)
+#                  as a CHUNKED LSF job array (~CHUNK_SIZE genes per chunk)
+#                  plus a merge job, via 28b_submit_independent.sh — this
+#                  script invokes 28b after submitting the map_cis jobs, and
+#                  chunk arrays chain on the map_cis jobs automatically.
+#                  (The old monolithic in-job stepwise scan took >24h per
+#                  ancestry × modality; chunking makes it minutes per chunk.)
+#                  Outputs {ANC}_{MOD}[_ungrouped]_cisqtl_independent.*
+#                  Default: 0. Chunk-layer knobs (CHUNK_SIZE, GPU=1,
+#                  INDEPENDENT_FDR, SEED) are passed through to 28b; for full
+#                  control run 28b_submit_independent.sh directly.
 #
 # Examples (GTEx-conventions round, MAF 0.01 + MAC>=5 carrier floor baked
 # into the qtl pgen by 23/24):
@@ -87,7 +95,8 @@ QVALUE_METHOD="${QVALUE_METHOD:-storey}"
 MAF_THRESHOLD="${MAF_THRESHOLD:?ERROR: set MAF_THRESHOLD explicitly (e.g. MAF_THRESHOLD=0.01) — it is never defaulted, to avoid silently running the wrong threshold}"
 
 # ---- Mode-dependent suffixes ----
-# Output base name: {ANC}_{MOD}{BASE_SUFFIX}_cisqtl{IND_SUFFIX}.parquet
+# Output base name: {ANC}_{MOD}{BASE_SUFFIX}_cisqtl.parquet
+# (the independent layer adds _cisqtl_independent.* via 28b, not this script)
 # Job name:         eqtl_{ANC}_{MOD}{JOB_SUFFIX}
 BASE_SUFFIX=""
 MODE_DESC="grouped (one lead variant per gene)"
@@ -98,12 +107,12 @@ if [ "$GROUPED" != "1" ]; then
 else
     NO_GROUPS=0
 fi
-IND_SUFFIX=""
+# The map_cis jobs submitted here are always scan-only; INDEPENDENT=1 hands
+# off to 28b_submit_independent.sh (chunked stepwise arrays + merge) after the
+# submission loop, so the job name/skip checks below use the primary parquet.
 JOB_SUFFIX="$BASE_SUFFIX"
 if [ "$INDEPENDENT" = "1" ]; then
-    IND_SUFFIX="_independent"
-    JOB_SUFFIX="${JOB_SUFFIX}_ind"
-    MODE_DESC="$MODE_DESC + stepwise (map_independent)"
+    MODE_DESC="$MODE_DESC + CHUNKED stepwise (map_independent via 28b)"
 fi
 
 mkdir -p "$LOG_DIR"
@@ -141,8 +150,9 @@ for ANC in $ANCESTRIES; do
             fi
             continue
         fi
-        # Skip if results already exist for this mode (check the FINAL product)
-        if [ -f "${OUTPUT_BASE}/qtl_results/${ANC}_${MOD}${BASE_SUFFIX}_cisqtl${IND_SUFFIX}.parquet" ]; then
+        # Skip if the primary map_cis results already exist (the independent
+        # layer has its own skip logic in 28b)
+        if [ -f "${OUTPUT_BASE}/qtl_results/${ANC}_${MOD}${BASE_SUFFIX}_cisqtl.parquet" ]; then
             echo "  SKIP ${ANC}/${MOD}${JOB_SUFFIX}: results already exist"
             continue
         fi
@@ -151,7 +161,15 @@ for ANC in $ANCESTRIES; do
             echo "  SKIP ${ANC}/${MOD}${JOB_SUFFIX}: job already running/pending"
             continue
         fi
-        ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},ANCESTRIES=${ANC},MODALITY=${MOD},NO_GROUPS=${NO_GROUPS},INDEPENDENT=${INDEPENDENT},MAF_THRESHOLD=${MAF_THRESHOLD},CIS_WINDOW=${CIS_WINDOW},QVALUE_METHOD=${QVALUE_METHOD}"
+        # Warn if an old-style monolithic (map_cis + unchunked stepwise) job
+        # is still running — its map_cis parquet is reusable once killed
+        if [ "$INDEPENDENT" = "1" ] && bjobs -J "eqtl_${ANC}_${MOD}${JOB_SUFFIX}_ind" 2>/dev/null | grep -q "_ind"; then
+            echo "  WARNING ${ANC}/${MOD}: old-style monolithic job eqtl_${ANC}_${MOD}${JOB_SUFFIX}_ind is running."
+            echo "    It runs the slow unchunked stepwise scan; its map_cis parquet is written ~1h in, so:"
+            echo "    bkill it, then rerun — 28b will reuse the parquet for the chunked independent scan."
+            continue
+        fi
+        ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},ANCESTRIES=${ANC},MODALITY=${MOD},NO_GROUPS=${NO_GROUPS},INDEPENDENT=0,MAF_THRESHOLD=${MAF_THRESHOLD},CIS_WINDOW=${CIS_WINDOW},QVALUE_METHOD=${QVALUE_METHOD}"
         if [ -n "$COVARIATES_FILE" ]; then
             ENV_STR="${ENV_STR},COVARIATES_FILE=${COVARIATES_FILE}"
         fi
@@ -167,8 +185,8 @@ for ANC in $ANCESTRIES; do
             echo "Check its log before submitting the rest:"
             echo "  tail ${LOG_DIR}/eqtl_${ANC}_${MOD}${JOB_SUFFIX}.<jobid>.out"
             if [ "$INDEPENDENT" = "1" ]; then
-                echo "Look for 'Running cis.map_cis...' AND 'Running cis.map_independent' —"
-                echo "then rerun without TEST=1."
+                echo "Look for 'Running cis.map_cis...' — the chunked independent"
+                echo "scans are submitted by 28b once you rerun without TEST=1."
             else
                 echo "Look for 'Running cis.map_cis...' — then rerun without TEST=1."
             fi
@@ -178,5 +196,25 @@ for ANC in $ANCESTRIES; do
 done
 
 echo ""
-echo "Submitted $N jobs ($MODE_DESC). Monitor with: bjobs"
+echo "Submitted $N map_cis jobs ($MODE_DESC). Monitor with: bjobs"
 echo "Logs: ${LOG_DIR}/eqtl_<ANC>_<MOD>${JOB_SUFFIX}.<jobid>.out"
+
+# ---- INDEPENDENT=1: chunked stepwise scans via 28b ----
+# 28b submits the chunk array immediately where the map_cis parquet already
+# exists and chains a planner job (done() dependency) on the map_cis jobs
+# submitted above where it does not. Chunk-layer resources are 28b's own
+# knobs (QUEUE/WALLTIME here apply to the map_cis jobs; set CHUNK_SIZE, GPU,
+# INDEPENDENT_FDR, SEED, or run 28b directly for full control).
+if [ "$INDEPENDENT" = "1" ]; then
+    echo ""
+    echo "INDEPENDENT=1: handing off to 28b_submit_independent.sh for the chunked"
+    echo "stepwise (map_independent) scans + merge..."
+    ANCESTRIES="$ANCESTRIES" MODALITIES="$MODALITIES" GROUPED="$GROUPED" \
+      MAF_THRESHOLD="$MAF_THRESHOLD" CIS_WINDOW="$CIS_WINDOW" \
+      QVALUE_METHOD="$QVALUE_METHOD" \
+      CHUNK_SIZE="${CHUNK_SIZE:-100}" INDEPENDENT_FDR="${INDEPENDENT_FDR:-0.05}" \
+      GPU="${GPU:-0}" GPU_QUEUE="${GPU_QUEUE:-gpu}" GPU_OPTS="${GPU_OPTS:-num=1}" \
+      COVARIATES_FILE="$COVARIATES_FILE" SEED="${SEED:-}" \
+      MAP_QUEUE="$QUEUE" MAP_WALLTIME="$WALLTIME" \
+      bash "${SCRIPTS_DIR}/28b_submit_independent.sh"
+fi

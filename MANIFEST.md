@@ -162,9 +162,12 @@ fine-mapping, and annotation enrichment.
 | 25b_optimize_hcp_modalities.sh | Per-modality HCP k grid search |
 | optimize_hcp_modalities.py | Implementation of 25b |
 | 26_harmonize_modalities.py | Harmonize modality BEDs to the final array_id sample set |
-| 27_run_tensorqtl.py | tensorQTL cis mapping for one ancestry x modality |
+| 27_run_tensorqtl.py | tensorQTL cis mapping for one ancestry x modality (incl. `--independent-only --chunk-index` chunked stepwise mode) |
 | 27_run_tensorqtl.sh | Job wrapper for 27 |
-| 28_submit_modalities.sh | Submit all ancestry x modality tensorQTL jobs (grouped / ungrouped / combined layers; stepwise independent scans via INDEPENDENT=1) |
+| 27b_independent_chunk.sh | LSF array-task wrapper: one ~100-gene chunk of the cis.map_independent stepwise scan |
+| 27c_merge_independent.py | Merge chunk outputs into the final `*_cisqtl_independent.parquet`/`_top.tsv` (completeness + parameter checks) |
+| 28_submit_modalities.sh | Submit all ancestry x modality tensorQTL jobs (grouped / ungrouped / combined layers; INDEPENDENT=1 hands off to 28b) |
+| 28b_submit_independent.sh | Submit chunked stepwise (independent) scans as LSF job arrays + dependent merge jobs (CPU or GPU=1; chains on map_cis jobs) |
 | compute_qvalues.R | Storey q-values via the R qvalue package (file bridge) |
 | 29_make_top_tables.py | Top-association tables from parquet outputs (all layers: grouped, ungrouped, combined, plus independent scans) |
 | 29b_expression_diagnostics.py | Expression diagnostic inputs: sample PCs, per-cohort residual variances, k=15 vs k=45 lead-stability table |
