@@ -1,10 +1,8 @@
-/reports/data/
-/reports/figures/
 /reports/tables/
-/reports/gene_map.tsv
-/reports/data/gene_bodies.tsv
-/reports/output/
+/reports/inputs/
+/reports/qtl_results/
 /reports/diagnostics/
+/reports/
 __pycache__/
 *.pyc
 .DS_Store
