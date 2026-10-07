@@ -23,10 +23,12 @@
 #   ANCESTRY_MAP — default: ${OUTPUT_BASE%/*}/pooled/pooled_sample_ancestry_RNAseq.tsv
 #   METADATA_TSV — default: ${OUTPUT_BASE%/*}/pooled/placenta_QTL_cohort_metadata.tsv
 #   NORM_DIR     — default: ${OUTPUT_BASE}/normalized_modalities/int
-#   GENO_QC_DIR  — module-01 report dir with *_rsq_pass_per_chr.tsv and
-#                  pooled_{sample_counts,variant_summary,variants_per_chr}.tsv
-#                  (default: unset — genotype-QC tables not staged)
-#   POOLED_ANCESTRY_TSV — pooled_sample_ancestry.tsv (genotypes; optional)
+#   GENO_BASE     — module-01 data root (default: parent of OUTPUT_BASE;
+#                   e.g. /rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL)
+#   GENO_COHORTS  — cohort names used by module 01
+#                   (default: "GUSTO NIEHS_RICHS SNUH MALI_G3A NIGMS")
+#   POOLED_GENO_DIR — pooled genotype directory
+#                   (default: ${GENO_BASE}/pooled/genotypes)
 #   OUT          — output tarball path (default: ./placenta_xqtl_report_inputs_<date>.tar.gz)
 #   KEEP_STAGING — 1 to keep the staging directory after archiving (default: 0)
 #
@@ -660,31 +662,46 @@ else
 fi
 
 # ---- 3.6 Genotype QC summaries (module 01 outputs) -------------------------
-# Per-cohort Rsq-pass-per-chromosome tables (cohort_imputationQC.R) and
-# pooled sample/variant summaries (mega_imputationQC.R), plus the long-form
-# pooled sample->ancestry/cohort map. All non-core: absence only blanks the
-# report's genotype-QC panels.
-GENO_QC_DIR="${GENO_QC_DIR:-}"
-POOLED_ANCESTRY_TSV="${POOLED_ANCESTRY_TSV:-}"
+# Module 01 does not place all report inputs in one directory:
+#   cohort_imputationQC.R writes
+#     ${GENO_BASE}/${COHORT}/genotypes/imputed/qc/report/
+#       ${COHORT}_rsq_pass_per_chr.tsv
+#   mega_imputationQC.R writes pooled report tables under
+#     ${GENO_BASE}/pooled/genotypes/report/
+#   and reads the canonical genotype ancestry map from
+#     ${GENO_BASE}/pooled/genotypes/pooled_sample_ancestry.tsv
+# Resolve those repository-defined locations directly instead of requiring a
+# synthetic GENO_QC_DIR. All are non-core: absence only blanks genotype-QC
+# report panels and is recorded in MANIFEST.txt.
+GENO_BASE="${GENO_BASE:-$(dirname "$OUTPUT_BASE")}"
+GENO_COHORTS="${GENO_COHORTS:-GUSTO NIEHS_RICHS SNUH MALI_G3A NIGMS}"
+POOLED_GENO_DIR="${POOLED_GENO_DIR:-${GENO_BASE}/pooled/genotypes}"
+POOLED_GENO_REPORT="${POOLED_GENO_DIR}/report"
+
 mkdir -p "$STAGING/data/qc/genotype_qc"
-echo "  GENO_QC_DIR:  ${GENO_QC_DIR:-(not set)}"
-if [ -n "$GENO_QC_DIR" ] && [ -d "$GENO_QC_DIR" ]; then
-    for f in "$GENO_QC_DIR"/*_rsq_pass_per_chr.tsv \
-             "$GENO_QC_DIR"/pooled_sample_counts.tsv \
-             "$GENO_QC_DIR"/pooled_variant_summary.tsv \
-             "$GENO_QC_DIR"/pooled_variants_per_chr.tsv; do
-        [ -f "$f" ] || continue
-        copy_req "$f" "$STAGING/data/qc/genotype_qc" other \
-                 "genotype_qc/$(basename "$f")"
-    done
-else
-    echo "  genotype_qc: GENO_QC_DIR not set/found — module-01 QC tables not staged"
-    MISSING_OTHER+=("genotype_qc/ (set GENO_QC_DIR to the module-01 report dir)")
-fi
-if [ -n "$POOLED_ANCESTRY_TSV" ]; then
-    copy_req "$POOLED_ANCESTRY_TSV" "$STAGING/data/qc/genotype_qc" other \
-             "genotype_qc/pooled_sample_ancestry.tsv"
-fi
+
+echo "  GENO_BASE:          $GENO_BASE"
+echo "  GENO_COHORTS:       $GENO_COHORTS"
+echo "  POOLED_GENO_DIR:    $POOLED_GENO_DIR"
+echo "  POOLED_GENO_REPORT: $POOLED_GENO_REPORT"
+
+# Per-cohort Rsq summaries produced by 01_genotype_imputation/cohort_imputationQC.R.
+for COHORT in $GENO_COHORTS; do
+    f="${GENO_BASE}/${COHORT}/genotypes/imputed/qc/report/${COHORT}_rsq_pass_per_chr.tsv"
+    copy_req "$f" "$STAGING/data/qc/genotype_qc" other \
+             "genotype_qc/${COHORT}_rsq_pass_per_chr.tsv"
+done
+
+# Pooled summaries produced by 01_genotype_imputation/mega_imputationQC.R.
+for name in pooled_sample_counts.tsv pooled_variant_summary.tsv pooled_variants_per_chr.tsv; do
+    copy_req "${POOLED_GENO_REPORT}/${name}" "$STAGING/data/qc/genotype_qc" other \
+             "genotype_qc/${name}"
+done
+
+# Canonical pooled genotype ancestry table consumed by mega_imputationQC.R.
+copy_req "${POOLED_GENO_DIR}/pooled_sample_ancestry.tsv" \
+         "$STAGING/data/qc/genotype_qc" other \
+         "genotype_qc/pooled_sample_ancestry.tsv"
 
 # ---- 4. Manifest -----------------------------------------------------------
 {
