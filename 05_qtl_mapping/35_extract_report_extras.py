@@ -40,7 +40,6 @@ import os
 import re
 import subprocess
 import sys
-import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -611,14 +610,21 @@ def constraint_table(results_dir, qtl_dir, ancestries, out_dir,
                      gnomad_path=None):
     """gnomAD v2.1.1 per-gene pLI/LOEUF for all tested genes (+ background)."""
     if gnomad_path is None:
-        gnomad_path = os.path.join(out_dir, os.path.basename(GNOMAD_CONSTRAINT_URL))
-        if not os.path.exists(gnomad_path):
-            print(f"  downloading {GNOMAD_CONSTRAINT_URL}")
-            try:
-                urllib.request.urlretrieve(GNOMAD_CONSTRAINT_URL, gnomad_path)
-            except Exception as e:
-                print(f"  WARN: constraint download failed ({e}); section skipped")
-                return None
+        print("  WARN: --gnomad-constraint not supplied; constraint section skipped")
+        print("  Compute nodes are offline; stage the file beforehand on an "
+              "internet-enabled host and rerun with:")
+        print("    --gnomad-constraint "
+              "/path/to/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz")
+        print(f"  Source: {GNOMAD_CONSTRAINT_URL}")
+        return None
+
+    gnomad_path = os.path.abspath(os.path.expanduser(gnomad_path))
+    if not os.path.isfile(gnomad_path):
+        print(f"  WARN: --gnomad-constraint file not found: {gnomad_path}; "
+              "constraint section skipped")
+        print(f"  Source: {GNOMAD_CONSTRAINT_URL}")
+        return None
+
     keep = ["gene_id", "gene", "pLI", "oe_lof", "oe_lof_upper", "lof_z"]
     con = pd.read_csv(gnomad_path, sep="\t", compression="gzip",
                       usecols=lambda c: c in keep, low_memory=False)
@@ -953,8 +959,8 @@ def main():
                     help="BED:LABEL pairs (as in 34_pip_annotation_enrichment.py)")
     ap.add_argument("--placenta-ocr", default=None)
     ap.add_argument("--gnomad-constraint", default=None,
-                    help="local gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz "
-                         "(downloaded if absent)")
+                    help="local gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz; "
+                         "must be staged beforehand (no network access attempted)")
     ap.add_argument("--pcair-dir", default=None,
                     help="dir holding per-cohort *_pcair_pcs.tsv")
     ap.add_argument("--pooled-bed-dir", default=None,
