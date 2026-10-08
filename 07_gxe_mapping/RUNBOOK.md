@@ -155,10 +155,12 @@ Stage 0 performs the following independently for EAS and EUR:
 5. z-scores each phenotype within ancestry;
 6. writes `${GXE_DIR}/inputs/{ANC}_{MOD}.bed.gz` + `.tbi`;
 7. builds `{ANC}_sample_manifest.tsv` from the retained Module-05 metadata;
-8. writes `{ANC}_metadata.tsv` for HCP QC aggregation;
-9. builds `{ANC}_covariates_base.tsv`;
-10. writes one common `exposures.tsv` whose continuous exposures are scaled across
-    all retained ancestries.
+8. writes `{ANC}_metadata.tsv` for provenance/QC;
+9. writes one common `exposures.tsv` whose continuous exposures are scaled across
+   all retained ancestries.
+
+Stage 0 does **not** rebuild genotype PCs/cell fractions or estimate HCPs. Those
+optimized covariates are reused from Module 5 in Stage 1.
 
 Expected output examples:
 
@@ -171,8 +173,6 @@ ${GXE_DIR}/inputs/EAS_intron_retention.bed.gz
 ${GXE_DIR}/inputs/EUR_intron_retention.bed.gz
 ${GXE_DIR}/inputs/EAS_sample_manifest.tsv
 ${GXE_DIR}/inputs/EUR_sample_manifest.tsv
-${GXE_DIR}/inputs/EAS_covariates_base.tsv
-${GXE_DIR}/inputs/EUR_covariates_base.tsv
 ${GXE_DIR}/inputs/exposures.tsv
 ```
 
@@ -222,22 +222,10 @@ done
 ```
 
 The manifest should have one row per `array_id`. `{ANC}_metadata.tsv` may have more
-RNA-seq rows than the manifest because same-cohort technical replicate rows are kept
-for HCP QC averaging.
+RNA-seq rows than the manifest because it preserves the Module-05 metadata provenance.
+It is not used to estimate new HCPs.
 
-### 4.3 Cell-fraction QC
-
-Stage 0 should log, separately by ancestry, the dominant cell type dropped as the
-compositional reference and the exclusion of the maternal fraction, for example:
-
-```text
-EAS cell types: 6 (dropped dominant: Syncytiotrophoblast; excluded maternal fraction: Maternal)
-```
-
-The dominant reference may differ by ancestry; that is acceptable because covariates
-are fit within ancestry.
-
-## 5. Stage 1 — ancestry/modality-specific HCP factors
+## 5. Stage 1 — reuse Module-05 optimized covariates
 
 Submit:
 
@@ -245,19 +233,25 @@ Submit:
 STAGES="1" FORCE=1 bash 53_submit_gxe.sh
 ```
 
-The historical filename `51_pooled_hcp.sh` is retained for compatibility, but the
-worker now runs **one ancestry × modality**. Expected outputs include:
+The historical filename `51_pooled_hcp.sh` is retained only for compatibility. It
+**does not run HCP estimation**. For each ancestry × modality it reads:
 
 ```text
-inputs/EAS_hcp_expression.tsv
-inputs/EUR_hcp_expression.tsv
+${QTL_DIR}/{ANC}_covariates_{MOD}.tsv
+```
+
+and subsets/reorders that already-optimized Module-05 table to the exact sample
+columns in `${GXE_DIR}/inputs/{ANC}_{MOD}.bed.gz`, writing:
+
+```text
 inputs/EAS_covariates_expression.tsv
 inputs/EUR_covariates_expression.tsv
 ...
 ```
 
-For each modality, finalized covariates are restricted to that modality's actual
-sample columns. This is required because modalities can differ by one or more samples.
+The staged table must preserve Module 5's complete covariate row set (including its
+optimized HCP rows) with no re-pruning. Modality-specific BED sample sets may differ
+by one or more individuals; Stage 1 handles that by column subsetting only.
 
 QC:
 
@@ -268,6 +262,9 @@ for ANC in EAS EUR; do
     test -s "$C" || echo "MISSING $C"
     printf '%s %s: ' "$ANC" "$MOD"
     awk 'END{print NR-1 " covariates"}' "$C"
+    SRC="$QTL_DIR/${ANC}_covariates_${MOD}.tsv"
+    diff <(cut -f1 "$SRC") <(cut -f1 "$C") >/dev/null || \
+      echo "COVARIATE ROW MISMATCH: $ANC $MOD"
   done
 done
 ```
@@ -484,8 +481,8 @@ STAGES="5 6 7" bash 53_submit_gxe.sh
 ## 14. Restart and FORCE behavior
 
 - Stage-2 chromosome workers skip an existing parquet unless `FORCE=1`.
-- Stage-1 HCP workers skip an existing finalized ancestry/modality covariate file
-  unless `FORCE=1`.
+- Stage-1 covariate-staging workers skip an existing ancestry/modality covariate
+  file unless `FORCE=1`. Stage 1 never re-estimates HCPs.
 - Stage-4 synthesis skips an existing `.meta.tsv.gz` unless `FORCE=1`.
 - Use `FORCE=1` after any input/covariate/metadata logic change.
 

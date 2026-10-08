@@ -13,20 +13,16 @@ intersection:
   2. inputs/{ANC}_sample_manifest.tsv — one retained Module-05 individual per
      array_id, using replicate_collapsed/reports/ancestry_map_collapsed.tsv as
      the retained-run authority.
-  3. inputs/{ANC}_metadata.tsv — rnaseq-level metadata for those final
-     individuals, retaining same-cohort technical replicate rows only for HCP
-     QC aggregation.
+  3. inputs/{ANC}_metadata.tsv — rnaseq-level metadata retained for provenance
+     and QC of the final Module-05 individuals.
   4. inputs/exposures.tsv — one common exposure scale across all ancestries.
      Continuous exposures are transformed/range-filtered then z-scored across
      the combined retained individuals so ancestry-specific b_int estimates
      remain on the same exposure-SD scale for downstream comparison/meta.
-  5. inputs/{ANC}_covariates_base.tsv — ancestry-specific genotype PCs, sex,
-     cohort, GA, and harmonized cell-type proportions.  Maternal cell fraction
-     is excluded and the dominant placental cell type is dropped as the
-     compositional reference.  Correlation pruning is done within ancestry.
-  6. --finalize-covariates --ancestry ANC --modality MOD --hcp-file F appends
-     ancestry/modality-specific HCP factors and writes
-     inputs/{ANC}_covariates_{MOD}.tsv.
+
+Module-07 does not re-estimate HCPs or rebuild the optimized covariate model.
+Stage 1 subsets/reorders Module-05's finalized {ANC}_covariates_{MOD}.tsv to the
+exact samples present in each ancestry-specific Module-07 BED.
 
 No cross-ancestry phenotype or variant intersection is performed here.  The
 primary scanner operates on each ancestry independently; cross-ancestry
@@ -495,36 +491,6 @@ def build_base_covariates(samples, meta_collapsed, qtl_dir, pcair_dir,
     return cov
 
 
-def finalize_covariates(out_dir, ancestry, modality, hcp_file, cor_threshold=0.9):
-    """Append ancestry-specific HCP rows to the ancestry base table."""
-    base_path = os.path.join(out_dir, f"{ancestry}_covariates_base.tsv")
-    base = pd.read_csv(base_path, sep="	", index_col=0)
-    hcp = pd.read_csv(hcp_file, sep="	", index_col=0)
-    missing_base = [c for c in hcp.columns if c not in base.columns]
-    if missing_base:
-        sys.exit(f"ERROR: HCP file {hcp_file} contains samples absent from the {ancestry} base covariates: {missing_base[:5]}")
-    # Base covariates are built on the union of modality sample sets. HCPs are
-    # modality-specific, so finalize only the samples present in this modality.
-    base = base[hcp.columns]
-    if hcp.isna().any().any():
-        sys.exit(f"ERROR: NaN in HCP file {hcp_file}")
-    priority = {name: (0 if name.startswith("cohort_") or name in ("sex", "GA")
-                       else 1 if "_PC" in name else 2, i)
-                for i, name in enumerate(base.index)}
-    for j, name in enumerate(hcp.index):
-        priority[name] = (3, j)
-    cov = pd.concat([base, hcp])
-    cov, dropped = prune_correlated(cov, priority, cor_threshold)
-    cov.index.name = "covariate"
-    out_path = os.path.join(out_dir, f"{ancestry}_covariates_{modality}.tsv")
-    cov.to_csv(out_path, sep="	", float_format="%.6g")
-    log(f"  wrote {out_path}: {cov.shape[0]} covariates ({hcp.shape[0]} HCPs in; "
-        f"{sum(1 for d in dropped if str(d['covariate']).startswith('HCP_'))} HCPs pruned)")
-    if dropped:
-        pd.DataFrame(dropped).to_csv(
-            os.path.join(out_dir, f"{ancestry}_covariate_pruning_{modality}.tsv"),
-            sep="	", index=False)
-
 def main():
     p = argparse.ArgumentParser(description="Build ancestry-specific GxE inputs")
     p.add_argument("--qtl-dir", required=True)
@@ -538,22 +504,11 @@ def main():
     p.add_argument("--gxe-config", default=os.path.join(HERE, "gxe_config.tsv"))
     p.add_argument("--gxe-dir", default=None)
     p.add_argument("--cor-threshold", type=float, default=0.9)
-    p.add_argument("--finalize-covariates", action="store_true")
-    p.add_argument("--ancestry", default=None)
-    p.add_argument("--modality", default=None)
-    p.add_argument("--hcp-file", default=None)
     args = p.parse_args()
 
     out_dir = args.gxe_dir or os.path.join(args.results_dir, "gxe")
     inputs_dir = os.path.join(out_dir, "inputs")
     os.makedirs(inputs_dir, exist_ok=True)
-
-    if args.finalize_covariates:
-        if not (args.ancestry and args.modality and args.hcp_file):
-            sys.exit("ERROR: --finalize-covariates needs --ancestry, --modality and --hcp-file")
-        finalize_covariates(inputs_dir, args.ancestry, args.modality,
-                            args.hcp_file, args.cor_threshold)
-        return
 
     ancestries = args.ancestries.split()
     modalities = args.modalities.split()
@@ -613,7 +568,7 @@ def main():
             cross_protocol = (pm["cohort"].notna() & expected.notna()
                               & (pm["cohort"].astype(str) != expected.astype(str)))
             if cross_protocol.any():
-                log(f"  {anc} HCP metadata: dropping {int(cross_protocol.sum())} "
+                log(f"  {anc} metadata provenance: dropping {int(cross_protocol.sum())} "
                     "non-primary cross-protocol rnaseq row(s)")
                 pm = pm.loc[~cross_protocol].copy()
         pm_cols = [c for c in ["rnaseq_id", "array_id", "ancestry", "cohort", "sex"] if c in pm.columns]
@@ -621,14 +576,11 @@ def main():
         pm[pm_cols].to_csv(meta_path, sep="	", index=False)
         log(f"  wrote {meta_path}: {len(pm)} rnaseq rows for {pm['array_id'].nunique()} array_ids")
 
-        build_base_covariates(list(manifest["array_id"].astype(str)), meta_one,
-                              args.qtl_dir, pcair_dir, anc, inputs_dir,
-                              args.cor_threshold)
 
     # One common exposure scale, then each ancestry scan simply subsets columns.
     all_manifest_samples = list(dict.fromkeys(all_manifest_samples))
     build_exposures(args.gxe_config, meta_one, all_manifest_samples, inputs_dir)
-    log("done. Next: 51_pooled_hcp.sh, now run per ancestry x modality.")
+    log("done. Next: Stage 1 stages Module-05 optimized per-modality covariates.")
 
 
 if __name__ == "__main__":

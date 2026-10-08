@@ -24,17 +24,18 @@ canonicalized only so results can be matched after scanning.
 Stage 0 reads Module-05 `{ANC}_metadata.tsv` files and uses
 `replicate_collapsed/reports/ancestry_map_collapsed.tsv` as the retained-run
 authority. Individual-level exposures/demographics therefore follow the same
-representative RNA run used by Module 05. Same-cohort technical replicate rows may
-remain in `{ANC}_metadata.tsv` only for HCP QC aggregation.
+representative RNA run used by Module 05. `{ANC}_metadata.tsv` is retained in the
+Module-07 input directory for provenance/QC only; it is not used to re-estimate HCPs.
 
 ## Covariates
 
-Covariates are built within ancestry: genotype PCs, sex, cohort dummies, GA, cell
-fractions, and ancestry/modality-specific HCP factors. The maternal cell fraction
-is excluded; the dominant placental cell type is also dropped as the compositional
-reference. A covariate row with the same name as the active exposure (for example
-`GA`) is removed by the scanner because the exposure enters the interaction model
-as a main effect.
+Module 07 reuses Module-05's finalized, optimized per-modality covariates
+`${QTL_DIR}/{ANC}_covariates_{MOD}.tsv`, including the HCP count selected in Module 5
+and Module-05's fixed-covariate/correlation-pruning decisions. Stage 1 only subsets
+and reorders those covariates to the exact samples in each Module-07 ancestry BED;
+it does not re-estimate HCPs or re-prune covariates. A covariate row with the same
+name as the active exposure (for example `GA`) is removed by the scanner because
+the exposure enters the interaction model as a main effect.
 
 Continuous exposures are range-filtered/transformed and then standardized once
 across all retained ancestries so ancestry-specific interaction coefficients remain
@@ -60,8 +61,8 @@ results.
 
 | Stage | Action |
 |---|---|
-| 0 | Build ancestry-specific BEDs, manifests, metadata, exposures, base covariates |
-| 1 | Estimate HCPs and finalize covariates per ancestry × modality |
+| 0 | Build ancestry-specific BEDs, manifests, metadata provenance, exposures |
+| 1 | Stage/validate Module-05 optimized covariates per ancestry × modality |
 | 2 | Tier-1 adaptive cis-permutation scans per ancestry × modality × exposure × chromosome |
 | 3 | Merge chromosomes and compute Storey q-values within ancestry |
 | 4 | Cross-ancestry tier-1 synthesis |

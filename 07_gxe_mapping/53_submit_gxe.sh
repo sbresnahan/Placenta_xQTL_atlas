@@ -4,7 +4,7 @@
 # =============================================================================
 # Stages:
 #   0  ancestry-specific inputs       — 50_build_gxe_inputs.py
-#   1  ancestry-specific HCPs         — 51_pooled_hcp.sh per ancestry array
+#   1  stage Module-05 covariates     — 51_pooled_hcp.sh per ancestry array
 #   2  tier-1 ancestry cis-perm scans — chr arrays per ancestry x modality x exposure
 #   3  ancestry merge + Storey q      — one merge per ancestry x modality x exposure
 #   4  cross-ancestry tier-1 synthesis— ACAT feature evidence + exact-lead IVW
@@ -69,8 +69,13 @@ dep_expr() {
 DEP0=""
 if has_stage 0; then
     COMPLETE=1
+    [ -f "${GXE_DIR}/inputs/exposures.tsv" ] || COMPLETE=0
     for ANC in $ANCESTRIES; do
-        [ -f "${GXE_DIR}/inputs/${ANC}_covariates_base.tsv" ] || COMPLETE=0
+        [ -f "${GXE_DIR}/inputs/${ANC}_sample_manifest.tsv" ] || COMPLETE=0
+        for MOD in $MODALITIES; do
+            [ -f "${GXE_DIR}/inputs/${ANC}_${MOD}.bed.gz" ] || COMPLETE=0
+            [ -f "${GXE_DIR}/inputs/${ANC}_${MOD}.bed.gz.tbi" ] || COMPLETE=0
+        done
     done
     if [ "$COMPLETE" = "1" ] && [ "$FORCE" != "1" ]; then
         echo "  stage 0: ancestry inputs exist — skipping (FORCE=1 to rebuild)"
@@ -86,32 +91,32 @@ if has_stage 0; then
 fi
 
 # ---- Stage 1 --------------------------------------------------------------
-declare -a HCP_JOBS=()
+declare -a COV_JOBS=()
 if has_stage 1; then
     for ANC in $ANCESTRIES; do
         DEP_ARGS=()
         [ -n "$DEP0" ] && DEP_ARGS=(-w "done($DEP0)")
-        J=$(bsub -q "$QUEUE" -n 4 -M 32G -R "rusage[mem=32G]" -W 8:00 \
-            -J "gxe_hcp_${ANC}[1-${N_MODS}]" "${DEP_ARGS[@]}" \
-            -o "${LOG_DIR}/gxe_hcp_${ANC}.%J.%I.out" \
-            -e "${LOG_DIR}/gxe_hcp_${ANC}.%J.%I.err" \
-            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRY=$ANC,MODALITIES=$MODALITIES,FORCE=$FORCE,R_PACKAGE_LIB=$R_PACKAGE_LIB,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+        J=$(bsub -q "$QUEUE" -n 1 -M 4G -R "rusage[mem=4G]" -W 0:30 \
+            -J "gxe_cov_${ANC}[1-${N_MODS}]" "${DEP_ARGS[@]}" \
+            -o "${LOG_DIR}/gxe_cov_${ANC}.%J.%I.out" \
+            -e "${LOG_DIR}/gxe_cov_${ANC}.%J.%I.err" \
+            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRY=$ANC,MODALITIES=$MODALITIES,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
             "bash ${SCRIPTS_DIR}/51_pooled_hcp.sh")
-        jid=$(echo "$J" | job_id); HCP_JOBS+=("$jid")
-        echo "  stage 1: gxe_hcp_${ANC} array $jid"
+        jid=$(echo "$J" | job_id); COV_JOBS+=("$jid")
+        echo "  stage 1: gxe_cov_${ANC} array $jid"
     done
 fi
 
 # ---- Stages 2-3 -----------------------------------------------------------
 declare -A MERGE_BY_KEY=()
 declare -a MERGE_JOBS=()
-HCP_DEP=$(dep_expr "${HCP_JOBS[@]}")
+COV_DEP=$(dep_expr "${COV_JOBS[@]}")
 for ANC in $ANCESTRIES; do
     for MOD in $MODALITIES; do
         for EXP in $EXPOSURES; do
             SCAN_DEP=""
             if has_stage 2; then
-                DEP_ARGS=(); [ -n "$HCP_DEP" ] && DEP_ARGS=(-w "$HCP_DEP")
+                DEP_ARGS=(); [ -n "$COV_DEP" ] && DEP_ARGS=(-w "$COV_DEP")
                 J=$(bsub -q "$QUEUE" -n 4 -M 48G -R "rusage[mem=48G]" -W 12:00 \
                     -J "gxe_t1_${ANC}_${MOD}_${EXP}[1-${N_CHROMS}]" "${DEP_ARGS[@]}" \
                     -o "${LOG_DIR}/gxe_t1_${ANC}_${MOD}_${EXP}.%J.%I.out" \
