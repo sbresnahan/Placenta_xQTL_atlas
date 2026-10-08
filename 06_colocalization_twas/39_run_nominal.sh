@@ -1,0 +1,113 @@
+#!/bin/bash
+# =============================================================================
+# 39_run_nominal.sh — submit genome-wide nominal cis-xQTL scans (module 06)
+# =============================================================================
+# Objective 1.6: full cis-window summary statistics per ancestry x modality
+# for colocalization (SuSiE-coloc / colocBoost) and TWAS QC. One LSF array
+# job per ancestry x modality (22 chromosome tasks) plus a dependent merge
+# job that writes the bgzipped/tabix'd per-modality nominal store.
+#
+# Prerequisites: module-05 steps 23-25 completed (qtl_inputs has
+#   {ANC}_qtl.pgen, {ANC}_{MOD}.bed.gz, {ANC}_covariates_{MOD}.tsv);
+#   tensorqtl conda env (module-05 script 21).
+#
+# Usage:
+#   TEST=1 bash 39_run_nominal.sh    # one pilot chromosome (chr21, expression)
+#   bash 39_run_nominal.sh           # all ancestries x modalities
+#
+# Optional overrides: ANCESTRIES, MODALITIES, CHROMS, QUEUE, WALLTIME,
+#   THREADS, MEM, GPU=1 (submit to GPU queue; tensorQTL auto-uses CUDA),
+#   FORCE=1, MAF_THRESHOLD.
+# =============================================================================
+set -euo pipefail
+
+CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
+SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
+OUTPUT_BASE="${OUTPUT_BASE:-$(dirname "$CONFIG")}"
+QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
+RESULTS_DIR="${RESULTS_DIR:-${OUTPUT_BASE}/qtl_results}"
+LOG_DIR="${LOG_DIR:-${OUTPUT_BASE}/logs}"
+ANCESTRIES="${ANCESTRIES:-EAS EUR}"
+MODALITIES="${MODALITIES:-expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability}"
+CHROMS="${CHROMS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22}"
+QUEUE="${QUEUE:-medium}"
+WALLTIME="${WALLTIME:-12:00}"
+THREADS="${THREADS:-4}"
+MEM="${MEM:-32G}"
+GPU="${GPU:-0}"
+GPU_QUEUE="${GPU_QUEUE:-gpu}"
+MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"
+TEST="${TEST:-0}"
+FORCE="${FORCE:-0}"
+
+if [ "$TEST" = "1" ]; then
+    ANCESTRIES="EAS"; MODALITIES="expression"; CHROMS="21"
+    echo "TEST=1: pilot = EAS expression chr21 only"
+fi
+
+mkdir -p "$LOG_DIR"
+N_CHROMS=$(echo $CHROMS | wc -w)
+
+for ANC in $ANCESTRIES; do
+  for MOD in $MODALITIES; do
+    JOB="nom_${ANC}_${MOD}"
+    MERGE_JOB="nomm_${ANC}_${MOD}"
+    SHARD_GLOB="${RESULTS_DIR}/nominal/${ANC}/${ANC}_${MOD}.nominal.chr*.parquet"
+    MERGED="${RESULTS_DIR}/nominal/${ANC}/${ANC}_${MOD}.nominal.tsv.gz"
+    if [ -f "$MERGED" ] && [ "$FORCE" != "1" ]; then
+        echo "  SKIP ${ANC}/${MOD}: merged nominal store exists"
+        continue
+    fi
+    if bjobs -J "$JOB" 2>/dev/null | grep -q "$JOB"; then
+        echo "  SKIP ${ANC}/${MOD}: array already running/pending"
+        continue
+    fi
+    EXTRA=""
+    if [ "$GPU" = "1" ]; then
+        QUEUE_USE="$GPU_QUEUE"
+        EXTRA='-gpu "num=1"'
+    else
+        QUEUE_USE="$QUEUE"
+    fi
+    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},QTL_DIR=${QTL_DIR},RESULTS_DIR=${RESULTS_DIR},ANC=${ANC},MOD=${MOD},MAF_THRESHOLD=${MAF_THRESHOLD},FORCE=${FORCE}"
+    # array of chromosome shards
+    bsub -J "${JOB}[1-${N_CHROMS}]" -q "$QUEUE_USE" -n "$THREADS" -W "$WALLTIME" \
+         -M "$MEM" -R "rusage[mem=${MEM}]" $EXTRA \
+         -o "${LOG_DIR}/${JOB}.%J.%I.out" -e "${LOG_DIR}/${JOB}.%J.%I.err" \
+         -env "$ENV_STR,CHROMS_LIST=${CHROMS}" \
+         <<'EOF'
+#!/bin/bash
+set -euo pipefail
+source /etc/profile.d/modules.sh
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate tensorqtl
+CHROM=$(echo $CHROMS_LIST | cut -d' ' -f${LSB_JOBINDEX})
+FORCE_FLAG=""; [ "$FORCE" = "1" ] && FORCE_FLAG="--force"
+python3 "${SCRIPTS_DIR}/39_run_nominal.py" \
+    --qtl-dir "$QTL_DIR" --output-dir "$RESULTS_DIR" \
+    --ancestry "$ANC" --modality "$MOD" --chrom "$CHROM" \
+    --maf-threshold "$MAF_THRESHOLD" $FORCE_FLAG
+EOF
+    # dependent merge job
+    bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W 02:00 -M 16G -R "rusage[mem=16G]" \
+         -w "done(${JOB})" \
+         -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
+         -env "$ENV_STR" \
+         <<'EOF'
+#!/bin/bash
+set -euo pipefail
+source /etc/profile.d/modules.sh
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate tensorqtl
+module load samtools
+python3 "${SCRIPTS_DIR}/39_run_nominal.py" \
+    --qtl-dir "$QTL_DIR" --output-dir "$RESULTS_DIR" \
+    --ancestry "$ANC" --modality "$MOD" --merge
+EOF
+    echo "  submitted ${JOB}[1-${N_CHROMS}] + merge ${MERGE_JOB}"
+    if [ "$TEST" = "1" ]; then
+        echo "TEST=1: one pilot array submitted; check ${LOG_DIR}/${JOB}.*.out"
+        exit 0
+    fi
+  done
+done

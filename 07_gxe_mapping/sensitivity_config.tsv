@@ -1,0 +1,6 @@
+covariate	column	enabled	description
+maternal_age	maternal_age	0	Maternal age (years); BLOCKED until the column is added to the cohort metadata
+parity	parity	0	Parity; BLOCKED until the column is added to the cohort metadata
+smoking	smoking	0	Smoking status; BLOCKED until the column is added to the cohort metadata
+GA	GA	0	Gestational age at delivery (weeks); available now — enable for non-GA exposures after review
+ancestry_pcs		0	SNP x ancestry-PC interactions (uses the pooled covariate PC block; no metadata column needed)

@@ -43,6 +43,20 @@ transcriptome annotation from
   mapping (grouped, ungrouped, combined, stepwise-conditional) with Storey
   q-values, SuSHiE cross-ancestry fine-mapping, and functional enrichment of
   fine-mapped variants.
+- **06_colocalization_twas/**: Objective 1.6 — GWAS catalog +
+  fetch/harmonize, genome-wide nominal cis stats, SuSiE-coloc at
+  fine-mapped loci with ancestry-matched LD, colocBoost multi-trait
+  colocalization, isoTWAS weight training (multivariate elastic net across
+  isoforms + per-gene expression), FUSION TWAS against harmonized GWAS, and
+  cross-trait aggregation with gene-level ACAT combination and cell-type
+  annotation.
+- **07_gxe_mapping/**: Objective 2.1 — SNP × exposure (GxE) interaction
+  mapping. Pooled multi-ancestry tier-1 discovery (tensorQTL-mirroring
+  interaction model, adaptive phenotype permutations, Storey q-values),
+  ancestry-stratified tier 2 at Aim-1 prioritized loci with IVW
+  meta-analysis, SNP × covariate sensitivity refits (config-gated), and
+  transmitted/non-transmitted decomposition (status-gated on maternal
+  genotypes).
 - **reports/**: analysis reports (`report_placenta_xqtl.Rmd`,
   `report_finemap.Rmd`) rendered to self-contained HTML.
 
@@ -76,6 +90,20 @@ transcriptome annotation from
   29      top tables
   31-33   SuSHiE cross-ancestry fine-mapping + aggregation
   34      annotation enrichment of high-PIP variants
+        |
+06_colocalization_twas (Objective 1.6)
+  36-38   coloc env, GWAS catalog fetch + harmonization
+  39/40   genome-wide nominal stats, coloc locus tasks
+  41-45   SuSiE-coloc + colocBoost (sharded LSF arrays)
+  46-48   isoTWAS weight training + FUSION TWAS
+  49      aggregation (coloc/TWAS tables, ACAT, cell-type annotation)
+        |
+07_gxe_mapping (Objective 2.1)
+  50/51   pooled multi-ancestry inputs + pooled HCPs
+  52/53   tier-1 GxE scan (chromosome arrays) + merge + q-values
+  54      tier-2 ancestry-stratified + IVW meta-analysis
+  55/56   SNP x covariate sensitivity (gated), T/NT decomposition (gated)
+  57      aggregation
         |
 reports/
   summary report (Rmd -> HTML)

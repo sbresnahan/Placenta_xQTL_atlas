@@ -187,6 +187,46 @@ fine-mapping, and annotation enrichment.
 | test_build_covariates.py, test_collapse_replicates.py, test_normalize_modalities.py, test_hcp.py, test_optimize_hcp.py, test_optimize_hcp_modalities.py, test_extract_report_extras.py, test_prepare_intersection.py, test_picard_qc_fullpanel.py, test_union_pooling.py | Unit tests |
 | test_sushie_finemap.py | End-to-end fine-mapping fixture (locus prep, SuSHiE recovery, aggregation, enrichment, report render) |
 
+## 06_colocalization_twas/
+
+Objective 1.6: GWAS colocalization (SuSiE-coloc + colocBoost) and isoTWAS.
+
+| File | Purpose |
+|------|---------|
+| gwas_catalog.tsv | Curated GWAS sources (trait, ancestry, access route, URLs) |
+| 36_install_coloc_env.sh | R package setup (coloc, susieR, colocBoost, glmnet, plink2R) |
+| 37_fetch_gwas.py, 37_fetch_gwas.sh | GWAS download driver (login-node fetch; manual-placement entries for JECS/ProDiGY) |
+| 38_harmonize_gwas.py | Harmonize to chr/pos/rsid/EA/OA/EAF/beta/se/p/n; bgzip+tabix |
+| 39_run_nominal.py, 39_run_nominal.sh | Genome-wide nominal cis stats per ancestry x modality (tabix'd store) |
+| 40_prepare_coloc_loci.py | Per-modality coloc task lists + 1KG ancestry keep files |
+| coloc_common.R | Shared R helpers (tabix slices, plink2 LD, dosage export) |
+| 41_susie_coloc.R, 42_submit_coloc.sh, 42a_run_coloc_shard.sh | SuSiE-coloc per locus x trait (sharded arrays) |
+| 43_prepare_colocboost.py, 44_colocboost.R, 45_submit_colocboost.sh, 45a_run_colocboost_shard.sh | colocBoost multi-trait colocalization |
+| 46_isotwas_train.R, 47_submit_isotwas.sh, 47a_run_isotwas_shard.sh | isoTWAS weight training (multivariate elastic net across isoforms; EAS/EUR/pooled) |
+| 48_fusion_twas.sh, 48a_run_fusion.sh | FUSION TWAS per weight set x GWAS trait |
+| 49_aggregate_coloc_twas.py | Aggregation: coloc tables, TWAS + gene-level ACAT, cell-type annotation |
+| test_susie_coloc.py, test_colocboost.py, test_isotwas_train.py, test_aggregate.py | Fixture tests (11 tests) |
+
+## 07_gxe_mapping/
+
+Objective 2.1: SNP x exposure (GxE) interaction mapping.
+
+| File | Purpose |
+|------|---------|
+| gxe_config.tsv | Exposure registry (pilot: GA; gdm/ogtt/ppBMI pre-configured, disabled) |
+| sensitivity_config.tsv | SNP x covariate sensitivity registry (all disabled pending metadata) |
+| 50_build_gxe_inputs.py | Pooled multi-ancestry BEDs, covariates, exposures, manifest |
+| 51_pooled_hcp.sh | Pooled HCP estimation (reuses 05 hcp_from_matrix.R) + covariate finalize |
+| gxe_core.py | torch core: tensorQTL-mirroring interaction fit, adaptive permutations, IVW, T/NT |
+| 52_gxe_scan.py | Scanner CLI: cis-perm (tier 1), nominal, merge (+ Storey q bridge) |
+| 53_submit_gxe.sh | Orchestrator (stages 0-6 with LSF dependencies) |
+| 53a_run_gxe_scan.sh, 53b_run_post.sh | LSF workers (scan/merge; tier2/sensitivity/tnt/aggregate) |
+| 54_tier2_stratified.py | Ancestry-stratified tier 2 at coloc/TWAS loci + IVW meta-analysis |
+| 55_sensitivity_snpxcov.py | SNP x covariate sensitivity refits (status-gated OFF) |
+| 56_transmitted_nontransmitted.py | T/NT decomposition (status-gated BLOCKED pending maternal pgens) |
+| 57_aggregate_gxe.py | Cross-modality aggregation + summary figure |
+| test_gxe_scan.py | Fixture tests (8 tests, incl. tensorQTL equivalence + CLI end-to-end) |
+
 ## reports/
 
 | File | Purpose |

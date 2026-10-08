@@ -1,0 +1,5 @@
+exposure_id	column	transform	min	max	enabled	description
+GA	GA	none	20	45	1	Gestational age at delivery (weeks); pilot exposure, already in cohort metadata
+gdm	gdm	none	0	1	0	Gestational diabetes (0/1); BLOCKED until the gdm column is added to the cohort metadata
+ogtt	ogtt	none	NA	NA	0	OGTT (continuous, N=1305 subset); BLOCKED until the ogtt column is added
+ppBMI	ppBMI	none	14	70	0	Pre-pregnancy BMI (continuous); enable after review; binary >=30 analysis uses the same column
