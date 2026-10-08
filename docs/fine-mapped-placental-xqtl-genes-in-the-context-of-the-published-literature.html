@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+<head>
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Fine-mapped placental xQTL genes in the context of the published literature | Cross-ancestry fine-mapping of placental xQTL loci</title>
+  <meta name="description" content="Fine-mapped placental xQTL genes in the context of the published literature | Cross-ancestry fine-mapping of placental xQTL loci" />
+  <meta name="generator" content="bookdown 0.48 and GitBook 2.6.7" />
+
+  <meta property="og:title" content="Fine-mapped placental xQTL genes in the context of the published literature | Cross-ancestry fine-mapping of placental xQTL loci" />
+  <meta property="og:type" content="book" />
+  
+  
+  
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Fine-mapped placental xQTL genes in the context of the published literature | Cross-ancestry fine-mapping of placental xQTL loci" />
+  
+  
+  
+
+<meta name="author" content="Bhattacharya Lab (analysis: S. Bresnahan; report generated with Biomni/Phylo)" />
+
+
+<meta name="date" content="2026-10-07" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  
+  
+<link rel="prev" href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"/>
+
+<script src="libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.6/dist/fuse.min.js"></script>
+<link href="libs/gitbook-2.6.7/css/style.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-table.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-bookdown.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-highlight.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-search.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-fontsettings.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-clipboard.css" rel="stylesheet" />
+
+
+
+
+
+
+
+
+<link href="libs/anchor-sections-1.1.0/anchor-sections.css" rel="stylesheet" />
+<link href="libs/anchor-sections-1.1.0/anchor-sections-hash.css" rel="stylesheet" />
+<script src="libs/anchor-sections-1.1.0/anchor-sections.js"></script>
+
+
+
+<style type="text/css">
+  
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+</style>
+
+<link rel="stylesheet" href="style.css" type="text/css" />
+</head>
+
+<body>
+
+
+
+  <div class="book without-animation with-summary font-size-2 font-family-1" data-basepath=".">
+
+    <div class="book-summary">
+      <nav role="navigation">
+
+<ul class="summary">
+<li><a href="./">Placenta xQTL Atlas</a></li>
+
+<li class="divider"></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html"><i class="fa fa-check"></i>Placenta xQTL Atlas</a>
+<ul>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#the-documents"><i class="fa fa-check"></i>The documents</a></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#how-to-read-this-atlas"><i class="fa fa-check"></i>How to read this atlas</a></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#source-and-data"><i class="fa fa-check"></i>Source and data</a></li>
+</ul></li>
+<li class="part"><span><b>I Report 1 · xQTL mapping</b></span></li>
+<li class="chapter" data-level="" data-path="multi-ancestry-placental-xqtl-analysis.html"><a href="multi-ancestry-placental-xqtl-analysis.html"><i class="fa fa-check"></i>Multi-ancestry placental xQTL analysis</a></li>
+<li class="chapter" data-level="1" data-path="executive-summary.html"><a href="executive-summary.html"><i class="fa fa-check"></i><b>1</b> Executive summary</a>
+<ul>
+<li class="chapter" data-level="1.1" data-path="executive-summary.html"><a href="executive-summary.html#study-cohorts-and-data"><i class="fa fa-check"></i><b>1.1</b> Study cohorts and data</a></li>
+<li class="chapter" data-level="1.2" data-path="executive-summary.html"><a href="executive-summary.html#genotype-processing-and-imputation"><i class="fa fa-check"></i><b>1.2</b> Genotype processing and imputation</a></li>
+<li class="chapter" data-level="1.3" data-path="executive-summary.html"><a href="executive-summary.html#ancestry-assignment-and-cross-cohort-genotype-pooling"><i class="fa fa-check"></i><b>1.3</b> Ancestry assignment and cross-cohort genotype pooling</a></li>
+<li class="chapter" data-level="1.4" data-path="executive-summary.html"><a href="executive-summary.html#rna-seq-processing"><i class="fa fa-check"></i><b>1.4</b> RNA-seq processing</a></li>
+<li class="chapter" data-level="1.5" data-path="executive-summary.html"><a href="executive-summary.html#transcriptomic-phenotyping"><i class="fa fa-check"></i><b>1.5</b> Transcriptomic phenotyping</a></li>
+<li class="chapter" data-level="1.6" data-path="executive-summary.html"><a href="executive-summary.html#cell-type-deconvolution"><i class="fa fa-check"></i><b>1.6</b> Cell-type deconvolution</a></li>
+<li class="chapter" data-level="1.7" data-path="executive-summary.html"><a href="executive-summary.html#rna-to-dna-sample-linkage"><i class="fa fa-check"></i><b>1.7</b> RNA to DNA sample linkage</a></li>
+<li class="chapter" data-level="1.8" data-path="executive-summary.html"><a href="executive-summary.html#phenotype-pooling-and-normalization"><i class="fa fa-check"></i><b>1.8</b> Phenotype pooling and normalization</a></li>
+<li class="chapter" data-level="1.9" data-path="executive-summary.html"><a href="executive-summary.html#genotype-principal-components-and-sample-quality-control"><i class="fa fa-check"></i><b>1.9</b> Genotype principal components and sample quality control</a></li>
+<li class="chapter" data-level="1.10" data-path="executive-summary.html"><a href="executive-summary.html#covariate-assembly-and-hidden-factor-estimation"><i class="fa fa-check"></i><b>1.10</b> Covariate assembly and hidden factor estimation</a></li>
+<li class="chapter" data-level="1.11" data-path="executive-summary.html"><a href="executive-summary.html#cis-xqtl-mapping"><i class="fa fa-check"></i><b>1.11</b> cis-xQTL mapping</a></li>
+<li class="chapter" data-level="1.12" data-path="executive-summary.html"><a href="executive-summary.html#cross-ancestry-fine-mapping"><i class="fa fa-check"></i><b>1.12</b> Cross-ancestry fine-mapping</a></li>
+<li class="chapter" data-level="1.13" data-path="executive-summary.html"><a href="executive-summary.html#functional-enrichment-of-fine-mapped-variants"><i class="fa fa-check"></i><b>1.13</b> Functional enrichment of fine-mapped variants</a></li>
+<li class="chapter" data-level="1.14" data-path="executive-summary.html"><a href="executive-summary.html#report-integration-targeted-lookups"><i class="fa fa-check"></i><b>1.14</b> Report-integration targeted lookups</a></li>
+<li class="chapter" data-level="1.15" data-path="executive-summary.html"><a href="executive-summary.html#software-and-computing"><i class="fa fa-check"></i><b>1.15</b> Software and computing</a></li>
+</ul></li>
+<li class="chapter" data-level="2" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html"><i class="fa fa-check"></i><b>2</b> Cohort and data landscape</a>
+<ul>
+<li class="chapter" data-level="2.1" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#sample-attrition"><i class="fa fa-check"></i><b>2.1</b> Sample attrition</a></li>
+<li class="chapter" data-level="2.2" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#cohort-composition-and-genotype-processing"><i class="fa fa-check"></i><b>2.2</b> Cohort composition and genotype processing</a></li>
+<li class="chapter" data-level="2.3" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#genotype-pca"><i class="fa fa-check"></i><b>2.3</b> Genotype PCA</a></li>
+<li class="chapter" data-level="2.4" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#covariate-qc"><i class="fa fa-check"></i><b>2.4</b> Covariate QC</a></li>
+<li class="chapter" data-level="2.5" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#phenotype-processing-qc"><i class="fa fa-check"></i><b>2.5</b> Phenotype processing QC</a></li>
+<li class="chapter" data-level="2.6" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#sequencing-qc"><i class="fa fa-check"></i><b>2.6</b> Sequencing QC</a></li>
+</ul></li>
+<li class="chapter" data-level="3" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html"><i class="fa fa-check"></i><b>3</b> Pipeline and calibration</a>
+<ul>
+<li class="chapter" data-level="3.1" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#pipeline-recap"><i class="fa fa-check"></i><b>3.1</b> Pipeline recap</a></li>
+<li class="chapter" data-level="3.2" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#hcp-count-optimization-module-25b"><i class="fa fa-check"></i><b>3.2</b> HCP count optimization (module 25b)</a></li>
+<li class="chapter" data-level="3.3" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#permutation-calibrated-p-value-qq-plots"><i class="fa fa-check"></i><b>3.3</b> Permutation-calibrated p-value QQ plots</a></li>
+<li class="chapter" data-level="3.4" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#signal-fraction-storey-%CF%801-per-layer"><i class="fa fa-check"></i><b>3.4</b> Signal fraction (Storey π1) per layer</a></li>
+<li class="chapter" data-level="3.5" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#power-analysis"><i class="fa fa-check"></i><b>3.5</b> Power analysis</a></li>
+<li class="chapter" data-level="3.6" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#carrier-count-audit-mac-floor-propagation"><i class="fa fa-check"></i><b>3.6</b> Carrier-count audit: MAC floor propagation</a></li>
+</ul></li>
+<li class="chapter" data-level="4" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html"><i class="fa fa-check"></i><b>4</b> The landscape of placental xQTL regulation</a>
+<ul>
+<li class="chapter" data-level="4.1" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#phenotypes-and-genes-tested-per-modality"><i class="fa fa-check"></i><b>4.1</b> Phenotypes and genes tested per modality</a></li>
+<li class="chapter" data-level="4.2" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#discovery-in-the-context-of-published-placenta-eqtl-studies"><i class="fa fa-check"></i><b>4.2</b> Discovery in the context of published placenta eQTL studies</a></li>
+<li class="chapter" data-level="4.3" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#xqtl-associations-per-modality-q-value-tiers"><i class="fa fa-check"></i><b>4.3</b> xQTL associations per modality — q-value tiers</a></li>
+<li class="chapter" data-level="4.4" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#conditionally-independent-signals-per-gene"><i class="fa fa-check"></i><b>4.4</b> Conditionally independent signals per gene</a></li>
+<li class="chapter" data-level="4.5" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#lead-variant-distance-from-the-tss"><i class="fa fa-check"></i><b>4.5</b> Lead-variant distance from the TSS</a></li>
+<li class="chapter" data-level="4.6" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#cross-modality-overlap-of-xgenes"><i class="fa fa-check"></i><b>4.6</b> Cross-modality overlap of xGenes</a></li>
+<li class="chapter" data-level="4.7" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#functional-annotation-enrichment-of-lead-variants"><i class="fa fa-check"></i><b>4.7</b> Functional annotation enrichment of lead variants</a></li>
+<li class="chapter" data-level="4.8" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#cross-modality-sharing-of-xqtl-effects"><i class="fa fa-check"></i><b>4.8</b> Cross-modality sharing of xQTL effects</a></li>
+<li class="chapter" data-level="4.9" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#constraint-of-xgenes"><i class="fa fa-check"></i><b>4.9</b> Constraint of xGenes</a></li>
+<li class="chapter" data-level="4.10" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#fine-mapped-credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>4.10</b> Fine-mapped credible sets versus conditional signals</a></li>
+</ul></li>
+<li class="chapter" data-level="5" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html"><i class="fa fa-check"></i><b>5</b> Cross-ancestry regulation</a>
+<ul>
+<li class="chapter" data-level="5.1" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#per-ancestry-discovery-comparison"><i class="fa fa-check"></i><b>5.1</b> Per-ancestry discovery comparison</a></li>
+<li class="chapter" data-level="5.2" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#ancestry-specific-versus-shared-egenes"><i class="fa fa-check"></i><b>5.2</b> Ancestry-specific versus shared eGenes</a></li>
+<li class="chapter" data-level="5.3" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#cross-ancestry-effect-size-concordance"><i class="fa fa-check"></i><b>5.3</b> Cross-ancestry effect-size concordance</a></li>
+<li class="chapter" data-level="5.4" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#showcase-loci"><i class="fa fa-check"></i><b>5.4</b> Showcase loci</a></li>
+<li class="chapter" data-level="5.5" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#sushie-credible-set-summary"><i class="fa fa-check"></i><b>5.5</b> SuSHiE credible-set summary</a></li>
+</ul></li>
+<li class="chapter" data-level="6" data-path="discovery-catalog.html"><a href="discovery-catalog.html"><i class="fa fa-check"></i><b>6</b> Discovery catalog</a>
+<ul>
+<li class="chapter" data-level="6.1" data-path="discovery-catalog.html"><a href="discovery-catalog.html#fdr-significant-associations"><i class="fa fa-check"></i><b>6.1</b> FDR-significant associations</a></li>
+<li class="chapter" data-level="6.2" data-path="discovery-catalog.html"><a href="discovery-catalog.html#conditionally-independent-secondary-signals"><i class="fa fa-check"></i><b>6.2</b> Conditionally independent secondary signals</a></li>
+<li class="chapter" data-level="6.3" data-path="discovery-catalog.html"><a href="discovery-catalog.html#egene-catalog-fdr-5"><i class="fa fa-check"></i><b>6.3</b> eGene catalog (FDR ≤ 5%)</a></li>
+<li class="chapter" data-level="6.4" data-path="discovery-catalog.html"><a href="discovery-catalog.html#top-ranked-genes-per-layer"><i class="fa fa-check"></i><b>6.4</b> Top-ranked genes per layer</a></li>
+<li class="chapter" data-level="6.5" data-path="discovery-catalog.html"><a href="discovery-catalog.html#driver-modality-resolution"><i class="fa fa-check"></i><b>6.5</b> Driver-modality resolution</a>
+<ul>
+<li class="chapter" data-level="6.5.1" data-path="discovery-catalog.html"><a href="discovery-catalog.html#within-gene-driver-breakdown-for-the-top-combined-genes"><i class="fa fa-check"></i><b>6.5.1</b> Within-gene driver breakdown for the top combined genes</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="7" data-path="functional-enrichment.html"><a href="functional-enrichment.html"><i class="fa fa-check"></i><b>7</b> Functional enrichment</a>
+<ul>
+<li class="chapter" data-level="7.1" data-path="functional-enrichment.html"><a href="functional-enrichment.html#per-modality-enrichment-of-xqtl-gene-sets"><i class="fa fa-check"></i><b>7.1</b> Per-modality enrichment of xQTL gene sets</a>
+<ul>
+<li class="chapter" data-level="7.1.1" data-path="functional-enrichment.html"><a href="functional-enrichment.html#pregnancyplacenta-gene-collection"><i class="fa fa-check"></i><b>7.1.1</b> Pregnancy/placenta gene collection</a></li>
+<li class="chapter" data-level="7.1.2" data-path="functional-enrichment.html"><a href="functional-enrichment.html#ora-results"><i class="fa fa-check"></i><b>7.1.2</b> ORA results</a></li>
+<li class="chapter" data-level="7.1.3" data-path="functional-enrichment.html"><a href="functional-enrichment.html#go-biological-process"><i class="fa fa-check"></i><b>7.1.3</b> GO Biological Process</a></li>
+<li class="chapter" data-level="7.1.4" data-path="functional-enrichment.html"><a href="functional-enrichment.html#go-molecular-function-and-cellular-component"><i class="fa fa-check"></i><b>7.1.4</b> GO Molecular Function and Cellular Component</a></li>
+<li class="chapter" data-level="7.1.5" data-path="functional-enrichment.html"><a href="functional-enrichment.html#kegg"><i class="fa fa-check"></i><b>7.1.5</b> KEGG</a></li>
+<li class="chapter" data-level="7.1.6" data-path="functional-enrichment.html"><a href="functional-enrichment.html#msigdb-hallmark"><i class="fa fa-check"></i><b>7.1.6</b> MSigDB Hallmark</a></li>
+<li class="chapter" data-level="7.1.7" data-path="functional-enrichment.html"><a href="functional-enrichment.html#pregnancyplacenta-collection"><i class="fa fa-check"></i><b>7.1.7</b> Pregnancy/placenta collection</a></li>
+<li class="chapter" data-level="7.1.8" data-path="functional-enrichment.html"><a href="functional-enrichment.html#cross-ancestry-contrast"><i class="fa fa-check"></i><b>7.1.8</b> Cross-ancestry contrast</a></li>
+<li class="chapter" data-level="7.1.9" data-path="functional-enrichment.html"><a href="functional-enrichment.html#background-sensitivity"><i class="fa fa-check"></i><b>7.1.9</b> Background sensitivity</a></li>
+</ul></li>
+<li class="chapter" data-level="7.2" data-path="functional-enrichment.html"><a href="functional-enrichment.html#combined-catalog-enrichment-gprofiler"><i class="fa fa-check"></i><b>7.2</b> Combined-catalog enrichment (g:Profiler)</a></li>
+<li class="chapter" data-level="7.3" data-path="functional-enrichment.html"><a href="functional-enrichment.html#enrichment-limitations"><i class="fa fa-check"></i><b>7.3</b> Enrichment limitations</a></li>
+</ul></li>
+<li class="chapter" data-level="8" data-path="biological-interpretation.html"><a href="biological-interpretation.html"><i class="fa fa-check"></i><b>8</b> Biological interpretation</a>
+<ul>
+<li class="chapter" data-level="8.1" data-path="biological-interpretation.html"><a href="biological-interpretation.html#literature-context"><i class="fa fa-check"></i><b>8.1</b> Literature context</a></li>
+</ul></li>
+<li class="chapter" data-level="9" data-path="limitations-and-next-steps.html"><a href="limitations-and-next-steps.html"><i class="fa fa-check"></i><b>9</b> Limitations and next steps</a></li>
+<li class="chapter" data-level="10" data-path="reproducibility.html"><a href="reproducibility.html"><i class="fa fa-check"></i><b>10</b> Reproducibility</a></li>
+<li class="part"><span><b>II Report 2 · Fine-mapping</b></span></li>
+<li class="chapter" data-level="" data-path="cross-ancestry-fine-mapping-of-placental-xqtl-loci.html"><a href="cross-ancestry-fine-mapping-of-placental-xqtl-loci.html"><i class="fa fa-check"></i>Cross-ancestry fine-mapping of placental xQTL loci</a></li>
+<li class="chapter" data-level="11" data-path="overview.html"><a href="overview.html"><i class="fa fa-check"></i><b>11</b> Overview</a></li>
+<li class="chapter" data-level="12" data-path="pip-diagnostics.html"><a href="pip-diagnostics.html"><i class="fa fa-check"></i><b>12</b> PIP diagnostics</a></li>
+<li class="chapter" data-level="13" data-path="credible-sets.html"><a href="credible-sets.html"><i class="fa fa-check"></i><b>13</b> Credible sets</a>
+<ul>
+<li class="chapter" data-level="13.1" data-path="credible-sets.html"><a href="credible-sets.html#credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>13.1</b> Credible sets versus conditional signals</a></li>
+</ul></li>
+<li class="chapter" data-level="14" data-path="cross-ancestry-concordance.html"><a href="cross-ancestry-concordance.html"><i class="fa fa-check"></i><b>14</b> Cross-ancestry concordance</a></li>
+<li class="chapter" data-level="15" data-path="top-loci.html"><a href="top-loci.html"><i class="fa fa-check"></i><b>15</b> Top loci</a></li>
+<li class="chapter" data-level="16" data-path="functional-annotation-enrichment-of-high-pip-variants.html"><a href="functional-annotation-enrichment-of-high-pip-variants.html"><i class="fa fa-check"></i><b>16</b> Functional-annotation enrichment of high-PIP variants</a></li>
+<li class="chapter" data-level="17" data-path="gene-set-enrichment-of-high-confidence-fine-mapped-genes.html"><a href="gene-set-enrichment-of-high-confidence-fine-mapped-genes.html"><i class="fa fa-check"></i><b>17</b> Gene-set enrichment of high-confidence fine-mapped genes</a></li>
+<li class="chapter" data-level="18" data-path="run-diagnostics.html"><a href="run-diagnostics.html"><i class="fa fa-check"></i><b>18</b> Run diagnostics</a></li>
+<li class="chapter" data-level="19" data-path="methods-summary.html"><a href="methods-summary.html"><i class="fa fa-check"></i><b>19</b> Methods summary</a></li>
+<li class="chapter" data-level="20" data-path="session-info.html"><a href="session-info.html"><i class="fa fa-check"></i><b>20</b> Session info</a></li>
+<li class="part"><span><b>III Literature companions</b></span></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><i class="fa fa-check"></i>Top placental xQTL hits in the context of the published literature</a>
+<ul>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#background-and-scope"><i class="fa fa-check"></i>1. Background and scope</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#methods"><i class="fa fa-check"></i>2. Methods</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#overview-of-the-80-top-hits"><i class="fa fa-check"></i>3. Overview of the 80 top hits</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#cross-cutting-patterns"><i class="fa fa-check"></i>4. Cross-cutting patterns</a>
+<ul>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#recurring-multi-modality-loci"><i class="fa fa-check"></i>4.1 Recurring multi-modality loci</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#isoform-switch-qtls"><i class="fa fa-check"></i>4.2 Isoform-switch QTLs</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#splicing-and-intron-retention-top-hits-are-rare-variant-and-ancestry-specific"><i class="fa fa-check"></i>4.3 Splicing and intron-retention top hits are rare-variant and ancestry-specific</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#novel-hplrv2-transcripts-among-the-top-hits"><i class="fa fa-check"></i>4.4 Novel HPLRv2 transcripts among the top hits</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#rna-editing-coverage-asymmetry"><i class="fa fa-check"></i>4.5 RNA-editing coverage asymmetry</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#modality-by-modality-results-and-gene-snapshots"><i class="fa fa-check"></i>5. Modality-by-modality results and gene snapshots</a>
+<ul>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#isoform-expression"><i class="fa fa-check"></i>5.1 Isoform expression</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#isoforms"><i class="fa fa-check"></i>5.2 Isoforms</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#splicing"><i class="fa fa-check"></i>5.3 Splicing</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#intron-retention"><i class="fa fa-check"></i>5.4 Intron retention</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#alternative-tss"><i class="fa fa-check"></i>5.5 Alternative TSS</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#alternative-polya"><i class="fa fa-check"></i>5.6 Alternative polyA</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#rna-editing"><i class="fa fa-check"></i>5.7 RNA editing</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#transcript-stability"><i class="fa fa-check"></i>5.8 Transcript stability</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#synthesis"><i class="fa fa-check"></i>6. Synthesis</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#limitations"><i class="fa fa-check"></i>7. Limitations</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#files"><i class="fa fa-check"></i>8. Files</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><i class="fa fa-check"></i>Fine-mapped placental xQTL genes in the context of the published literature</a>
+<ul>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#background-and-scope-1"><i class="fa fa-check"></i>1. Background and scope</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#methods-1"><i class="fa fa-check"></i>2. Methods</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#overview-of-the-20-deep-dive-genes"><i class="fa fa-check"></i>3. Overview of the 20 deep-dive genes</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#cross-cutting-patterns-1"><i class="fa fa-check"></i>4. Cross-cutting patterns</a>
+<ul>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#the-most-recurrent-signals-are-the-least-characterized"><i class="fa fa-check"></i>4.1 The most recurrent signals are the least characterized</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#splicing-qtls-dominate-the-pregnancy-and-conflict-lenses"><i class="fa fa-check"></i>4.2 Splicing QTLs dominate the pregnancy and conflict lenses</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#fine-mapping-recovers-known-pregnancy-genes-as-positive-controls"><i class="fa fa-check"></i>4.3 Fine-mapping recovers known pregnancy genes as positive controls</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#imprinted-genes-are-enriched-and-cleanly-resolved"><i class="fa fa-check"></i>4.4 Imprinted genes are enriched and cleanly resolved</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#gene-snapshots-by-lens"><i class="fa fa-check"></i>5. Gene snapshots by lens</a>
+<ul>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#placental-biology"><i class="fa fa-check"></i>5.1 Placental biology</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#pregnancy-and-birth-outcomes"><i class="fa fa-check"></i>5.2 Pregnancy and birth outcomes</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#intragenomic-conflict"><i class="fa fa-check"></i>5.3 Intragenomic conflict</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#synthesis-1"><i class="fa fa-check"></i>6. Synthesis</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#limitations-1"><i class="fa fa-check"></i>7. Limitations</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#files-1"><i class="fa fa-check"></i>8. Files</a></li>
+</ul></li>
+</ul>
+
+      </nav>
+    </div>
+
+    <div class="book-body">
+      <div class="body-inner">
+        <div class="book-header" role="navigation">
+          <h1>
+            <i class="fa fa-circle-o-notch fa-spin"></i><a href="./">Cross-ancestry fine-mapping of placental xQTL loci</a>
+          </h1>
+        </div>
+
+        <div class="page-wrapper" tabindex="-1" role="main">
+          <div class="page-inner">
+
+            <section class="normal" id="section-">
+<div id="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature" class="section level1 unnumbered hasAnchor">
+<h1>Fine-mapped placental xQTL genes in the context of the published literature<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature" class="anchor-section" aria-label="Anchor link to header"></a></h1>
+<p><em>Companion literature review to <code>report_finemap.html</code> (Report 2). It is the
+fine-mapping counterpart to <code>literature_xqtl_mapping.md</code>, which reviews the
+top variant-level association hits from Report 1.</em></p>
+<div id="background-and-scope-1" class="section level2 unnumbered hasAnchor">
+<h2>1. Background and scope<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#background-and-scope-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>Report 2 (<code>report_finemap.html</code>) summarizes cross-ancestry (EUR + EAS) SuSHiE
+fine-mapping of every placental xQTL locus across nine molecular modalities
+(gene expression, isoform expression, isoform ratios, splicing, intron
+retention, alternative TSS, alternative polyA, RNA editing, and transcript
+stability). Fine-mapping collapses each associated locus to one or more 95%
+credible sets (CSs) of candidate causal variants and assigns every variant a
+posterior inclusion probability (PIP). The high-confidence gene set used here
+is the best credible set per locus with lead-variant PIP &gt;= 0.9, which
+nominates <strong>5,236 genes</strong> with at least one confidently resolved regulatory
+signal.</p>
+<p>Where Report 1’s companion review asked “which genes sit under the strongest
+association peaks,” this review asks a sharper question enabled by
+fine-mapping: <strong>which genes have a confidently resolved, often single-variant,
+causal regulatory signal, and what is already known about them in placental
+biology, pregnancy outcomes, and intragenomic conflict?</strong> Placental eQTL and
+multi-omic studies have established that common regulatory variants shape the
+placental transcriptome and connect to developmental and pregnancy phenotypes
+[6, 7, 8, 9]. Because the placenta is the arena of maternal-fetal conflict
+over nutrient transfer [1, 2, 3, 4], and because placental regulatory
+variation is increasingly tied to preeclampsia, fetal growth, and gestational
+duration [10, 11, 12], we read the fine-mapped catalog through three lenses:</p>
+<ul>
+<li><strong>Placental biology</strong> — genes that define trophoblast identity,
+syncytialization, and placental function, including genes with little or no
+prior placental characterization (candidate novel biology).</li>
+<li><strong>Pregnancy and birth outcomes</strong> — genes with established or candidate links
+to preeclampsia, fetal growth, parturition, and related complications.</li>
+<li><strong>Intragenomic conflict</strong> — imprinted genes and other loci where
+parent-of-origin selection (Haig’s kinship theory) is expected to leave
+strong, sometimes antagonistic, regulatory signatures [1, 2, 5].</li>
+</ul>
+</div>
+<div id="methods-1" class="section level2 unnumbered hasAnchor">
+<h2>2. Methods<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#methods-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<ul>
+<li><strong>High-confidence set.</strong> From <code>finemap_credible_sets.tsv.gz</code>, the credible
+set with the highest lead-variant PIP was taken per locus; a locus enters the
+high-confidence set when that lead PIP &gt;= 0.9. This yields 5,236 genes. The
+lead-PIP distribution is strongly bimodal (median ~0.93), so PIP &gt;= 0.9 alone
+is permissive; cross-modality recurrence and credible-set size are used as
+secondary evidence (Report 2, “Credible sets”).</li>
+<li><strong>Candidate ranking.</strong> Genes were ranked by (i) the number of modalities in
+which they reach the high-confidence threshold (cross-modality recurrence),
+(ii) maximum lead PIP, and (iii) minimum credible-set size, and were flagged
+against a priori lists: imprinted genes (geneimprint), preeclampsia GWAS
+candidates, syncytiotrophoblast (STB) syncytialization markers, HPA
+placenta-enriched genes, and KRAB-zinc-finger proteins.</li>
+<li><strong>Literature screen.</strong> All 264 ranked/flagged candidate genes were screened
+against PubMed (E-utilities <code>esearch</code>, 0.34 s rate limit) with three
+lens-specific queries per gene (placenta/trophoblast; pregnancy/birth
+outcomes; imprinting/intragenomic conflict). Hit counts and the top PMIDs per
+lens were recorded (<code>finemap_lit_screen_candidates.tsv</code>).</li>
+<li><strong>Deep-dive selection.</strong> Twenty genes were chosen to span the three lenses,
+balancing (a) cross-modality recurrence, (b) strength and specificity of the
+existing literature, and (c) novelty. For each, lens-specific PubMed queries
+were re-run with <code>sort=relevance</code> and the top records retrieved (<code>efetch</code>),
+with citation counts from the NIH iCite API. Synthesis is at the abstract
+level; the 59 references cited here are indexed in
+<code>finemap_hits_evidence_table.csv</code>, whose <code>index</code> column matches the <code>[N]</code>
+citations below. Claims about the atlas itself (PIP values, credible-set
+sizes, modality recurrence) come from the project data, not the literature.</li>
+</ul>
+</div>
+<div id="overview-of-the-20-deep-dive-genes" class="section level2 unnumbered hasAnchor">
+<h2>3. Overview of the 20 deep-dive genes<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#overview-of-the-20-deep-dive-genes" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<table>
+<thead>
+<tr class="header">
+<th>Gene</th>
+<th>Lens</th>
+<th>Modalities</th>
+<th>Max lead PIP</th>
+<th>Min CS size</th>
+<th>Prior flag</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>WSB1</td>
+<td>Placental (novel)</td>
+<td>7</td>
+<td>1.00</td>
+<td>1</td>
+<td>none</td>
+</tr>
+<tr class="even">
+<td>GBP3</td>
+<td>Placental (novel)</td>
+<td>6</td>
+<td>1.00</td>
+<td>1</td>
+<td>none</td>
+</tr>
+<tr class="odd">
+<td>CYP19A1</td>
+<td>Placental</td>
+<td>5</td>
+<td>1.00</td>
+<td>1</td>
+<td>STB marker</td>
+</tr>
+<tr class="even">
+<td>CAST</td>
+<td>Placental (novel)</td>
+<td>4</td>
+<td>1.00</td>
+<td>1</td>
+<td>none</td>
+</tr>
+<tr class="odd">
+<td>SIGLEC6</td>
+<td>Placental</td>
+<td>4</td>
+<td>1.00</td>
+<td>1</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td>GCM1</td>
+<td>Placental</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>STB marker</td>
+</tr>
+<tr class="odd">
+<td>GSTM1</td>
+<td>Placental</td>
+<td>3</td>
+<td>1.00</td>
+<td>1</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td>ERAP1</td>
+<td>Pregnancy</td>
+<td>6</td>
+<td>1.00</td>
+<td>1</td>
+<td>PE GWAS</td>
+</tr>
+<tr class="odd">
+<td>FLT1</td>
+<td>Pregnancy</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>PE GWAS</td>
+</tr>
+<tr class="even">
+<td>PAPPA</td>
+<td>Pregnancy</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>—</td>
+</tr>
+<tr class="odd">
+<td>HLA-C</td>
+<td>Pregnancy</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>PE GWAS</td>
+</tr>
+<tr class="even">
+<td>ACVR2A</td>
+<td>Pregnancy</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>PE GWAS</td>
+</tr>
+<tr class="odd">
+<td>HSD11B2</td>
+<td>Pregnancy</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>STB marker</td>
+</tr>
+<tr class="even">
+<td>IL1R1</td>
+<td>Pregnancy</td>
+<td>4</td>
+<td>1.00</td>
+<td>1</td>
+<td>—</td>
+</tr>
+<tr class="odd">
+<td>IGF2</td>
+<td>Conflict</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>imprinted</td>
+</tr>
+<tr class="even">
+<td>IGF2R</td>
+<td>Conflict</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>imprinted</td>
+</tr>
+<tr class="odd">
+<td>MEG3</td>
+<td>Conflict</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>imprinted</td>
+</tr>
+<tr class="even">
+<td>PEG3</td>
+<td>Conflict</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>imprinted</td>
+</tr>
+<tr class="odd">
+<td>MEST</td>
+<td>Conflict</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>imprinted</td>
+</tr>
+<tr class="even">
+<td>GNAS</td>
+<td>Conflict</td>
+<td>1</td>
+<td>1.00</td>
+<td>1</td>
+<td>imprinted</td>
+</tr>
+</tbody>
+</table>
+<p>Every selected gene reaches the high-confidence threshold with a single-variant
+credible set (min CS size = 1) and lead PIP ~1.0 in at least one modality, so
+each represents a confidently resolved regulatory signal rather than a diffuse
+association peak.</p>
+</div>
+<div id="cross-cutting-patterns-1" class="section level2 unnumbered hasAnchor">
+<h2>4. Cross-cutting patterns<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#cross-cutting-patterns-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="the-most-recurrent-signals-are-the-least-characterized" class="section level3 unnumbered hasAnchor">
+<h3>4.1 The most recurrent signals are the least characterized<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#the-most-recurrent-signals-are-the-least-characterized" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>The genes with the broadest cross-modality regulatory control are precisely
+those with the thinnest placental literature. <strong>WSB1</strong> (7 modalities) and
+<strong>GBP3</strong> (6 modalities) each carry a single-variant credible set at lead PIP
+= 1.0 across six to seven independent molecular layers, yet neither has any
+prior placental characterization (Section 5.1). This inversion — strongest
+genetic evidence, least biological annotation — is the clearest discovery
+signal in the fine-mapped catalog and mirrors a pattern seen in Report 1, where
+several top hits were novel HPLRv2 transcripts.</p>
+</div>
+<div id="splicing-qtls-dominate-the-pregnancy-and-conflict-lenses" class="section level3 unnumbered hasAnchor">
+<h3>4.2 Splicing QTLs dominate the pregnancy and conflict lenses<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#splicing-qtls-dominate-the-pregnancy-and-conflict-lenses" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>Eleven of the thirteen pregnancy-outcome and conflict genes are fine-mapped
+<strong>only</strong> through splicing (FLT1, PAPPA, HLA-C, ACVR2A, HSD11B2, IGF2, MEG3,
+PEG3, MEST, GNAS) or expression (IGF2R). This is consistent with Report 2’s
+headline enrichment — high-confidence splicing-QTL genes are enriched for
+syncytiotrophoblast syncytialization markers (FDR ~ 8e-5) — and suggests that
+post-transcriptional regulation, more than transcript abundance, is the
+readout through which many pregnancy-relevant loci act in term placenta.</p>
+</div>
+<div id="fine-mapping-recovers-known-pregnancy-genes-as-positive-controls" class="section level3 unnumbered hasAnchor">
+<h3>4.3 Fine-mapping recovers known pregnancy genes as positive controls<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#fine-mapping-recovers-known-pregnancy-genes-as-positive-controls" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>The pregnancy lens is anchored by genes with strong prior evidence — FLT1 [10,
+11, 31], PAPPA [33, 34], HLA-C [35, 36], ACVR2A [37, 38], ERAP1 [28, 29] —
+each resolved to a single-variant credible set. That fine-mapping
+re-nominates these established loci with high confidence cross-validates the
+pipeline and calibrates interpretation of the novel signals.</p>
+</div>
+<div id="imprinted-genes-are-enriched-and-cleanly-resolved" class="section level3 unnumbered hasAnchor">
+<h3>4.4 Imprinted genes are enriched and cleanly resolved<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#imprinted-genes-are-enriched-and-cleanly-resolved" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>Six canonical imprinted genes (IGF2, IGF2R, MEG3, PEG3, MEST, GNAS) carry
+single-variant credible sets, part of a broader pool of 27 imprinted genes in
+the high-confidence set. Their clean resolution is notable because imprinting
+places effectively all regulatory weight on one parental allele, so regulatory
+variants at these loci can have outsized, parent-of-origin-specific effects on
+placental and fetal growth [1, 2, 3].</p>
+</div>
+</div>
+<div id="gene-snapshots-by-lens" class="section level2 unnumbered hasAnchor">
+<h2>5. Gene snapshots by lens<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#gene-snapshots-by-lens" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="placental-biology" class="section level3 unnumbered hasAnchor">
+<h3>5.1 Placental biology<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#placental-biology" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p><strong>WSB1 (WD repeat and SOCS box 1) — 7 modalities, lead PIP 1.0, single-variant
+CS.</strong> The single most recurrent high-confidence gene in the atlas, with
+resolved signals in alt_TSS, expression, intron retention, isoform expression,
+RNA editing, splicing, and stability. WSB1 encodes the substrate-recognition
+subunit of an E3 ubiquitin ligase and is a HIF-1 target that promotes
+degradation of VHL and HIPK2, positioning it at the center of the hypoxia
+response that dominates early placentation [13]. Critically, WSB1 produces at
+least three splice isoforms with distinct, partly opposing effects on cell
+proliferation and apoptosis [14] — so the multi-layer splicing/isoform signal
+we resolve is likely functionally consequential, not neutral. No placental
+role has been reported; WSB1 is a priority candidate for functional follow-up.</p>
+<p><strong>GBP3 (guanylate-binding protein 3) — 6 modalities, lead PIP 1.0,
+single-variant CS.</strong> Resolved across alt_polyA, expression, isoform
+expression, isoforms, splicing, and stability. GBPs are interferon-inducible
+GTPases that act as intracellular pattern-recognition proteins [15]; GBP3
+specifically governs caspase-4 activation on cytosolic bacteria to trigger
+pyroptotic cell death [16]. Cell-autonomous innate immunity at the
+maternal-fetal interface is biologically plausible (defense against ascending
+infection) but unstudied for GBP3 in placenta — a second high-confidence novel
+nomination.</p>
+<p><strong>CYP19A1 (aromatase) — 5 modalities, lead PIP 1.0, single-variant CS; STB
+marker.</strong> Aromatase catalyzes estrogen synthesis and is one of the most
+placenta-specific genes known: its promoter drives trophoblast-exclusive
+expression (the basis of the Cyp19a1-Cre placenta-specific mouse) [17], and
+placental CYP19A1 also metabolizes xenobiotics such as nifedipine [18].
+Aromatase/CYP activity is dysregulated in preeclampsia organoid models [19].
+The strong multi-modality signal here is a reassuring positive control for a
+bona fide placenta-enriched regulator.</p>
+<p><strong>CAST (calpastatin) — 4 modalities, lead PIP 1.0, single-variant CS.</strong>
+Calpastatin is the endogenous inhibitor of the calcium-dependent calpain
+proteases. The calpain/calpastatin system acts at mitochondria-associated ER
+membranes to regulate calcium homeostasis, autophagy, and apoptosis, and its
+components are altered in preeclamptic placentas [20]. CAST’s cross-modality
+signal (isoform expression, isoforms, RNA editing, splicing) is essentially
+unstudied in human placenta and represents a third novel, mechanistically
+grounded candidate.</p>
+<p><strong>SIGLEC6 (sialic acid-binding Ig-like lectin 6) — 4 modalities, lead PIP 1.0,
+single-variant CS.</strong> SIGLEC6 is among the most placenta-specific genes and an
+emerging preeclampsia biomarker: circulating SIGLEC6 is elevated ~9.5-fold in
+preterm preeclampsia and tracks disease severity across seven cohorts [21].
+Mechanistically, SIGLEC6 overexpression impairs trophoblast syncytialization
+and promotes macrophage M1 polarization in early-onset disease [22], and on
+syncytiotrophoblasts it mediates extracellular-vesicle uptake through a
+noncanonical glycolipid-binding pocket [23]. The fine-mapped regulatory
+variants may therefore influence both placental development and a clinically
+measured circulating biomarker.</p>
+<p><strong>GCM1 (glial cells missing 1) — splicing, lead PIP 1.0, single-variant CS;
+STB marker.</strong> GCM1 is the master transcription factor of syncytiotrophoblast
+differentiation, activating syncytin and hCG-beta [24] and sitting at the
+center of the DeltaNp63alpha/GCM1 switch that governs the
+cytotrophoblast-to-syncytiotrophoblast transition [25]. A single-variant
+splicing credible set at GCM1 directly implicates post-transcriptional control
+of the syncytialization program — dovetailing with the report-level enrichment
+of splicing QTLs for STB markers.</p>
+<p><strong>GSTM1 (glutathione S-transferase mu 1) — 3 modalities, lead PIP 1.0,
+single-variant CS.</strong> GSTM1 is a central glutathione-conjugating enzyme in
+cellular oxidative-stress defense [27]. Although the common GSTM1-null
+deletion shows no robust association with preeclampsia [26], our signal is a
+finely resolved expression/splicing QTL, suggesting regulatory (rather than
+null-allele) modulation of placental glutathione metabolism — consistent with
+the KEGG glutathione-metabolism enrichment among fine-mapped expression genes
+(Report 2).</p>
+</div>
+<div id="pregnancy-and-birth-outcomes" class="section level3 unnumbered hasAnchor">
+<h3>5.2 Pregnancy and birth outcomes<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#pregnancy-and-birth-outcomes" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p><strong>ERAP1 (endoplasmic reticulum aminopeptidase 1) — 6 modalities, lead PIP 1.0,
+single-variant CS; PE GWAS candidate.</strong> ERAP1 trims peptides for MHC-I loading
+and degrades vasoactive peptides; it is expressed in placenta, changes in
+preeclampsia from the first trimester, and associates with immune-cell
+activation [29], and its variants are associated with eclampsia/preeclampsia
+[28]. ERAP1 sits at the trophoblast-immune interface that governs spiral-artery
+remodeling [30]. Its six-modality recurrence (expression, intron retention,
+isoform expression, RNA editing, splicing, stability) makes it one of the most
+heavily regulated pregnancy genes in the atlas; the adjacent ERAP2 (the
+balancing-selection positive control of Report 1) shares the same haplotype
+background.</p>
+<p><strong>FLT1 (fms-like tyrosine kinase 1) — splicing, lead PIP 1.0, single-variant
+CS; PE GWAS.</strong> FLT1 encodes the VEGF receptor whose soluble splice isoform,
+sFlt-1, is the anti-angiogenic driver of the maternal preeclampsia phenotype;
+the sFlt-1/PlGF ratio is a frontline clinical biomarker [31, 32]. Fetal-genome
+GWAS identified FLT1 as a robust preeclampsia risk locus [10, 11]. That we
+resolve a <strong>splicing</strong> credible set at FLT1 is mechanistically apt: the
+pathogenic species is itself a splice isoform, so genetically regulated
+splicing at FLT1 is a direct candidate mechanism for modulating the
+sFlt-1/PlGF balance.</p>
+<p><strong>PAPPA (pregnancy-associated plasma protein A) — splicing, lead PIP 1.0,
+single-variant CS.</strong> PAPP-A is a metalloprotease that frees insulin-like
+growth factors from their binding proteins, thereby promoting fetal growth;
+low first-trimester PAPP-A is an established predictor of preeclampsia and
+adverse outcomes [33] and a core component of first-trimester competing-risks
+screening [34]. A single-variant splicing signal at PAPPA nominates a
+regulatory handle on a clinically deployed biomarker.</p>
+<p><strong>HLA-C (major histocompatibility complex class I, C) — splicing, lead PIP
+1.0, single-variant CS; PE GWAS.</strong> HLA-C on extravillous trophoblasts is the
+dominant ligand for killer-cell immunoglobulin-like receptors (KIR) on uterine
+NK cells, and this interaction calibrates trophoblast invasion and
+spiral-artery remodeling [35, 36]; specific HLA-C/KIR combinations alter
+preeclampsia risk. A resolved splicing QTL at HLA-C adds a regulatory layer to
+a locus usually considered through protein-coding and copy-number variation.</p>
+<p><strong>ACVR2A (activin A receptor type 2A) — splicing, lead PIP 1.0, single-variant
+CS; PE GWAS candidate.</strong> ACVR2A was nominated by linkage and association as a
+preeclampsia positional candidate at 2q22 [37], though replication has been
+population-dependent [38]. Functionally, ACVR2A promotes trophoblast migration
+and invasion via TCF7/c-JUN and is downregulated in preeclamptic placentas
+[39]. The fine-mapped splicing signal offers a candidate causal mechanism
+reconciling the genetic association with the observed expression changes.</p>
+<p><strong>HSD11B2 (hydroxysteroid 11-beta dehydrogenase 2) — splicing, lead PIP 1.0,
+single-variant CS; STB marker.</strong> HSD11B2 forms the placental glucocorticoid
+barrier, inactivating maternal cortisol to protect the fetus [40]; its
+placental expression is epigenetically tuned by maternal distress [41] and its
+variants are associated with hypertensive pregnancy [42]. A single-variant
+splicing credible set identifies a regulatory lever on a barrier central to
+fetal programming.</p>
+<p><strong>IL1R1 (interleukin 1 receptor type 1) — 4 modalities, lead PIP 1.0,
+single-variant CS.</strong> IL1R1 transduces IL-1 signaling, a core inflammatory
+pathway in parturition: IL-1 receptor signaling is necessary for
+infection-induced preterm labor in mice [44], IL1R1 is dynamically regulated
+across rat parturition [43], and IL1R1 polymorphisms associate with
+chorioamnionitis risk [45]. Its cross-modality signal (expression, isoform
+expression, RNA editing, splicing) implicates regulated IL-1 responsiveness in
+the timing of labor.</p>
+</div>
+<div id="intragenomic-conflict" class="section level3 unnumbered hasAnchor">
+<h3>5.3 Intragenomic conflict<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#intragenomic-conflict" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>The six imprinted genes below are the clearest molecular footprint of
+maternal-fetal conflict in the catalog [1, 2, 3]. Because imprinting enforces
+monoallelic expression, a regulatory variant at these loci acts on effectively
+the only expressed copy, so parent-of-origin-specific effects on placental and
+fetal growth are expected [2, 48].</p>
+<p><strong>IGF2 (insulin-like growth factor 2) — splicing, lead PIP 1.0, single-variant
+CS; imprinted (paternally expressed).</strong> IGF2 is the canonical
+growth-promoting imprinted gene: placental-endocrine Igf2 manipulates maternal
+metabolism to partition nutrients to the fetus [46], and the IGF2-H19 complex
+matches placental nutrient supply to fetal demand [47]. Chorionic-villus IGF2
+expression correlates with fetal growth [48]. A resolved splicing QTL at IGF2
+is a direct regulatory handle on the fetal side of the conflict.</p>
+<p><strong>IGF2R (IGF2 receptor) — expression, lead PIP 1.0, single-variant CS;
+imprinted (maternally expressed).</strong> IGF2R is the functional antagonist of
+IGF2 — it sequesters and degrades IGF2, restraining growth — and the
+IGF2/IGF2R pair was the first described embodiment of parental conflict [49].
+A cleanly resolved expression QTL at the maternally expressed receptor
+complements the paternally expressed ligand signal above.</p>
+<p><strong>MEG3 (maternally expressed 3) — splicing, lead PIP 1.0, single-variant CS;
+imprinted.</strong> MEG3 is a maternally expressed lncRNA in the Dlk1-Dio3 imprinted
+domain; the Meg3 transcript is required in cis to repress paternal Dlk1 [50],
+and its differentially methylated region is the imprinting-control element of
+the locus, with loss causing embryonic death and placental loss of imprinting
+[51]. A splicing credible set at MEG3 points to post-transcriptional control
+of an imprinting-control lncRNA.</p>
+<p><strong>PEG3 (paternally expressed 3) — splicing, lead PIP 1.0, single-variant CS;
+imprinted.</strong> PEG3 anchors a ~500-kb imprinted domain controlling fetal growth
+and maternal-caring behavior [52], and imprinted DMRs (including this
+pathway’s H19/MEST) are sensitive to the conception environment [53]. The
+resolved splicing signal adds PEG3 to the set of conflict loci under genetic
+regulatory control in term placenta.</p>
+<p><strong>MEST (mesoderm-specific transcript) — splicing, lead PIP 1.0, single-variant
+CS; imprinted (paternally expressed).</strong> Loss of paternally expressed Mest
+causes embryonic growth retardation and abnormal maternal behavior in mice
+[54], placental MEST is downregulated in early-onset preeclampsia [55], and
+its placenta-conserved imprinting across mammals supports a conflict-driven
+origin [56]. MEST thus links the conflict lens directly back to pregnancy
+disease.</p>
+<p><strong>GNAS (GNAS complex locus) — splicing, lead PIP 1.0, single-variant CS;
+imprinted.</strong> GNAS is a complex imprinted locus with oppositely imprinted
+transcripts (Gs-alpha vs XL-alpha-s) whose parent-of-origin effects on growth
+and metabolism follow the conflict model [57]; its disruption causes human
+imprinting disorders [58], and altered GNAS NESP55 methylation is seen in
+placental overgrowth (placental mesenchymal dysplasia) [59]. A single-variant
+splicing credible set resolves regulatory variation at this dosage-sensitive
+locus.</p>
+</div>
+</div>
+<div id="synthesis-1" class="section level2 unnumbered hasAnchor">
+<h2>6. Synthesis<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#synthesis-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>Reading the high-confidence fine-mapped genes through the three lenses yields a
+coherent picture. The <strong>pregnancy</strong> and <strong>conflict</strong> lenses are dominated by
+single-variant <strong>splicing</strong> credible sets at genes with strong prior evidence
+(FLT1, PAPPA, HLA-C, ACVR2A, HSD11B2) or established imprinting (IGF2, IGF2R,
+MEG3, PEG3, MEST, GNAS) — these serve as positive controls that validate the
+fine-mapping and point to post-transcriptional regulation as the operative
+mechanism. The <strong>placental-biology</strong> lens, by contrast, surfaces the atlas’s
+most novel contribution: broadly cross-modality genes (WSB1, GBP3, CAST) with
+single-variant resolution but no prior placental annotation, alongside
+mechanistically anchored regulators of syncytialization (GCM1, SIGLEC6,
+CYP19A1). The convergence of the splicing-QTL enrichment for
+syncytiotrophoblast markers (Report 2) with the splicing-dominated pregnancy
+and conflict signals here suggests that <strong>regulation of RNA processing in the
+syncytiotrophoblast is a principal route by which common genetic variation
+shapes placental function and pregnancy outcomes.</strong></p>
+</div>
+<div id="limitations-1" class="section level2 unnumbered hasAnchor">
+<h2>7. Limitations<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#limitations-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<ul>
+<li><strong>Abstract-level synthesis.</strong> Key findings are drawn from abstracts (and, for
+framing papers, review-level knowledge); individual effect sizes and
+subgroup results were not re-extracted from full texts.</li>
+<li><strong>Selection is illustrative, not exhaustive.</strong> Twenty genes were chosen to
+span the three lenses; the full 264-gene screen
+(<code>finemap_lit_screen_candidates.tsv</code>) and the 5,236-gene high-confidence set
+contain additional candidates (e.g., SGCE, ZDBF2, KISS1, the PSG family,
+GLS, PSCA) not given deep-dives here.</li>
+<li><strong>Lens assignment is not exclusive.</strong> Several genes (e.g., SIGLEC6, MEST,
+CYP19A1) span placental biology and pregnancy disease; each is discussed
+under its dominant lens.</li>
+<li><strong>Credible-set causality is statistical.</strong> A single-variant credible set at
+lead PIP ~1.0 is strong evidence of a causal regulatory variant but does not
+by itself prove the molecular mechanism or the direction of effect on the
+phenotype.</li>
+<li><strong>Literature recency.</strong> PubMed and iCite were queried at the time of writing;
+citation counts and the literature landscape will drift.</li>
+</ul>
+</div>
+<div id="files-1" class="section level2 unnumbered hasAnchor">
+<h2>8. Files<a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#files-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<ul>
+<li><code>literature_finemap.md</code> — this report</li>
+<li><code>finemap_hits_evidence_table.csv</code> — all 59 cited references with
+bibliographic metadata and key-finding notes; the <code>index</code> column matches the
+<code>[N]</code> citations above</li>
+<li><code>finemap_lit_screen_candidates.tsv</code> — the 264-gene PubMed screen (hit counts
+and top PMIDs per lens) used to select the deep-dive genes</li>
+<li><code>report_finemap.html</code> — Report 2 (fine-mapping results), the companion this
+review supports</li>
+</ul>
+
+</div>
+</div>
+            </section>
+
+          </div>
+        </div>
+      </div>
+<a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html" class="navigation navigation-prev navigation-unique" aria-label="Previous page"><i class="fa fa-angle-left"></i></a>
+
+    </div>
+  </div>
+<script src="libs/gitbook-2.6.7/js/app.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/clipboard.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-search.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-sharing.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-fontsettings.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-bookdown.js"></script>
+<script src="libs/gitbook-2.6.7/js/jquery.highlight.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-clipboard.js"></script>
+<script>
+gitbook.require(["gitbook"], function(gitbook) {
+gitbook.start({
+  "sharing": null,
+  "fontsettings": {
+    "theme": "white",
+    "family": "sans",
+    "size": 2
+  },
+  "edit": {
+    "link": null,
+    "text": null
+  },
+  "history": {
+    "link": null,
+    "text": null
+  },
+  "view": {
+    "link": null,
+    "text": null
+  },
+  "download": null,
+  "search": {
+    "engine": "fuse",
+    "options": null
+  },
+  "toc": {
+    "collapse": "section",
+    "scroll_highlight": true
+  }
+});
+});
+</script>
+
+</body>
+
+</html>

@@ -1,0 +1,27 @@
+# (PART) Report 1 · xQTL mapping {-}
+
+# Multi-ancestry placental xQTL analysis {.unnumbered}
+
+**xQTL mapping report (Report 1 of 2) — internal QC + R21 progress**
+
+*Bhattacharya Lab (analysis: S. Bresnahan; report generated with Biomni/Phylo)*
+
+This report covers cis-xQTL association mapping across nine placental RNA
+modalities (gene expression, isoform expression and ratio, splicing, intron
+retention, alternative TSS and polyA, RNA editing, transcript stability) in
+two ancestry strata (EAS n = 280, EUR n = 140), from raw cohort data through
+the combined cross-ancestry catalog.
+
+Chapters in this report:
+
+- **Executive summary** — headline numbers and the ERAP2/ERAP1 preeclampsia locus
+- **Methods** — cohorts, genotyping, phenotyping, and the mapping pipeline
+- **Cohort and data landscape** — sample attrition, composition, and QC
+- **Pipeline and calibration** — HCP optimization, permutation calibration, power
+- **The landscape of placental xQTL regulation** — discovery per modality
+- **Cross-ancestry regulation** — sharing and concordance between strata
+- **Discovery catalog** — top hits and the combined xQTL catalog
+- **Functional enrichment** — annotation enrichment of lead variants
+- **Biological interpretation** — headline loci in context
+- **Limitations and next steps**
+- **Reproducibility** — software, environments, and session info

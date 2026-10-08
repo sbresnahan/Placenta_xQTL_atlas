@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+<head>
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Cross-ancestry fine-mapping of placental xQTL loci</title>
+  <meta name="description" content="Cross-ancestry fine-mapping of placental xQTL loci" />
+  <meta name="generator" content="bookdown 0.48 and GitBook 2.6.7" />
+
+  <meta property="og:title" content="Cross-ancestry fine-mapping of placental xQTL loci" />
+  <meta property="og:type" content="book" />
+  
+  
+  
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Cross-ancestry fine-mapping of placental xQTL loci" />
+  
+  
+  
+
+<meta name="author" content="Bhattacharya Lab (analysis: S. Bresnahan; report generated with Biomni/Phylo)" />
+
+
+<meta name="date" content="2026-10-07" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  
+  
+<link rel="prev" href="reproducibility.html"/>
+<link rel="next" href="overview.html"/>
+<script src="libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.6/dist/fuse.min.js"></script>
+<link href="libs/gitbook-2.6.7/css/style.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-table.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-bookdown.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-highlight.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-search.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-fontsettings.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-clipboard.css" rel="stylesheet" />
+
+
+
+
+
+
+
+
+<link href="libs/anchor-sections-1.1.0/anchor-sections.css" rel="stylesheet" />
+<link href="libs/anchor-sections-1.1.0/anchor-sections-hash.css" rel="stylesheet" />
+<script src="libs/anchor-sections-1.1.0/anchor-sections.js"></script>
+
+
+
+<style type="text/css">
+  
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+</style>
+
+<link rel="stylesheet" href="style.css" type="text/css" />
+</head>
+
+<body>
+
+
+
+  <div class="book without-animation with-summary font-size-2 font-family-1" data-basepath=".">
+
+    <div class="book-summary">
+      <nav role="navigation">
+
+<ul class="summary">
+<li><a href="./">Placenta xQTL Atlas</a></li>
+
+<li class="divider"></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html"><i class="fa fa-check"></i>Placenta xQTL Atlas</a>
+<ul>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#the-documents"><i class="fa fa-check"></i>The documents</a></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#how-to-read-this-atlas"><i class="fa fa-check"></i>How to read this atlas</a></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#source-and-data"><i class="fa fa-check"></i>Source and data</a></li>
+</ul></li>
+<li class="part"><span><b>I Report 1 · xQTL mapping</b></span></li>
+<li class="chapter" data-level="" data-path="multi-ancestry-placental-xqtl-analysis.html"><a href="multi-ancestry-placental-xqtl-analysis.html"><i class="fa fa-check"></i>Multi-ancestry placental xQTL analysis</a></li>
+<li class="chapter" data-level="1" data-path="executive-summary.html"><a href="executive-summary.html"><i class="fa fa-check"></i><b>1</b> Executive summary</a>
+<ul>
+<li class="chapter" data-level="1.1" data-path="executive-summary.html"><a href="executive-summary.html#study-cohorts-and-data"><i class="fa fa-check"></i><b>1.1</b> Study cohorts and data</a></li>
+<li class="chapter" data-level="1.2" data-path="executive-summary.html"><a href="executive-summary.html#genotype-processing-and-imputation"><i class="fa fa-check"></i><b>1.2</b> Genotype processing and imputation</a></li>
+<li class="chapter" data-level="1.3" data-path="executive-summary.html"><a href="executive-summary.html#ancestry-assignment-and-cross-cohort-genotype-pooling"><i class="fa fa-check"></i><b>1.3</b> Ancestry assignment and cross-cohort genotype pooling</a></li>
+<li class="chapter" data-level="1.4" data-path="executive-summary.html"><a href="executive-summary.html#rna-seq-processing"><i class="fa fa-check"></i><b>1.4</b> RNA-seq processing</a></li>
+<li class="chapter" data-level="1.5" data-path="executive-summary.html"><a href="executive-summary.html#transcriptomic-phenotyping"><i class="fa fa-check"></i><b>1.5</b> Transcriptomic phenotyping</a></li>
+<li class="chapter" data-level="1.6" data-path="executive-summary.html"><a href="executive-summary.html#cell-type-deconvolution"><i class="fa fa-check"></i><b>1.6</b> Cell-type deconvolution</a></li>
+<li class="chapter" data-level="1.7" data-path="executive-summary.html"><a href="executive-summary.html#rna-to-dna-sample-linkage"><i class="fa fa-check"></i><b>1.7</b> RNA to DNA sample linkage</a></li>
+<li class="chapter" data-level="1.8" data-path="executive-summary.html"><a href="executive-summary.html#phenotype-pooling-and-normalization"><i class="fa fa-check"></i><b>1.8</b> Phenotype pooling and normalization</a></li>
+<li class="chapter" data-level="1.9" data-path="executive-summary.html"><a href="executive-summary.html#genotype-principal-components-and-sample-quality-control"><i class="fa fa-check"></i><b>1.9</b> Genotype principal components and sample quality control</a></li>
+<li class="chapter" data-level="1.10" data-path="executive-summary.html"><a href="executive-summary.html#covariate-assembly-and-hidden-factor-estimation"><i class="fa fa-check"></i><b>1.10</b> Covariate assembly and hidden factor estimation</a></li>
+<li class="chapter" data-level="1.11" data-path="executive-summary.html"><a href="executive-summary.html#cis-xqtl-mapping"><i class="fa fa-check"></i><b>1.11</b> cis-xQTL mapping</a></li>
+<li class="chapter" data-level="1.12" data-path="executive-summary.html"><a href="executive-summary.html#cross-ancestry-fine-mapping"><i class="fa fa-check"></i><b>1.12</b> Cross-ancestry fine-mapping</a></li>
+<li class="chapter" data-level="1.13" data-path="executive-summary.html"><a href="executive-summary.html#functional-enrichment-of-fine-mapped-variants"><i class="fa fa-check"></i><b>1.13</b> Functional enrichment of fine-mapped variants</a></li>
+<li class="chapter" data-level="1.14" data-path="executive-summary.html"><a href="executive-summary.html#report-integration-targeted-lookups"><i class="fa fa-check"></i><b>1.14</b> Report-integration targeted lookups</a></li>
+<li class="chapter" data-level="1.15" data-path="executive-summary.html"><a href="executive-summary.html#software-and-computing"><i class="fa fa-check"></i><b>1.15</b> Software and computing</a></li>
+</ul></li>
+<li class="chapter" data-level="2" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html"><i class="fa fa-check"></i><b>2</b> Cohort and data landscape</a>
+<ul>
+<li class="chapter" data-level="2.1" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#sample-attrition"><i class="fa fa-check"></i><b>2.1</b> Sample attrition</a></li>
+<li class="chapter" data-level="2.2" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#cohort-composition-and-genotype-processing"><i class="fa fa-check"></i><b>2.2</b> Cohort composition and genotype processing</a></li>
+<li class="chapter" data-level="2.3" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#genotype-pca"><i class="fa fa-check"></i><b>2.3</b> Genotype PCA</a></li>
+<li class="chapter" data-level="2.4" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#covariate-qc"><i class="fa fa-check"></i><b>2.4</b> Covariate QC</a></li>
+<li class="chapter" data-level="2.5" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#phenotype-processing-qc"><i class="fa fa-check"></i><b>2.5</b> Phenotype processing QC</a></li>
+<li class="chapter" data-level="2.6" data-path="cohort-and-data-landscape.html"><a href="cohort-and-data-landscape.html#sequencing-qc"><i class="fa fa-check"></i><b>2.6</b> Sequencing QC</a></li>
+</ul></li>
+<li class="chapter" data-level="3" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html"><i class="fa fa-check"></i><b>3</b> Pipeline and calibration</a>
+<ul>
+<li class="chapter" data-level="3.1" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#pipeline-recap"><i class="fa fa-check"></i><b>3.1</b> Pipeline recap</a></li>
+<li class="chapter" data-level="3.2" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#hcp-count-optimization-module-25b"><i class="fa fa-check"></i><b>3.2</b> HCP count optimization (module 25b)</a></li>
+<li class="chapter" data-level="3.3" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#permutation-calibrated-p-value-qq-plots"><i class="fa fa-check"></i><b>3.3</b> Permutation-calibrated p-value QQ plots</a></li>
+<li class="chapter" data-level="3.4" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#signal-fraction-storey-%CF%801-per-layer"><i class="fa fa-check"></i><b>3.4</b> Signal fraction (Storey π1) per layer</a></li>
+<li class="chapter" data-level="3.5" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#power-analysis"><i class="fa fa-check"></i><b>3.5</b> Power analysis</a></li>
+<li class="chapter" data-level="3.6" data-path="pipeline-and-calibration.html"><a href="pipeline-and-calibration.html#carrier-count-audit-mac-floor-propagation"><i class="fa fa-check"></i><b>3.6</b> Carrier-count audit: MAC floor propagation</a></li>
+</ul></li>
+<li class="chapter" data-level="4" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html"><i class="fa fa-check"></i><b>4</b> The landscape of placental xQTL regulation</a>
+<ul>
+<li class="chapter" data-level="4.1" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#phenotypes-and-genes-tested-per-modality"><i class="fa fa-check"></i><b>4.1</b> Phenotypes and genes tested per modality</a></li>
+<li class="chapter" data-level="4.2" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#discovery-in-the-context-of-published-placenta-eqtl-studies"><i class="fa fa-check"></i><b>4.2</b> Discovery in the context of published placenta eQTL studies</a></li>
+<li class="chapter" data-level="4.3" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#xqtl-associations-per-modality-q-value-tiers"><i class="fa fa-check"></i><b>4.3</b> xQTL associations per modality — q-value tiers</a></li>
+<li class="chapter" data-level="4.4" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#conditionally-independent-signals-per-gene"><i class="fa fa-check"></i><b>4.4</b> Conditionally independent signals per gene</a></li>
+<li class="chapter" data-level="4.5" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#lead-variant-distance-from-the-tss"><i class="fa fa-check"></i><b>4.5</b> Lead-variant distance from the TSS</a></li>
+<li class="chapter" data-level="4.6" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#cross-modality-overlap-of-xgenes"><i class="fa fa-check"></i><b>4.6</b> Cross-modality overlap of xGenes</a></li>
+<li class="chapter" data-level="4.7" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#functional-annotation-enrichment-of-lead-variants"><i class="fa fa-check"></i><b>4.7</b> Functional annotation enrichment of lead variants</a></li>
+<li class="chapter" data-level="4.8" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#cross-modality-sharing-of-xqtl-effects"><i class="fa fa-check"></i><b>4.8</b> Cross-modality sharing of xQTL effects</a></li>
+<li class="chapter" data-level="4.9" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#constraint-of-xgenes"><i class="fa fa-check"></i><b>4.9</b> Constraint of xGenes</a></li>
+<li class="chapter" data-level="4.10" data-path="the-landscape-of-placental-xqtl-regulation.html"><a href="the-landscape-of-placental-xqtl-regulation.html#fine-mapped-credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>4.10</b> Fine-mapped credible sets versus conditional signals</a></li>
+</ul></li>
+<li class="chapter" data-level="5" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html"><i class="fa fa-check"></i><b>5</b> Cross-ancestry regulation</a>
+<ul>
+<li class="chapter" data-level="5.1" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#per-ancestry-discovery-comparison"><i class="fa fa-check"></i><b>5.1</b> Per-ancestry discovery comparison</a></li>
+<li class="chapter" data-level="5.2" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#ancestry-specific-versus-shared-egenes"><i class="fa fa-check"></i><b>5.2</b> Ancestry-specific versus shared eGenes</a></li>
+<li class="chapter" data-level="5.3" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#cross-ancestry-effect-size-concordance"><i class="fa fa-check"></i><b>5.3</b> Cross-ancestry effect-size concordance</a></li>
+<li class="chapter" data-level="5.4" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#showcase-loci"><i class="fa fa-check"></i><b>5.4</b> Showcase loci</a></li>
+<li class="chapter" data-level="5.5" data-path="cross-ancestry-regulation.html"><a href="cross-ancestry-regulation.html#sushie-credible-set-summary"><i class="fa fa-check"></i><b>5.5</b> SuSHiE credible-set summary</a></li>
+</ul></li>
+<li class="chapter" data-level="6" data-path="discovery-catalog.html"><a href="discovery-catalog.html"><i class="fa fa-check"></i><b>6</b> Discovery catalog</a>
+<ul>
+<li class="chapter" data-level="6.1" data-path="discovery-catalog.html"><a href="discovery-catalog.html#fdr-significant-associations"><i class="fa fa-check"></i><b>6.1</b> FDR-significant associations</a></li>
+<li class="chapter" data-level="6.2" data-path="discovery-catalog.html"><a href="discovery-catalog.html#conditionally-independent-secondary-signals"><i class="fa fa-check"></i><b>6.2</b> Conditionally independent secondary signals</a></li>
+<li class="chapter" data-level="6.3" data-path="discovery-catalog.html"><a href="discovery-catalog.html#egene-catalog-fdr-5"><i class="fa fa-check"></i><b>6.3</b> eGene catalog (FDR ≤ 5%)</a></li>
+<li class="chapter" data-level="6.4" data-path="discovery-catalog.html"><a href="discovery-catalog.html#top-ranked-genes-per-layer"><i class="fa fa-check"></i><b>6.4</b> Top-ranked genes per layer</a></li>
+<li class="chapter" data-level="6.5" data-path="discovery-catalog.html"><a href="discovery-catalog.html#driver-modality-resolution"><i class="fa fa-check"></i><b>6.5</b> Driver-modality resolution</a>
+<ul>
+<li class="chapter" data-level="6.5.1" data-path="discovery-catalog.html"><a href="discovery-catalog.html#within-gene-driver-breakdown-for-the-top-combined-genes"><i class="fa fa-check"></i><b>6.5.1</b> Within-gene driver breakdown for the top combined genes</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="7" data-path="functional-enrichment.html"><a href="functional-enrichment.html"><i class="fa fa-check"></i><b>7</b> Functional enrichment</a>
+<ul>
+<li class="chapter" data-level="7.1" data-path="functional-enrichment.html"><a href="functional-enrichment.html#per-modality-enrichment-of-xqtl-gene-sets"><i class="fa fa-check"></i><b>7.1</b> Per-modality enrichment of xQTL gene sets</a>
+<ul>
+<li class="chapter" data-level="7.1.1" data-path="functional-enrichment.html"><a href="functional-enrichment.html#pregnancyplacenta-gene-collection"><i class="fa fa-check"></i><b>7.1.1</b> Pregnancy/placenta gene collection</a></li>
+<li class="chapter" data-level="7.1.2" data-path="functional-enrichment.html"><a href="functional-enrichment.html#ora-results"><i class="fa fa-check"></i><b>7.1.2</b> ORA results</a></li>
+<li class="chapter" data-level="7.1.3" data-path="functional-enrichment.html"><a href="functional-enrichment.html#go-biological-process"><i class="fa fa-check"></i><b>7.1.3</b> GO Biological Process</a></li>
+<li class="chapter" data-level="7.1.4" data-path="functional-enrichment.html"><a href="functional-enrichment.html#go-molecular-function-and-cellular-component"><i class="fa fa-check"></i><b>7.1.4</b> GO Molecular Function and Cellular Component</a></li>
+<li class="chapter" data-level="7.1.5" data-path="functional-enrichment.html"><a href="functional-enrichment.html#kegg"><i class="fa fa-check"></i><b>7.1.5</b> KEGG</a></li>
+<li class="chapter" data-level="7.1.6" data-path="functional-enrichment.html"><a href="functional-enrichment.html#msigdb-hallmark"><i class="fa fa-check"></i><b>7.1.6</b> MSigDB Hallmark</a></li>
+<li class="chapter" data-level="7.1.7" data-path="functional-enrichment.html"><a href="functional-enrichment.html#pregnancyplacenta-collection"><i class="fa fa-check"></i><b>7.1.7</b> Pregnancy/placenta collection</a></li>
+<li class="chapter" data-level="7.1.8" data-path="functional-enrichment.html"><a href="functional-enrichment.html#cross-ancestry-contrast"><i class="fa fa-check"></i><b>7.1.8</b> Cross-ancestry contrast</a></li>
+<li class="chapter" data-level="7.1.9" data-path="functional-enrichment.html"><a href="functional-enrichment.html#background-sensitivity"><i class="fa fa-check"></i><b>7.1.9</b> Background sensitivity</a></li>
+</ul></li>
+<li class="chapter" data-level="7.2" data-path="functional-enrichment.html"><a href="functional-enrichment.html#combined-catalog-enrichment-gprofiler"><i class="fa fa-check"></i><b>7.2</b> Combined-catalog enrichment (g:Profiler)</a></li>
+<li class="chapter" data-level="7.3" data-path="functional-enrichment.html"><a href="functional-enrichment.html#enrichment-limitations"><i class="fa fa-check"></i><b>7.3</b> Enrichment limitations</a></li>
+</ul></li>
+<li class="chapter" data-level="8" data-path="biological-interpretation.html"><a href="biological-interpretation.html"><i class="fa fa-check"></i><b>8</b> Biological interpretation</a>
+<ul>
+<li class="chapter" data-level="8.1" data-path="biological-interpretation.html"><a href="biological-interpretation.html#literature-context"><i class="fa fa-check"></i><b>8.1</b> Literature context</a></li>
+</ul></li>
+<li class="chapter" data-level="9" data-path="limitations-and-next-steps.html"><a href="limitations-and-next-steps.html"><i class="fa fa-check"></i><b>9</b> Limitations and next steps</a></li>
+<li class="chapter" data-level="10" data-path="reproducibility.html"><a href="reproducibility.html"><i class="fa fa-check"></i><b>10</b> Reproducibility</a></li>
+<li class="part"><span><b>II Report 2 · Fine-mapping</b></span></li>
+<li class="chapter" data-level="" data-path="cross-ancestry-fine-mapping-of-placental-xqtl-loci.html"><a href="cross-ancestry-fine-mapping-of-placental-xqtl-loci.html"><i class="fa fa-check"></i>Cross-ancestry fine-mapping of placental xQTL loci</a></li>
+<li class="chapter" data-level="11" data-path="overview.html"><a href="overview.html"><i class="fa fa-check"></i><b>11</b> Overview</a></li>
+<li class="chapter" data-level="12" data-path="pip-diagnostics.html"><a href="pip-diagnostics.html"><i class="fa fa-check"></i><b>12</b> PIP diagnostics</a></li>
+<li class="chapter" data-level="13" data-path="credible-sets.html"><a href="credible-sets.html"><i class="fa fa-check"></i><b>13</b> Credible sets</a>
+<ul>
+<li class="chapter" data-level="13.1" data-path="credible-sets.html"><a href="credible-sets.html#credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>13.1</b> Credible sets versus conditional signals</a></li>
+</ul></li>
+<li class="chapter" data-level="14" data-path="cross-ancestry-concordance.html"><a href="cross-ancestry-concordance.html"><i class="fa fa-check"></i><b>14</b> Cross-ancestry concordance</a></li>
+<li class="chapter" data-level="15" data-path="top-loci.html"><a href="top-loci.html"><i class="fa fa-check"></i><b>15</b> Top loci</a></li>
+<li class="chapter" data-level="16" data-path="functional-annotation-enrichment-of-high-pip-variants.html"><a href="functional-annotation-enrichment-of-high-pip-variants.html"><i class="fa fa-check"></i><b>16</b> Functional-annotation enrichment of high-PIP variants</a></li>
+<li class="chapter" data-level="17" data-path="gene-set-enrichment-of-high-confidence-fine-mapped-genes.html"><a href="gene-set-enrichment-of-high-confidence-fine-mapped-genes.html"><i class="fa fa-check"></i><b>17</b> Gene-set enrichment of high-confidence fine-mapped genes</a></li>
+<li class="chapter" data-level="18" data-path="run-diagnostics.html"><a href="run-diagnostics.html"><i class="fa fa-check"></i><b>18</b> Run diagnostics</a></li>
+<li class="chapter" data-level="19" data-path="methods-summary.html"><a href="methods-summary.html"><i class="fa fa-check"></i><b>19</b> Methods summary</a></li>
+<li class="chapter" data-level="20" data-path="session-info.html"><a href="session-info.html"><i class="fa fa-check"></i><b>20</b> Session info</a></li>
+<li class="part"><span><b>III Literature companions</b></span></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><i class="fa fa-check"></i>Top placental xQTL hits in the context of the published literature</a>
+<ul>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#background-and-scope"><i class="fa fa-check"></i>1. Background and scope</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#methods"><i class="fa fa-check"></i>2. Methods</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#overview-of-the-80-top-hits"><i class="fa fa-check"></i>3. Overview of the 80 top hits</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#cross-cutting-patterns"><i class="fa fa-check"></i>4. Cross-cutting patterns</a>
+<ul>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#recurring-multi-modality-loci"><i class="fa fa-check"></i>4.1 Recurring multi-modality loci</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#isoform-switch-qtls"><i class="fa fa-check"></i>4.2 Isoform-switch QTLs</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#splicing-and-intron-retention-top-hits-are-rare-variant-and-ancestry-specific"><i class="fa fa-check"></i>4.3 Splicing and intron-retention top hits are rare-variant and ancestry-specific</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#novel-hplrv2-transcripts-among-the-top-hits"><i class="fa fa-check"></i>4.4 Novel HPLRv2 transcripts among the top hits</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#rna-editing-coverage-asymmetry"><i class="fa fa-check"></i>4.5 RNA-editing coverage asymmetry</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#modality-by-modality-results-and-gene-snapshots"><i class="fa fa-check"></i>5. Modality-by-modality results and gene snapshots</a>
+<ul>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#isoform-expression"><i class="fa fa-check"></i>5.1 Isoform expression</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#isoforms"><i class="fa fa-check"></i>5.2 Isoforms</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#splicing"><i class="fa fa-check"></i>5.3 Splicing</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#intron-retention"><i class="fa fa-check"></i>5.4 Intron retention</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#alternative-tss"><i class="fa fa-check"></i>5.5 Alternative TSS</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#alternative-polya"><i class="fa fa-check"></i>5.6 Alternative polyA</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#rna-editing"><i class="fa fa-check"></i>5.7 RNA editing</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#transcript-stability"><i class="fa fa-check"></i>5.8 Transcript stability</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#synthesis"><i class="fa fa-check"></i>6. Synthesis</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#limitations"><i class="fa fa-check"></i>7. Limitations</a></li>
+<li class="chapter" data-level="" data-path="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html"><a href="top-placental-xqtl-hits-in-the-context-of-the-published-literature.html#files"><i class="fa fa-check"></i>8. Files</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><i class="fa fa-check"></i>Fine-mapped placental xQTL genes in the context of the published literature</a>
+<ul>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#background-and-scope-1"><i class="fa fa-check"></i>1. Background and scope</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#methods-1"><i class="fa fa-check"></i>2. Methods</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#overview-of-the-20-deep-dive-genes"><i class="fa fa-check"></i>3. Overview of the 20 deep-dive genes</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#cross-cutting-patterns-1"><i class="fa fa-check"></i>4. Cross-cutting patterns</a>
+<ul>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#the-most-recurrent-signals-are-the-least-characterized"><i class="fa fa-check"></i>4.1 The most recurrent signals are the least characterized</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#splicing-qtls-dominate-the-pregnancy-and-conflict-lenses"><i class="fa fa-check"></i>4.2 Splicing QTLs dominate the pregnancy and conflict lenses</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#fine-mapping-recovers-known-pregnancy-genes-as-positive-controls"><i class="fa fa-check"></i>4.3 Fine-mapping recovers known pregnancy genes as positive controls</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#imprinted-genes-are-enriched-and-cleanly-resolved"><i class="fa fa-check"></i>4.4 Imprinted genes are enriched and cleanly resolved</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#gene-snapshots-by-lens"><i class="fa fa-check"></i>5. Gene snapshots by lens</a>
+<ul>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#placental-biology"><i class="fa fa-check"></i>5.1 Placental biology</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#pregnancy-and-birth-outcomes"><i class="fa fa-check"></i>5.2 Pregnancy and birth outcomes</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#intragenomic-conflict"><i class="fa fa-check"></i>5.3 Intragenomic conflict</a></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#synthesis-1"><i class="fa fa-check"></i>6. Synthesis</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#limitations-1"><i class="fa fa-check"></i>7. Limitations</a></li>
+<li class="chapter" data-level="" data-path="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html"><a href="fine-mapped-placental-xqtl-genes-in-the-context-of-the-published-literature.html#files-1"><i class="fa fa-check"></i>8. Files</a></li>
+</ul></li>
+</ul>
+
+      </nav>
+    </div>
+
+    <div class="book-body">
+      <div class="body-inner">
+        <div class="book-header" role="navigation">
+          <h1>
+            <i class="fa fa-circle-o-notch fa-spin"></i><a href="./">Cross-ancestry fine-mapping of placental xQTL loci</a>
+          </h1>
+        </div>
+
+        <div class="page-wrapper" tabindex="-1" role="main">
+          <div class="page-inner">
+
+            <section class="normal" id="section-">
+<div id="cross-ancestry-fine-mapping-of-placental-xqtl-loci" class="section level1 unnumbered hasAnchor">
+<h1>Cross-ancestry fine-mapping of placental xQTL loci<a href="cross-ancestry-fine-mapping-of-placental-xqtl-loci.html#cross-ancestry-fine-mapping-of-placental-xqtl-loci" class="anchor-section" aria-label="Anchor link to header"></a></h1>
+<p><strong>Fine-mapping report (Report 2 of 2) — SuSHiE credible sets, PIPs, and
+enrichment analyses</strong></p>
+<p><em>Bhattacharya Lab (analysis: S. Bresnahan; report generated with Biomni/Phylo)</em></p>
+<p>This report takes the Report 1 association signals to causal-variant
+resolution with cross-ancestry SuSHiE fine-mapping, then asks what the
+high-confidence variants and genes do: functional-annotation enrichment,
+gene-set enrichment, and deep dives on the most recurrent loci.</p>
+<p>Chapters in this report:</p>
+<ul>
+<li><strong>Overview</strong> — locus and credible-set summary</li>
+<li><strong>PIP diagnostics</strong> — posterior inclusion probability distributions</li>
+<li><strong>Credible sets</strong> — set sizes and composition versus conditional signals</li>
+<li><strong>Cross-ancestry concordance</strong> — effect agreement between EAS and EUR</li>
+<li><strong>Top loci</strong> — highest-confidence genes and modality recurrence</li>
+<li><strong>Functional-annotation enrichment</strong> — consequences of high-PIP variants</li>
+<li><strong>Gene-set enrichment</strong> — high-confidence genes against curated gene sets</li>
+<li><strong>Run diagnostics</strong>, <strong>Methods summary</strong>, <strong>Session info</strong></li>
+</ul>
+
+</div>
+            </section>
+
+          </div>
+        </div>
+      </div>
+<a href="reproducibility.html" class="navigation navigation-prev " aria-label="Previous page"><i class="fa fa-angle-left"></i></a>
+<a href="overview.html" class="navigation navigation-next " aria-label="Next page"><i class="fa fa-angle-right"></i></a>
+    </div>
+  </div>
+<script src="libs/gitbook-2.6.7/js/app.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/clipboard.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-search.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-sharing.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-fontsettings.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-bookdown.js"></script>
+<script src="libs/gitbook-2.6.7/js/jquery.highlight.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-clipboard.js"></script>
+<script>
+gitbook.require(["gitbook"], function(gitbook) {
+gitbook.start({
+  "sharing": null,
+  "fontsettings": {
+    "theme": "white",
+    "family": "sans",
+    "size": 2
+  },
+  "edit": {
+    "link": null,
+    "text": null
+  },
+  "history": {
+    "link": null,
+    "text": null
+  },
+  "view": {
+    "link": null,
+    "text": null
+  },
+  "download": null,
+  "search": {
+    "engine": "fuse",
+    "options": null
+  },
+  "toc": {
+    "collapse": "section",
+    "scroll_highlight": true
+  }
+});
+});
+</script>
+
+</body>
+
+</html>

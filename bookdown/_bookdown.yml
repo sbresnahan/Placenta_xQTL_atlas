@@ -1,0 +1,15 @@
+book_filename: "placenta-xqtl-atlas"
+output_dir: "../docs"
+delete_merged_file: true
+new_session: true
+language:
+  ui:
+    chapter_name: ""
+rmd_files:
+  - "index.Rmd"
+  - "01-report1-intro.Rmd"
+  - "02-report1-body.Rmd"
+  - "03-report2-intro.Rmd"
+  - "04-report2-body.Rmd"
+  - "05-literature-xqtl.md"
+  - "06-literature-finemap.md"

@@ -1,0 +1,10 @@
+# Build-time inputs and side outputs — not committed.
+# `data/` is regenerated on the cluster by reports/make_report_archive.sh
+# and symlinked/copied here before rebuilding the site.
+data
+figures/
+tables/
+figures_finemap/
+tables_finemap/
+_bookdown_files/
+*.log

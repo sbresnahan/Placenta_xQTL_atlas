@@ -1,0 +1,24 @@
+# (PART) Report 2 · Fine-mapping {-}
+
+# Cross-ancestry fine-mapping of placental xQTL loci {.unnumbered}
+
+**Fine-mapping report (Report 2 of 2) — SuSHiE credible sets, PIPs, and
+enrichment analyses**
+
+*Bhattacharya Lab (analysis: S. Bresnahan; report generated with Biomni/Phylo)*
+
+This report takes the Report 1 association signals to causal-variant
+resolution with cross-ancestry SuSHiE fine-mapping, then asks what the
+high-confidence variants and genes do: functional-annotation enrichment,
+gene-set enrichment, and deep dives on the most recurrent loci.
+
+Chapters in this report:
+
+- **Overview** — locus and credible-set summary
+- **PIP diagnostics** — posterior inclusion probability distributions
+- **Credible sets** — set sizes and composition versus conditional signals
+- **Cross-ancestry concordance** — effect agreement between EAS and EUR
+- **Top loci** — highest-confidence genes and modality recurrence
+- **Functional-annotation enrichment** — consequences of high-PIP variants
+- **Gene-set enrichment** — high-confidence genes against curated gene sets
+- **Run diagnostics**, **Methods summary**, **Session info**

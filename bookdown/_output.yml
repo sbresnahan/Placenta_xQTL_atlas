@@ -1,0 +1,13 @@
+bookdown::gitbook:
+  css: style.css
+  config:
+    toc:
+      collapse: section
+      scroll_highlight: true
+      before: |
+        <li><a href="./">Placenta xQTL Atlas</a></li>
+    sharing: null
+    fontsettings:
+      theme: white
+      family: sans
+      size: 2

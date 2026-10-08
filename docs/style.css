@@ -1,0 +1,101 @@
+/* Placenta xQTL Atlas — bookdown theme tweaks (Phylo palette) */
+
+:root {
+  --phylo-black: #000000;
+  --phylo-cream: #ECE9E2;
+  --phylo-offwhite: #FAF9F3;
+  --phylo-lime: #E9ED4C;
+  --phylo-orange: #FF9400;
+  --phylo-green: #75A025;
+  --phylo-pink: #FD9BED;
+  --phylo-blue: #0279EE;
+}
+
+.book.font-family-1, .book .book-body, .book .book-body .page-wrapper {
+  font-family: "Liberation Sans", "Arimo", "Helvetica Neue", Arial, sans-serif;
+}
+
+.book .book-summary {
+  background: var(--phylo-offwhite);
+  border-right: 1px solid var(--phylo-cream);
+}
+
+.book .book-summary ul.summary li a {
+  color: #222;
+}
+
+.book .book-summary ul.summary li.active > a {
+  color: var(--phylo-blue);
+  font-weight: 600;
+}
+
+/* Homepage document cards */
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 1.2em 0;
+}
+
+.doc-card {
+  border: 1px solid var(--phylo-cream);
+  border-radius: 10px;
+  padding: 16px 18px;
+  background: var(--phylo-offwhite);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.doc-card h3 {
+  margin-top: 0;
+  font-size: 1.05em;
+  color: var(--phylo-black);
+}
+
+.doc-card p {
+  font-size: 0.92em;
+  color: #333;
+}
+
+/* Buttons */
+a.btn, a.btn-alt {
+  display: inline-block;
+  text-decoration: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.9em;
+  font-weight: 600;
+  margin: 4px 6px 4px 0;
+}
+
+a.btn {
+  background: var(--phylo-blue);
+  color: #fff !important;
+}
+
+a.btn:hover { background: #0266cc; }
+
+a.btn-alt {
+  background: #fff;
+  color: var(--phylo-blue) !important;
+  border: 1px solid var(--phylo-blue);
+}
+
+a.btn-alt:hover { background: var(--phylo-offwhite); }
+
+/* Scrollable tables: cap height and scroll internally so long tables do not
+   push later sections off-screen; header row stays visible. */
+.book .book-body .page-inner table {
+  display: block;
+  max-height: 480px;
+  overflow-y: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.book .book-body .page-inner table thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+  box-shadow: inset 0 -1px 0 #888;
+}
