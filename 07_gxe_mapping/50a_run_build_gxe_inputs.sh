@@ -28,6 +28,8 @@ source /etc/profile.d/modules.sh
 [ -x "$CONDA_EXE" ] || { echo "ERROR: conda executable not found/executable: $CONDA_EXE"; exit 1; }
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate "$CONDA_ENV"
+module load samtools
+module load plink
 
 command -v python3 >/dev/null || { echo "ERROR: python3 not found after conda activation"; exit 1; }
 command -v bgzip >/dev/null || { echo "ERROR: bgzip not found after conda activation"; exit 1; }
