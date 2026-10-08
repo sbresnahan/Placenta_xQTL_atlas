@@ -121,11 +121,11 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
         value_blocks.append(pd.DataFrame(
             z, index=sub.index, columns=sub.columns[3:]))
     pooled = pd.concat(value_blocks, axis=1)
-    n_bad = int(pooled.isna().any(1).sum())
+    n_bad = int(pooled.isna().any(axis=1).sum())
     if n_bad:
         log(f"    dropping {n_bad} phenotypes with ~zero within-ancestry "
             f"variance")
-        keep = ~pooled.isna().any(1)
+        keep = ~pooled.isna().any(axis=1)
         pooled = pooled[keep]
         pos_ref = pos_ref[pos_ref["phenotype_id"].isin(pooled.index)]
     out_df = pd.concat([pos_ref.set_index("phenotype_id").loc[pooled.index]
