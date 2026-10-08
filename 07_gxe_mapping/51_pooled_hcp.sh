@@ -24,7 +24,8 @@
 #
 # Optional env: CONFIG, SCRIPTS_DIR, OUTPUT_BASE, QTL_DIR, RESULTS_DIR,
 #   GXE_DIR, MODALITIES, HCP_K (override), COHORT_DUMMY_MODALITIES
-#   (default "expression isoform_expression"), RSCRIPT, MAX_PHENOTYPES.
+#   (default "expression isoform_expression"), RSCRIPT, R_PACKAGE_LIB,
+#   MAX_PHENOTYPES.
 # =============================================================================
 set -euo pipefail
 
@@ -41,6 +42,7 @@ COHORT_DUMMY_MODALITIES="${COHORT_DUMMY_MODALITIES:-expression isoform_expressio
 HCP_K="${HCP_K:-}"
 MAX_PHENOTYPES="${MAX_PHENOTYPES:-40000}"
 RSCRIPT="${RSCRIPT:-${REPO_ROOT}/bin/Rscript_sif}"
+R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
 QC_METRICS="${QC_METRICS:-${OUTPUT_BASE}/hcp/all_qc_metrics.tsv}"
 MODULE05="${MODULE05:-${REPO_ROOT}/05_qtl_mapping}"
 
@@ -86,7 +88,34 @@ if [ "$HCP_K" -ge 1 ]; then
     case " $COHORT_DUMMY_MODALITIES " in
         *" ${MODALITY} "*) EXTRA+=(--cohort-dummies);;
     esac
-    "$RSCRIPT" "${MODULE05}/hcp_from_matrix.R" \
+    # Module-07 contract: the required package library must be set from
+    # inside R. Do not rely on R_LIBS_USER/R_LIBS_SITE exported by the shell
+    # or container wrapper. Run a temporary copy of the Module-05 script with
+    # an R preamble that keeps the required library first even if the sourced
+    # script later calls .libPaths() itself.
+    HCP_R_SRC="${MODULE05}/hcp_from_matrix.R"
+    [ -f "$HCP_R_SRC" ] || { echo "ERROR: missing $HCP_R_SRC"; exit 1; }
+    SCRATCH_R="${TMPDIR:-/tmp}/hcp_from_matrix.module07.$$.R"
+    R_PACKAGE_LIB_R=${R_PACKAGE_LIB//\\/\\\\}
+    R_PACKAGE_LIB_R=${R_PACKAGE_LIB_R//\"/\\\"}
+    {
+        printf '%s\n' \
+            ".module07_r_lib <- \"${R_PACKAGE_LIB_R}\"" \
+            'if (!dir.exists(.module07_r_lib)) stop("Required Module-07 R package library does not exist: ", .module07_r_lib)' \
+            '.module07_base_libPaths <- base::.libPaths' \
+            '.module07_base_libPaths(c(.module07_r_lib, .module07_base_libPaths()))' \
+            '.libPaths <- function(new) {' \
+            '    if (missing(new)) return(.module07_base_libPaths())' \
+            '    .module07_base_libPaths(c(.module07_r_lib, new))' \
+            '}' \
+            'if (normalizePath(.libPaths()[1], mustWork=TRUE) != normalizePath(.module07_r_lib, mustWork=TRUE)) stop("Failed to prepend required Module-07 R package library")'
+        cat "$HCP_R_SRC"
+    } > "$SCRATCH_R"
+
+    cleanup_hcp_scratch() { rm -f "$SCRATCH_BED" "$SCRATCH_R"; }
+    trap cleanup_hcp_scratch EXIT
+
+    "$RSCRIPT" "$SCRATCH_R" \
         --bed "$SCRATCH_BED" \
         --qc-metrics "$QC_METRICS" \
         --metadata "$META" \
@@ -94,7 +123,9 @@ if [ "$HCP_K" -ge 1 ]; then
         --max-phenotypes "$MAX_PHENOTYPES" \
         "${EXTRA[@]}" \
         --output "$HCP_OUT"
-    rm -f "$SCRATCH_BED"
+
+    cleanup_hcp_scratch
+    trap - EXIT
 else
     # k=0: header-only HCP file (finalize appends nothing)
     (printf 'covariate'; zcat "$BED_GZ" | head -1 | cut -f5- | tr '\t' '\n' | sed 's/^/\t/'; echo) \

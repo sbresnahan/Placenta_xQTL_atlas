@@ -21,7 +21,7 @@
 # Required env: CONFIG, SCRIPTS_DIR, METADATA (cohort metadata .txt).
 # Optional: OUTPUT_BASE, QTL_DIR, RESULTS_DIR, GXE_DIR, ANCESTRIES,
 #   MODALITIES, EXPOSURES (default: enabled rows of gxe_config.tsv),
-#   QUEUE, WALLTIME, CHROMS, FORCE.
+#   QUEUE, WALLTIME, CHROMS, FORCE, R_PACKAGE_LIB.
 # =============================================================================
 set -euo pipefail
 
@@ -41,6 +41,7 @@ QUEUE="${QUEUE:-medium}"
 TEST="${TEST:-0}"
 FORCE="${FORCE:-0}"
 CHROMS="${CHROMS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22}"
+R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
 
 if [ "$TEST" = "1" ]; then
     MODALITIES="expression"; CHROMS="21"; STAGES="${STAGES:-2 3}"
@@ -83,7 +84,7 @@ if has_stage 1; then
     J=$(bsub -q "$QUEUE" -n 4 -M 32G -R "rusage[mem=32G]" -W 8:00 \
         -J "gxe_hcp[1-${N_MODS}]" $DEP \
         -o "${LOG_DIR}/gxe_hcp.%J.%I.out" -e "${LOG_DIR}/gxe_hcp.%J.%I.err" \
-        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,METADATA=$METADATA,FORCE=$FORCE" \
+        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,METADATA=$METADATA,FORCE=$FORCE,R_PACKAGE_LIB=$R_PACKAGE_LIB" \
         "bash ${SCRIPTS_DIR}/51_pooled_hcp.sh")
     DEP1=$(echo "$J" | grep -o '[0-9]\+' | head -1)
     echo "  stage 1: gxe_hcp array $DEP1"
@@ -114,7 +115,7 @@ if has_stage 2 || has_stage 3; then
                     -J "gxe_merge_${MOD}_${EXP}" $MDEP \
                     -o "${LOG_DIR}/gxe_merge_${MOD}_${EXP}.%J.out" \
                     -e "${LOG_DIR}/gxe_merge_${MOD}_${EXP}.%J.err" \
-                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,MODALITY=$MOD,EXPOSURE=$EXP,MODE=merge" \
+                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,MODALITY=$MOD,EXPOSURE=$EXP,MODE=merge,R_PACKAGE_LIB=$R_PACKAGE_LIB" \
                     "bash ${SCRIPTS_DIR}/53a_run_gxe_scan.sh")
                 MERGE_JOBS+=($(echo "$J" | grep -o '[0-9]\+' | head -1))
                 echo "  stage 3: gxe_merge_${MOD}_${EXP} job ${MERGE_JOBS[-1]}"

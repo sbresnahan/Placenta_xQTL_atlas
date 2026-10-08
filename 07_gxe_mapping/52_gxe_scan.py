@@ -52,6 +52,7 @@ Usage (merge):
 import argparse
 import glob
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -457,9 +458,39 @@ def run_merge(args):
     with tempfile.TemporaryDirectory() as tmpd:
         in_tsv = os.path.join(tmpd, 'pval_beta.tsv')
         out_tsv = os.path.join(tmpd, 'qval.tsv')
+        wrapped_bridge = os.path.join(tmpd, 'compute_qvalues.module07.R')
         pd.DataFrame({'pval_beta': q_in}).to_csv(in_tsv, sep='\t', index=False)
-        proc = subprocess.run(f'"{rscript}" "{bridge}" "{in_tsv}" "{out_tsv}"',
-                              shell=True, capture_output=True, text=True)
+
+        # Module-07 contract: set the required package library from inside R,
+        # not via R_LIBS_* in the launching shell/container. The temporary
+        # bridge also masks ordinary .libPaths() calls so the required library
+        # stays first if the Module-05 script changes its library paths.
+        r_lib = args.r_package_lib.replace('\\', '\\\\').replace('"', '\\"')
+        preamble = '\n'.join([
+            f'.module07_r_lib <- "{r_lib}"',
+            'if (!dir.exists(.module07_r_lib)) stop(',
+            '    "Required Module-07 R package library does not exist: ",',
+            '    .module07_r_lib',
+            ')',
+            '.module07_base_libPaths <- base::.libPaths',
+            '.module07_base_libPaths(c(.module07_r_lib, '
+            '.module07_base_libPaths()))',
+            '.libPaths <- function(new) {',
+            '    if (missing(new)) return(.module07_base_libPaths())',
+            '    .module07_base_libPaths(c(.module07_r_lib, new))',
+            '}',
+            'if (normalizePath(.libPaths()[1], mustWork=TRUE) != '
+            'normalizePath(.module07_r_lib, mustWork=TRUE)) stop(',
+            '    "Failed to prepend required Module-07 R package library"',
+            ')',
+            '',
+        ])
+        with open(bridge) as src, open(wrapped_bridge, 'w') as dst:
+            dst.write(preamble)
+            dst.write(src.read())
+
+        cmd = shlex.split(rscript) + [wrapped_bridge, in_tsv, out_tsv]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0 or not os.path.exists(out_tsv):
             sys.exit("ERROR: Storey q-value computation failed.\n"
                      f"  stderr tail: {proc.stderr[-1500:]}")
@@ -538,6 +569,16 @@ def main():
     p.add_argument('--rscript', default='Rscript',
                    help='Rscript command for the qvalue bridge (merge mode; '
                         'QVALUE_RSCRIPT env var wins)')
+    p.add_argument(
+        '--r-package-lib',
+        default=os.environ.get(
+            'R_PACKAGE_LIB',
+            '/rsrch5/home/epi/bhattacharya_lab/software/'
+            'R_package_library/ubuntu/4.3.1',
+        ),
+        help='R package library prepended inside R before the qvalue bridge '
+             'runs (R_PACKAGE_LIB env var overrides the default)',
+    )
     p.add_argument('--out', required=True)
     args = p.parse_args()
 

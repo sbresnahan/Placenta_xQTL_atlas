@@ -7,7 +7,8 @@
 # scan:  $LSB_JOBINDEX = chromosome
 # merge: concatenates chr parquets + Storey q-values
 # Optional: OUTPUT_BASE, QTL_DIR, RESULTS_DIR, GXE_DIR, ANCESTRIES,
-#   CIS_WINDOW, MAF_THRESHOLD, PERM_BLOCKS, STOP_P, SEED, DOSAGES=1.
+#   CIS_WINDOW, MAF_THRESHOLD, PERM_BLOCKS, STOP_P, SEED, DOSAGES=1,
+#   R_PACKAGE_LIB.
 # =============================================================================
 #BSUB -q medium
 #BSUB -n 4
@@ -35,6 +36,7 @@ PERM_BLOCKS="${PERM_BLOCKS:-100 400 500 9000}"
 STOP_P="${STOP_P:-0.10}"
 SEED="${SEED:-12345}"
 DOSAGES="${DOSAGES:-0}"
+R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
 
 source /etc/profile.d/modules.sh
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
@@ -53,6 +55,7 @@ if [ "$MODE" = "merge" ]; then
     python3 "${SCRIPTS_DIR}/52_gxe_scan.py" --mode merge \
         --chr-outputs "${BASE}.chr*.gxe_cis.parquet" \
         --rscript "$QVALUE_RSCRIPT" \
+        --r-package-lib "$R_PACKAGE_LIB" \
         --out "${BASE}.gxe_cis.parquet"
     exit 0
 fi
