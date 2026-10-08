@@ -217,9 +217,12 @@ suppressPackageStartupMessages({
 # coloc.susie smoke test on the package's built-in simulated data
 data(coloc_test_data, package = "coloc")
 f <- coloc::coloc.susie(coloc_test_data$D1, coloc_test_data$D2)
-stopifnot(is.finite(f$summary["PP.H4.abf"]))
-message("coloc.susie smoke test OK (PP.H4 = ",
-        round(f$summary["PP.H4.abf"], 3), ")")
+# f$summary is a data.table. Use [[ ]] for column extraction; DT["col"]
+# is interpreted as a row/join operation by current data.table releases.
+pp_h4 <- f$summary[["PP.H4.abf"]]
+stopifnot(length(pp_h4) >= 1L, all(is.finite(pp_h4)))
+message("coloc.susie smoke test OK (max PP.H4 = ",
+        round(max(pp_h4), 3), ")")
 EOF
 
 echo ""
