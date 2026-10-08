@@ -119,7 +119,7 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
         vals = sub.iloc[:, 3:].values.astype(np.float64)
         z = zscore_rows(vals)
         value_blocks.append(pd.DataFrame(
-            z, index=sub.index, columns=sub.columns))
+            z, index=sub.index, columns=sub.columns[3:]))
     pooled = pd.concat(value_blocks, axis=1)
     n_bad = int(pooled.isna().any(1).sum())
     if n_bad:
