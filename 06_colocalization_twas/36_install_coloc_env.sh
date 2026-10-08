@@ -39,7 +39,7 @@ echo "  FUSION_DIR: $FUSION_DIR"
 
 if [ "$SKIP_R" != "1" ]; then
     echo ""
-    echo "== Step 1: R packages (CRAN) =="
+    echo "== Step 1a: base R packages (CRAN) =="
     "$RSCRIPT" - <<'EOF'
 R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
 if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
@@ -49,8 +49,7 @@ message("R package library: ", .libPaths()[1])
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 need_cran <- c("coloc", "susieR", "glmnet", "optparse", "data.table",
-               "R.utils", "remotes", "matrixStats", "irlba", "Rfast",
-               "colocboost")
+               "R.utils", "remotes", "matrixStats", "irlba")
 have <- rownames(installed.packages(lib.loc = R_LIB))
 for (p in need_cran[!need_cran %in% have]) {
   message("installing ", p, " -> ", R_LIB)
@@ -60,12 +59,97 @@ for (p in need_cran[!need_cran %in% have]) {
          "; inspect the installation output above for the underlying error")
   }
 }
-# Version gates: coloc.susie requires coloc >= 5.2; susieR >= 0.12.35
+EOF
+
+    echo ""
+    echo "== Step 1b: Rfast / RcppParallel ABI check =="
+    if "$RSCRIPT" - <<'EOF'
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+
+message("RcppParallel: ", as.character(packageVersion("RcppParallel")),
+        " [", find.package("RcppParallel"), "]")
+message("Rfast: ", as.character(packageVersion("Rfast")),
+        " [", find.package("Rfast"), "]")
+suppressPackageStartupMessages(library(Rfast))
+message("Rfast load OK")
+EOF
+    then
+        :
+    else
+        echo "  Rfast failed to load; rebuilding RcppParallel + Rfast together"
+        echo "  in the same R/container runtime to eliminate the TBB ABI mismatch."
+        "$RSCRIPT" - <<'EOF'
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+if (file.access(R_LIB, 2L) != 0L) stop("R package library is not writable: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+# RcppParallel 6.x moved to oneTBB and changed TBB ABI. Any compiled package
+# built against a different RcppParallel/TBB stack must be rebuilt. Install a
+# coherent RcppParallel -> Rfast pair into the pipeline library in a fresh R
+# process so no stale TBB shared library remains loaded while replacing them.
+for (p in c("Rfast", "RcppParallel")) {
+  pkg_dir <- file.path(R_LIB, p)
+  if (dir.exists(pkg_dir)) {
+    message("removing stale ", p, " from ", R_LIB)
+    remove.packages(p, lib = R_LIB)
+  }
+}
+
+for (p in c("RcppParallel", "Rfast")) {
+  message("rebuilding ", p, " from source -> ", R_LIB)
+  install.packages(p, lib = R_LIB, dependencies = NA, type = "source")
+  if (!p %in% rownames(installed.packages(lib.loc = R_LIB))) {
+    stop("source rebuild failed for ", p,
+         "; inspect the installation output above for the underlying error")
+  }
+}
+EOF
+
+        # Verify in another fresh process. This is important because the rebuild
+        # process may have loaded build-time namespaces before replacing them.
+        "$RSCRIPT" - <<'EOF'
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+.libPaths(c(R_LIB, .libPaths()))
+message("RcppParallel after rebuild: ", as.character(packageVersion("RcppParallel")),
+        " [", find.package("RcppParallel"), "]")
+message("Rfast after rebuild: ", as.character(packageVersion("Rfast")),
+        " [", find.package("Rfast"), "]")
+suppressPackageStartupMessages(library(Rfast))
+message("Rfast ABI check OK")
+EOF
+    fi
+
+    echo ""
+    echo "== Step 1c: colocboost (CRAN) =="
+    "$RSCRIPT" - <<'EOF'
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+if (file.access(R_LIB, 2L) != 0L) stop("R package library is not writable: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+message("R package library: ", .libPaths()[1])
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+if (!"colocboost" %in% rownames(installed.packages(lib.loc = R_LIB))) {
+  message("installing colocboost -> ", R_LIB)
+  install.packages("colocboost", lib = R_LIB, dependencies = NA)
+}
+if (!"colocboost" %in% rownames(installed.packages(lib.loc = R_LIB))) {
+  stop("CRAN installation failed for colocboost; inspect the installation output above")
+}
+suppressPackageStartupMessages(library(colocboost))
+
+# Version gates: coloc.susie requires coloc >= 5.2; susieR >= 0.12.35.
 stopifnot(packageVersion("coloc") >= "5.2.0")
 stopifnot(packageVersion("susieR") >= "0.12.0")
 message("CRAN packages OK: coloc ", as.character(packageVersion("coloc")),
         ", susieR ", as.character(packageVersion("susieR")),
         ", glmnet ", as.character(packageVersion("glmnet")),
+        ", RcppParallel ", as.character(packageVersion("RcppParallel")),
+        ", Rfast ", as.character(packageVersion("Rfast")),
         ", colocboost ", as.character(packageVersion("colocboost")))
 EOF
 
@@ -91,7 +175,6 @@ if (!"plink2R" %in% rownames(installed.packages(lib.loc = R_LIB))) {
 message("GitHub package OK: plink2R")
 EOF
 fi
-
 echo ""
 echo "== Step 3: FUSION TWAS scripts =="
 if [ -d "$FUSION_DIR" ] && [ -f "$FUSION_DIR/FUSION.assoc_test.R" ]; then
