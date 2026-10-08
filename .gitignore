@@ -3,6 +3,8 @@
 /reports/qtl_results/
 /reports/diagnostics/
 /reports/
+/docs/
+/bookdown/
 __pycache__/
 *.pyc
 .DS_Store
