@@ -96,7 +96,7 @@ if has_stage 1; then
     for ANC in $ANCESTRIES; do
         DEP_ARGS=()
         [ -n "$DEP0" ] && DEP_ARGS=(-w "done($DEP0)")
-        J=$(bsub -q "$QUEUE" -n 1 -M 4G -R "rusage[mem=4G]" -W 0:30 \
+        J=$(bsub -q "$QUEUE" -n 1 -M 4G -R "rusage[mem=4G]" -W 4:00 \
             -J "gxe_cov_${ANC}[1-${N_MODS}]" "${DEP_ARGS[@]}" \
             -o "${LOG_DIR}/gxe_cov_${ANC}.%J.%I.out" \
             -e "${LOG_DIR}/gxe_cov_${ANC}.%J.%I.err" \
@@ -128,7 +128,7 @@ for ANC in $ANCESTRIES; do
             fi
             if has_stage 3; then
                 DEP_ARGS=(); [ -n "$SCAN_DEP" ] && DEP_ARGS=(-w "done($SCAN_DEP)")
-                J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 2:00 \
+                J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 4:00 \
                     -J "gxe_merge_${ANC}_${MOD}_${EXP}" "${DEP_ARGS[@]}" \
                     -o "${LOG_DIR}/gxe_merge_${ANC}_${MOD}_${EXP}.%J.out" \
                     -e "${LOG_DIR}/gxe_merge_${ANC}_${MOD}_${EXP}.%J.err" \
@@ -155,7 +155,7 @@ if has_stage 4; then
             done
             dep=$(dep_expr "${rel[@]}")
             DEP_ARGS=(); [ -n "$dep" ] && DEP_ARGS=(-w "$dep")
-            J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 2:00 \
+            J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 4:00 \
                 -J "gxe_meta_${MOD}_${EXP}" "${DEP_ARGS[@]}" \
                 -o "${LOG_DIR}/gxe_meta_${MOD}_${EXP}.%J.out" \
                 -e "${LOG_DIR}/gxe_meta_${MOD}_${EXP}.%J.err" \
@@ -190,7 +190,7 @@ fi
 declare -a FOLLOWUP_JOBS=()
 if has_stage 6; then
     for PM in sensitivity tnt; do
-        J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 2:00 \
+        J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 4:00 \
             -J "gxe_${PM}" \
             -o "${LOG_DIR}/gxe_${PM}.%J.out" -e "${LOG_DIR}/gxe_${PM}.%J.err" \
             -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,POST_MODE=$PM,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
@@ -205,7 +205,7 @@ if has_stage 7; then
     final_ids=("${MERGE_JOBS[@]}" "${META_JOBS[@]}" "${TIER2_JOBS[@]}" "${FOLLOWUP_JOBS[@]}")
     dep=$(dep_expr "${final_ids[@]}")
     DEP_ARGS=(); [ -n "$dep" ] && DEP_ARGS=(-w "$dep")
-    J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 2:00 \
+    J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 4:00 \
         -J "gxe_aggregate" "${DEP_ARGS[@]}" \
         -o "${LOG_DIR}/gxe_aggregate.%J.out" -e "${LOG_DIR}/gxe_aggregate.%J.err" \
         -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,POST_MODE=aggregate,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
