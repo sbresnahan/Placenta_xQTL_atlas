@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # 53b_run_post.sh — LSF worker for the post-scan steps (dispatched by
-# POST_MODE): tier2 | sensitivity | tnt | aggregate. Submitted by
+# POST_MODE): tier1_meta | tier2 | sensitivity | tnt | aggregate. Submitted by
 # 53_submit_gxe.sh.
 # Optional env: CONDA_EXE, CONDA_ENV.
 # =============================================================================
@@ -31,6 +31,13 @@ conda activate "$CONDA_ENV"
 command -v python3 >/dev/null || { echo "ERROR: python3 not found after conda activation"; exit 1; }
 
 case "$POST_MODE" in
+  tier1_meta)
+    MODALITY="${MODALITY:?tier1_meta needs MODALITY}"
+    EXPOSURE="${EXPOSURE:?tier1_meta needs EXPOSURE}"
+    python3 "${SCRIPTS_DIR}/54_tier1_meta.py" \
+        --gxe-dir "$GXE_DIR" --ancestries $ANCESTRIES \
+        --modality "$MODALITY" --exposure "$EXPOSURE"
+    ;;
   tier2)
     MODALITY="${MODALITY:?tier2 needs MODALITY}"
     EXPOSURE="${EXPOSURE:?tier2 needs EXPOSURE}"
@@ -46,12 +53,13 @@ case "$POST_MODE" in
   tnt)
     python3 "${SCRIPTS_DIR}/56_transmitted_nontransmitted.py" \
         --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR" \
+        --ancestries $ANCESTRIES \
         ${MATERNAL_PGEN_DIR:+--maternal-pgen-dir "$MATERNAL_PGEN_DIR"} \
         ${PAIRS:+--pairs "$PAIRS"}
     ;;
   aggregate)
     python3 "${SCRIPTS_DIR}/57_aggregate_gxe.py" \
-        --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR"
+        --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR" --ancestries $ANCESTRIES
     ;;
   *)
     echo "ERROR: unknown POST_MODE=$POST_MODE"; exit 1;;

@@ -7,8 +7,8 @@ Model (per variant, mirroring tensorQTL's calculate_interaction_nominal):
 
 Modes:
   cis-perm  — tier-1 discovery scan: adaptive phenotype-permutation scan
-              (GTEx/tensorQTL convention) over one chromosome of a pooled or
-              per-ancestry BED. Writes one parquet row per phenotype with the
+              (GTEx/tensorQTL convention) over one chromosome of an
+              ancestry-specific BED. Writes one parquet row per phenotype with the
               top interaction variant, nominal/permutation/beta-approx
               p-values. Shard by chromosome (LSF array); merge with
               --mode merge.
@@ -34,14 +34,14 @@ The exposure main effect is a model term, so the exposure must NOT also sit
 in the covariate table: any covariate row named exactly like --exposure
 (e.g. 'GA' when GA is the exposure) is dropped automatically.
 
-Usage (tier 1, one chromosome):
+Usage (tier 1, one ancestry/chromosome):
   python3 52_gxe_scan.py --mode cis-perm \
-      --bed pooled_expression.bed.gz \
-      --pgens EAS={QTL_DIR}/EAS_qtl EUR={QTL_DIR}/EUR_qtl \
-      --manifest pooled_sample_manifest.tsv \
-      --covariates pooled_covariates_expression.tsv \
+      --bed EAS_expression.bed.gz \
+      --pgens EAS={QTL_DIR}/EAS_qtl \
+      --manifest EAS_sample_manifest.tsv \
+      --covariates EAS_covariates_expression.tsv \
       --exposures exposures.tsv --exposure GA \
-      --chrom 21 --out pooled_expression_GA.chr21.gxe_cis.parquet
+      --chrom 21 --out EAS_expression_GA.chr21.gxe_cis.parquet
 
 Usage (merge):
   python3 52_gxe_scan.py --mode merge \
@@ -192,7 +192,7 @@ def load_chromosome_genotypes(pgen_by_anc, samples_by_anc, chrom,
     G = G[mask]
     keep_ids = list(np.asarray(keep_ids)[mask])
     var_pos = var_pos[mask]
-    log(f"    pooled: {G.shape[0]} variants x {G.shape[1]} samples after "
+    log(f"    analysis set: {G.shape[0]} variants x {G.shape[1]} samples after "
         f"MAF>={maf_threshold} + monomorphic filters ({n0 - G.shape[0]} dropped)")
     return G, np.asarray(keep_ids), np.asarray(var_pos), samples
 
@@ -232,8 +232,8 @@ def load_scan_inputs(args):
     if len(pheno) == 0:
         sys.exit(f"ERROR: no phenotypes on chr{chrom_norm}")
 
-    # pooled analysis samples: BED columns with non-missing exposure and
-    # covariates, grouped by ancestry (block order = --pgens order)
+    # Analysis samples: BED columns with non-missing exposure and covariates,
+    # grouped by ancestry. Primary Module-07 jobs pass exactly one ancestry.
     pgen_by_anc = parse_pgens(args.pgens)
     cov_samples = set(cov.columns)
     exp_samples = set(exposure.index)
@@ -545,7 +545,7 @@ def main():
     p.add_argument('--bed', help='pooled or per-ancestry phenotype BED(.gz)')
     p.add_argument('--pgens', nargs='+',
                    help='ANC=pgen_prefix entries, block order = this order')
-    p.add_argument('--manifest', help='pooled_sample_manifest.tsv')
+    p.add_argument('--manifest', help='ancestry-specific sample manifest TSV')
     p.add_argument('--covariates', help='covariate TSV (rows = covariates)')
     p.add_argument('--exposures', help='exposures.tsv (rows = exposure_id)')
     p.add_argument('--exposure', help='exposure_id to scan')

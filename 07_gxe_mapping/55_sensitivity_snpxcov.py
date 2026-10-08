@@ -8,7 +8,7 @@ age at delivery, ancestry PCs); stability of b_int would imply any residual
 unmeasured confounder must interact with G orthogonally to all measured
 factors."
 
-For every tier-1 significant hit (qval <= --fdr), refit the pooled model
+For every ancestry-specific tier-1 significant hit (qval <= --fdr), refit that ancestry model
     Y ~ G + E + G:E + sum_j G:C_j + Z_cov
 where C_j are the enabled sensitivity covariates (sensitivity_config.tsv;
 new columns also enter as main effects). Reports b_int before/after, the
@@ -25,7 +25,9 @@ Usage:
 """
 
 import argparse
+import glob
 import os
+import re
 import sys
 
 import numpy as np
@@ -37,6 +39,28 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def log(msg):
     print(f"[{pd.Timestamp.now():%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
+
+def load_tier1_hits(gxe_dir, fdr, ancestries):
+    """Load significant ancestry-specific merged tier-1 parquets directly."""
+    rows = []
+    for path in sorted(glob.glob(os.path.join(gxe_dir, "tier1", "*.gxe_cis.parquet"))):
+        name = os.path.basename(path)
+        m = re.match(r"^([^_]+)_(.+)_([^_]+)\.gxe_cis\.parquet$", name)
+        if not m:
+            continue
+        anc, mod, exp = m.groups()
+        if anc not in set(ancestries):
+            continue
+        df = pd.read_parquet(path).reset_index()
+        if "qval" not in df.columns:
+            continue
+        df = df[df["qval"] <= fdr].copy()
+        if len(df):
+            df.insert(0, "exposure", exp)
+            df.insert(0, "modality", mod)
+            df.insert(0, "ancestry", anc)
+            rows.append(df)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
 def ols_b_se(y, X, idx):
@@ -85,10 +109,15 @@ def main():
     scanner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(scanner)
 
-    meta = pd.read_csv(os.path.join(args.gxe_dir, "inputs",
-                                    "pooled_sample_manifest.tsv"), sep="\t")
-    meta = meta.set_index("array_id")
-    missing_cols = [c for c in enabled["column"] if c and c not in meta.columns]
+    manifests = []
+    for anc in args.ancestries:
+        mp = os.path.join(args.gxe_dir, "inputs", f"{anc}_sample_manifest.tsv")
+        if os.path.exists(mp):
+            manifests.append(pd.read_csv(mp, sep="\t"))
+    if not manifests:
+        sys.exit("ERROR: no ancestry-specific sample manifests found")
+    meta_all = pd.concat(manifests, ignore_index=True).set_index("array_id")
+    missing_cols = [c for c in enabled["column"] if c and c not in meta_all.columns]
     if missing_cols:
         pd.DataFrame([dict(component="sensitivity_snpxcov", status="BLOCKED",
                            detail=f"metadata columns missing: {missing_cols}")]
@@ -96,24 +125,27 @@ def main():
         log(f"BLOCKED: metadata columns missing: {missing_cols}")
         return
 
-    hits_path = os.path.join(args.gxe_dir, "aggregate",
-                             "gxe_tier1_significant.tsv")
-    if not os.path.exists(hits_path):
-        sys.exit(f"ERROR: {hits_path} not found — run 57_aggregate_gxe.py first")
-    hits = pd.read_csv(hits_path, sep="\t")
+    hits = load_tier1_hits(args.gxe_dir, args.fdr, args.ancestries)
+    if hits.empty:
+        log(f"no ancestry-specific tier-1 hits at q<={args.fdr}; nothing to refit")
+        hits = pd.DataFrame(columns=["ancestry", "modality", "exposure",
+                                     "phenotype_id", "variant_id"])
     log(f"{len(hits)} tier-1 significant hits to refit")
 
-    # Build the pooled covariate main-effect matrix once per modality
     results = []
-    for (mod, exp_id), h in hits.groupby(["modality", "exposure"]):
+    if "ancestry" not in hits.columns:
+        sys.exit("ERROR: gxe_tier1_significant.tsv lacks ancestry; rerun ancestry-first aggregation")
+    for (anc, mod, exp_id), h in hits.groupby(["ancestry", "modality", "exposure"]):
         cov = pd.read_csv(os.path.join(args.gxe_dir, "inputs",
-                                       f"pooled_covariates_{mod}.tsv"),
+                                       f"{anc}_covariates_{mod}.tsv"),
                           sep="\t", index_col=0)
+        meta = pd.read_csv(os.path.join(args.gxe_dir, "inputs",
+                                        f"{anc}_sample_manifest.tsv"), sep="\t").set_index("array_id")
         if exp_id in cov.index:
             cov = cov.drop(index=exp_id)
         exp = pd.read_csv(os.path.join(args.gxe_dir, "inputs", "exposures.tsv"),
                           sep="\t", index_col=0).loc[exp_id]
-        bed_path = os.path.join(args.gxe_dir, "inputs", f"pooled_{mod}.bed.gz")
+        bed_path = os.path.join(args.gxe_dir, "inputs", f"{anc}_{mod}.bed.gz")
         import tensorqtl
         pheno, pheno_pos = tensorqtl.read_phenotype_bed(bed_path)
         for _, hit in h.iterrows():
@@ -126,18 +158,10 @@ def main():
             y = y_full[samples].values.astype(float)
             e = exp[samples].values.astype(float)
             Z = cov[samples].T.values
-            # genotype at the hit variant (pooled, per-ancestry blocks)
             chrom = str(hit.get("chrom", "")) or vid.split(":")[0]
-            man = pd.read_csv(os.path.join(args.gxe_dir, "inputs",
-                                           "pooled_sample_manifest.tsv"),
-                              sep="\t")
-            anc_of = dict(zip(man["array_id"], man["ancestry"]))
-            sba = {a: [s for s in samples if anc_of.get(s) == a]
-                   for a in args.ancestries}
-            pgens = {a: os.path.join(args.qtl_dir, f"{a}_qtl")
-                     for a in args.ancestries}
             G, vids, _, _ = scanner.load_chromosome_genotypes(
-                pgens, sba, chrom, maf_threshold=0.0)
+                {anc: os.path.join(args.qtl_dir, f"{anc}_qtl")},
+                {anc: samples}, chrom, maf_threshold=0.0)
             gi = np.where(vids == vid)[0]
             if len(gi) == 0:
                 continue
@@ -161,7 +185,7 @@ def main():
             b0, se0, p0 = ols_b_se(y, X0, 3)
             b1, se1, p1 = ols_b_se(y, X1, 3)
             results.append(dict(
-                modality=mod, exposure=exp_id, phenotype_id=pid,
+                ancestry=anc, modality=mod, exposure=exp_id, phenotype_id=pid,
                 variant_id=vid, b_int_base=b0, se_base=se0, p_base=p0,
                 b_int_adj=b1, se_adj=se1, p_adj=p1,
                 delta_b=b1 - b0,

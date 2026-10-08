@@ -153,10 +153,9 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
     import torch
     import tensorqtl
 
-    bed = os.path.join(args.qtl_dir, f"{anc}_{modality}.bed.gz")
-    cov_path = os.path.join(args.qtl_dir, f"{anc}_covariates_{modality}.tsv")
-    if not os.path.exists(cov_path):
-        cov_path = os.path.join(args.qtl_dir, f"{anc}_covariates.tsv")
+    inputs_dir = os.path.join(args.gxe_dir, "inputs")
+    bed = os.path.join(inputs_dir, f"{anc}_{modality}.bed.gz")
+    cov_path = os.path.join(inputs_dir, f"{anc}_covariates_{modality}.tsv")
     pgen = os.path.join(args.qtl_dir, f"{anc}_qtl")
     for f in [bed, cov_path, pgen + ".pgen"]:
         if not os.path.exists(f):
@@ -205,18 +204,13 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
         return pd.DataFrame()
     pheno = pheno[samples]
     cov = cov[samples]
-    # GA covariate when GA is not the exposure (aims Zcov); z-scored within
-    # ancestry, NA -> 0
-    if exposure_id != "GA":
-        man = pd.read_csv(os.path.join(args.gxe_dir, "inputs",
-                                       "pooled_sample_manifest.tsv"),
-                          sep="\t").set_index("array_id")
-        ga = pd.to_numeric(man.loc[samples, "GA"], errors="coerce")
-        ga = (ga - ga.mean()) / ga.std(ddof=0)
-        cov = pd.concat([cov, pd.DataFrame({"GA": ga.fillna(0.0)},
-                                           index=samples).T])
-    elif "GA" in cov.index:
-        cov = cov.drop(index="GA")
+    # Stage 0 already includes GA in the ancestry-specific base covariates.
+    # Remove it only when GA itself is the exposure; otherwise require it.
+    if exposure_id == "GA":
+        if "GA" in cov.index:
+            cov = cov.drop(index="GA")
+    elif "GA" not in cov.index:
+        sys.exit(f"ERROR: GA covariate missing from {cov_path} for exposure {exposure_id}")
     e = exp[samples]
 
     device = gxe_core.get_device()

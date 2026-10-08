@@ -33,7 +33,9 @@ Usage:
 """
 
 import argparse
+import glob
 import os
+import re
 import sys
 
 import numpy as np
@@ -47,6 +49,28 @@ import gxe_core
 
 def log(msg):
     print(f"[{pd.Timestamp.now():%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
+
+def load_tier1_hits(gxe_dir, fdr, ancestries):
+    """Load significant ancestry-specific merged tier-1 parquets directly."""
+    rows = []
+    for path in sorted(glob.glob(os.path.join(gxe_dir, "tier1", "*.gxe_cis.parquet"))):
+        name = os.path.basename(path)
+        m = re.match(r"^([^_]+)_(.+)_([^_]+)\.gxe_cis\.parquet$", name)
+        if not m:
+            continue
+        anc, mod, exp = m.groups()
+        if anc not in set(ancestries):
+            continue
+        df = pd.read_parquet(path).reset_index()
+        if "qval" not in df.columns:
+            continue
+        df = df[df["qval"] <= fdr].copy()
+        if len(df):
+            df.insert(0, "exposure", exp)
+            df.insert(0, "modality", mod)
+            df.insert(0, "ancestry", anc)
+            rows.append(df)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
 def ols(y, X):
@@ -70,6 +94,7 @@ def main():
     p.add_argument("--pairs", default=None,
                    help="TSV: child_array_id, mother_id, cohort")
     p.add_argument("--fdr", type=float, default=0.05)
+    p.add_argument("--ancestries", nargs="+", default=["EAS", "EUR"])
     args = p.parse_args()
 
     out_dir = os.path.join(args.gxe_dir, "tnt")
@@ -89,11 +114,11 @@ def main():
         log("BLOCKED: maternal genotypes/pairs not available — see status.tsv")
         return
 
-    hits_path = os.path.join(args.gxe_dir, "aggregate",
-                             "gxe_tier1_significant.tsv")
-    if not os.path.exists(hits_path):
-        sys.exit(f"ERROR: {hits_path} not found — run 57_aggregate_gxe.py first")
-    hits = pd.read_csv(hits_path, sep="\t")
+    hits = load_tier1_hits(args.gxe_dir, args.fdr, args.ancestries)
+    if hits.empty:
+        log(f"no ancestry-specific tier-1 hits at q<={args.fdr}; nothing to refit")
+        hits = pd.DataFrame(columns=["ancestry", "modality", "exposure",
+                                     "phenotype_id", "variant_id"])
     pairs = pd.read_csv(args.pairs, sep="\t")
     log(f"{len(hits)} hits x {len(pairs)} duos")
 
@@ -106,38 +131,31 @@ def main():
     import tensorqtl
 
     results = []
-    for (mod, exp_id), h in hits.groupby(["modality", "exposure"]):
+    if "ancestry" not in hits.columns:
+        sys.exit("ERROR: gxe_tier1_significant.tsv lacks ancestry; rerun ancestry-first aggregation")
+    for (anc, mod, exp_id), h in hits.groupby(["ancestry", "modality", "exposure"]):
         cov = pd.read_csv(os.path.join(args.gxe_dir, "inputs",
-                                       f"pooled_covariates_{mod}.tsv"),
+                                       f"{anc}_covariates_{mod}.tsv"),
                           sep="\t", index_col=0)
         if exp_id in cov.index:
             cov = cov.drop(index=exp_id)
         exp = pd.read_csv(os.path.join(args.gxe_dir, "inputs", "exposures.tsv"),
                           sep="\t", index_col=0).loc[exp_id]
         pheno, _ = tensorqtl.read_phenotype_bed(
-            os.path.join(args.gxe_dir, "inputs", f"pooled_{mod}.bed.gz"))
+            os.path.join(args.gxe_dir, "inputs", f"{anc}_{mod}.bed.gz"))
         for _, hit in h.iterrows():
             pid, vid = hit["phenotype_id"], hit["variant_id"]
             if pid not in pheno.index:
                 continue
             chrom = vid.split(":")[0]
-            # child genotypes at the hit variant (pooled per-ancestry blocks)
-            man = pd.read_csv(os.path.join(args.gxe_dir, "inputs",
-                                           "pooled_sample_manifest.tsv"),
-                              sep="\t")
-            anc_of = dict(zip(man["array_id"], man["ancestry"]))
-            duo_children = [s for s in pairs["child_array_id"]
-                            if s in pheno.columns]
-            sba = {}
-            for a in set(anc_of.get(s) for s in duo_children):
-                sba[a] = [s for s in duo_children if anc_of.get(s) == a]
-            pgens = {a: os.path.join(args.qtl_dir, f"{a}_qtl") for a in sba}
+            duo_children = [s for s in pairs["child_array_id"] if s in pheno.columns]
             G, vids, _, _ = scanner.load_chromosome_genotypes(
-                pgens, sba, chrom, maf_threshold=0.0)
+                {anc: os.path.join(args.qtl_dir, f"{anc}_qtl")},
+                {anc: duo_children}, chrom, maf_threshold=0.0)
             gi = np.where(vids == vid)[0]
             if len(gi) == 0:
                 continue
-            g_child = pd.Series(G[gi[0]], index=[s for a in sba for s in sba[a]])
+            g_child = pd.Series(G[gi[0]], index=duo_children)
             # maternal genotypes at the same variant, per cohort pgen
             g_mother = {}
             for cohort, sub in pairs.groupby("cohort"):
@@ -179,7 +197,7 @@ def main():
                                  T[ok] * e[ok], NT[ok] * e[ok], Z[ok]])
             beta, se, pv = ols(y[ok], X)
             results.append(dict(
-                modality=mod, exposure=exp_id, phenotype_id=pid,
+                ancestry=anc, modality=mod, exposure=exp_id, phenotype_id=pid,
                 variant_id=vid, n_duos=int(ok.sum()),
                 b_T=beta[1], se_T=se[1], p_T=pv[1],
                 b_NT=beta[2], se_NT=se[2], p_NT=pv[2],

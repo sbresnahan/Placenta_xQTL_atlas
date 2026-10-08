@@ -1,36 +1,19 @@
 #!/bin/bash
 # =============================================================================
-# 51_pooled_hcp.sh — pooled multi-ancestry HCP estimation (one modality)
+# 51_pooled_hcp.sh — ancestry-specific HCP estimation (one ancestry x modality)
 # =============================================================================
-# Objective 2.1 tier-1 covariates: HCP latent factors re-estimated on the
-# POOLED (within-ancestry z-scored) modality BED, using the module-05
-# estimator (05_qtl_mapping/hcp_from_matrix.R — same Rhcpp settings, pooled
-# Picard QC metrics as the known-covariate matrix, cohort dummies for the
-# VST-scale modalities). k defaults to the max HCP count across the
-# per-ancestry optimized covariate tables ({QTL_DIR}/{ANC}_covariates_{MOD}.tsv),
-# falling back to the shared {ANC}_covariates.tsv, then to 20.
+# Historical filename retained for compatibility. Primary Module-07 discovery
+# is ancestry-stratified; this worker estimates HCP factors separately within
+# ANCESTRY for MODALITY, then finalizes inputs/{ANC}_covariates_{MOD}.tsv.
 #
-# After estimation, 50_build_gxe_inputs.py --finalize-covariates appends the
-# HCP rows to the pooled base covariates (HCPs lowest pruning priority) and
-# writes inputs/pooled_covariates_{MOD}.tsv.
-#
-# Worker contract: runs ONE modality. MODALITY env var, or $LSB_JOBINDEX
-# (1-based) indexing the MODALITIES list when submitted as an array by
-# 53_submit_gxe.sh.
-#
-# Usage:
-#   MODALITY=expression bash 51_pooled_hcp.sh     # standalone
-#   (53_submit_gxe.sh submits the array form)
-#
-# Optional env: CONFIG, SCRIPTS_DIR, OUTPUT_BASE, QTL_DIR, RESULTS_DIR,
-#   GXE_DIR, MODALITIES, HCP_K (override), COHORT_DUMMY_MODALITIES
-#   (default "expression isoform_expression"), RSCRIPT, R_PACKAGE_LIB,
-#   MAX_PHENOTYPES, CONDA_EXE, CONDA_ENV.
+# Required env: CONFIG, SCRIPTS_DIR, ANCESTRY. MODALITY may be provided
+# directly or resolved from LSB_JOBINDEX against MODALITIES.
 # =============================================================================
 set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
+ANCESTRY="${ANCESTRY:?ERROR: ANCESTRY env var required}"
 REPO_ROOT="$(cd "${SCRIPTS_DIR}/.." && pwd)"
 OUTPUT_BASE="${OUTPUT_BASE:-$(dirname "$CONFIG")}"
 QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
@@ -48,61 +31,50 @@ MODULE05="${MODULE05:-${REPO_ROOT}/05_qtl_mapping}"
 CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
 CONDA_ENV="${CONDA_ENV:-tensorqtl}"
 
-# LSF workers must initialize their own software environment. Do not rely on
-# the interactive submit shell having tensorqtl activated.
 source /etc/profile.d/modules.sh
 [ -x "$CONDA_EXE" ] || { echo "ERROR: conda executable not found/executable: $CONDA_EXE"; exit 1; }
 eval "$("$CONDA_EXE" shell.bash hook)"
 conda activate "$CONDA_ENV"
 command -v python3 >/dev/null || { echo "ERROR: python3 not found after conda activation"; exit 1; }
 
-# ---- resolve modality (env var or LSF array index) ----
 if [ -z "${MODALITY:-}" ]; then
     MODALITY="$(echo $MODALITIES | awk -v i="${LSB_JOBINDEX:?set MODALITY or run under LSF}" '{print $i}')"
 fi
-echo "=== 51_pooled_hcp.sh: ${MODALITY} ==="
+echo "=== 51_pooled_hcp.sh: ${ANCESTRY} ${MODALITY} ==="
 
-BED_GZ="${INPUTS}/pooled_${MODALITY}.bed.gz"
-META="${INPUTS}/pooled_metadata.tsv"
-HCP_OUT="${INPUTS}/pooled_hcp_${MODALITY}.tsv"
-FINAL_COV="${INPUTS}/pooled_covariates_${MODALITY}.tsv"
-for f in "$BED_GZ" "$META" "${INPUTS}/pooled_covariates_base.tsv"; do
-    [ -f "$f" ] || { echo "ERROR: missing $f — run 50_build_gxe_inputs.py first"; exit 1; }
+BED_GZ="${INPUTS}/${ANCESTRY}_${MODALITY}.bed.gz"
+META="${INPUTS}/${ANCESTRY}_metadata.tsv"
+HCP_OUT="${INPUTS}/${ANCESTRY}_hcp_${MODALITY}.tsv"
+FINAL_COV="${INPUTS}/${ANCESTRY}_covariates_${MODALITY}.tsv"
+BASE_COV="${INPUTS}/${ANCESTRY}_covariates_base.tsv"
+for f in "$BED_GZ" "$META" "$BASE_COV"; do
+    [ -f "$f" ] || { echo "ERROR: missing $f — run Stage 0 first"; exit 1; }
 done
 if [ -f "$FINAL_COV" ] && [ "${FORCE:-0}" != "1" ]; then
     echo "  ${FINAL_COV} exists — skipping (FORCE=1 to redo)"; exit 0
 fi
 
-# ---- k: max HCP rows across per-ancestry optimized covariates ----
+# Match Module-05's ancestry/modality optimized HCP count when available.
 if [ -z "$HCP_K" ]; then
-    K=0
-    for ANC in ${ANCESTRIES:-EAS EUR}; do
-        for COV in "${QTL_DIR}/${ANC}_covariates_${MODALITY}.tsv" "${QTL_DIR}/${ANC}_covariates.tsv"; do
-            if [ -f "$COV" ]; then
-                N=$(cut -f1 "$COV" | grep -c '^HCP_' || true)
-                [ "$N" -gt "$K" ] && K=$N
-                break
-            fi
-        done
+    HCP_K=0
+    for COV in "${QTL_DIR}/${ANCESTRY}_covariates_${MODALITY}.tsv" "${QTL_DIR}/${ANCESTRY}_covariates.tsv"; do
+        if [ -f "$COV" ]; then
+            HCP_K=$(cut -f1 "$COV" | grep -c '^HCP_' || true)
+            break
+        fi
     done
-    [ "$K" -eq 0 ] && K=20
-    HCP_K=$K
+    [ "$HCP_K" -eq 0 ] && HCP_K=20
 fi
-echo "  pooled HCP k = ${HCP_K}"
+echo "  ${ANCESTRY} HCP k = ${HCP_K}"
 
-# ---- HCP estimation (hcp_from_matrix.R needs a plain-text BED) ----
 if [ "$HCP_K" -ge 1 ]; then
-    SCRATCH_BED="${TMPDIR:-/tmp}/pooled_${MODALITY}.$$.bed"
+    SCRATCH_BED="${TMPDIR:-/tmp}/${ANCESTRY}_${MODALITY}.$$.bed"
     zcat "$BED_GZ" > "$SCRATCH_BED"
     EXTRA=()
     case " $COHORT_DUMMY_MODALITIES " in
         *" ${MODALITY} "*) EXTRA+=(--cohort-dummies);;
     esac
-    # Module-07 contract: the required package library must be set from
-    # inside R. Do not rely on R_LIBS_USER/R_LIBS_SITE exported by the shell
-    # or container wrapper. Run a temporary copy of the Module-05 script with
-    # an R preamble that keeps the required library first even if the sourced
-    # script later calls .libPaths() itself.
+
     HCP_R_SRC="${MODULE05}/hcp_from_matrix.R"
     [ -f "$HCP_R_SRC" ] || { echo "ERROR: missing $HCP_R_SRC"; exit 1; }
     SCRATCH_R="${TMPDIR:-/tmp}/hcp_from_matrix.module07.$$.R"
@@ -137,15 +109,18 @@ if [ "$HCP_K" -ge 1 ]; then
     cleanup_hcp_scratch
     trap - EXIT
 else
-    # k=0: header-only HCP file (finalize appends nothing)
-    (printf 'covariate'; zcat "$BED_GZ" | head -1 | cut -f5- | tr '\t' '\n' | sed 's/^/\t/'; echo) \
-        | tr -d '\n' | sed 's/\t/\t/g' > "$HCP_OUT"
-    echo "" >> "$HCP_OUT"
+    python3 - "$BED_GZ" "$HCP_OUT" <<'PY'
+import gzip, sys
+bed, out = sys.argv[1:]
+with gzip.open(bed, 'rt') as fh:
+    samples = fh.readline().rstrip('\n').split('\t')[4:]
+with open(out, 'w') as fh:
+    fh.write('covariate\t' + '\t'.join(samples) + '\n')
+PY
 fi
 
-# ---- finalize per-modality covariates ----
 python3 "${SCRIPTS_DIR}/50_build_gxe_inputs.py" \
-    --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" \
-    --gxe-dir "$GXE_DIR" \
-    --finalize-covariates --modality "$MODALITY" --hcp-file "$HCP_OUT"
-echo "=== done: ${MODALITY} ==="
+    --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR" \
+    --finalize-covariates --ancestry "$ANCESTRY" --modality "$MODALITY" \
+    --hcp-file "$HCP_OUT"
+echo "=== done: ${ANCESTRY} ${MODALITY} ==="
