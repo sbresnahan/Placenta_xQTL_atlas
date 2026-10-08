@@ -40,13 +40,19 @@ if [ "$SKIP_R" != "1" ]; then
     echo ""
     echo "== Step 1: R packages (CRAN) =="
     "$RSCRIPT" - <<'EOF'
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+if (file.access(R_LIB, 2L) != 0L) stop("R package library is not writable: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+message("R package library: ", .libPaths()[1])
+
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 need_cran <- c("coloc", "susieR", "glmnet", "optparse", "data.table",
                "R.utils", "remotes", "matrixStats", "irlba")
-have <- rownames(installed.packages())
+have <- rownames(installed.packages(lib.loc = R_LIB))
 for (p in need_cran[!need_cran %in% have]) {
-  message("installing ", p)
-  install.packages(p)
+  message("installing ", p, " -> ", R_LIB)
+  install.packages(p, lib = R_LIB)
 }
 # Version gates: coloc.susie requires coloc >= 5.2; susieR >= 0.12.35
 stopifnot(packageVersion("coloc") >= "5.2.0")
@@ -59,19 +65,26 @@ EOF
     echo ""
     echo "== Step 2: GitHub packages (colocboost, plink2R) =="
     "$RSCRIPT" - <<'EOF'
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+if (file.access(R_LIB, 2L) != 0L) stop("R package library is not writable: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+message("R package library: ", .libPaths()[1])
+
 suppressPackageStartupMessages(library(remotes))
-have <- rownames(installed.packages())
+have <- rownames(installed.packages(lib.loc = R_LIB))
 if (!"colocboost" %in% have) {
-  message("installing StatFunGen/colocboost")
-  remotes::install_github("StatFunGen/colocboost", upgrade = "never")
-}
-if (!"plink2R" %in% have) {
-  message("installing gabraham/plink2R (FUSION LD-reference reader)")
-  remotes::install_github("gabraham/plink2R", subdir = "plink2R",
+  message("installing StatFunGen/colocboost -> ", R_LIB)
+  remotes::install_github("StatFunGen/colocboost", lib = R_LIB,
                           upgrade = "never")
 }
-stopifnot("colocboost" %in% rownames(installed.packages()))
-stopifnot("plink2R" %in% rownames(installed.packages()))
+if (!"plink2R" %in% have) {
+  message("installing gabraham/plink2R (FUSION LD-reference reader) -> ", R_LIB)
+  remotes::install_github("gabraham/plink2R", subdir = "plink2R",
+                          lib = R_LIB, upgrade = "never")
+}
+stopifnot("colocboost" %in% rownames(installed.packages(lib.loc = R_LIB)))
+stopifnot("plink2R" %in% rownames(installed.packages(lib.loc = R_LIB)))
 message("GitHub packages OK")
 EOF
 fi
@@ -87,6 +100,10 @@ fi
 echo ""
 echo "== Step 4: smoke tests =="
 "$RSCRIPT" - <<'EOF'
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+
 suppressPackageStartupMessages({
   library(coloc); library(susieR); library(glmnet); library(colocboost)
 })
@@ -100,7 +117,7 @@ EOF
 
 echo ""
 echo "Done. Record installed versions in docs/software_environments.md:"
-"$RSCRIPT" -e 'cat(sprintf("coloc %s | susieR %s | glmnet %s | colocboost %s\n",
+"$RSCRIPT" -e '.libPaths(c("/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1", .libPaths())); cat(sprintf("coloc %s | susieR %s | glmnet %s | colocboost %s\n",
   packageVersion("coloc"), packageVersion("susieR"),
   packageVersion("glmnet"), packageVersion("colocboost")))'
 echo "FUSION: $(cd "$FUSION_DIR" && git rev-parse --short HEAD)"

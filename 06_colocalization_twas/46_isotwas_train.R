@@ -33,6 +33,10 @@
 #     --qtl-dir $QTL_DIR --outdir $RESULTS_DIR/isotwas
 # =============================================================================
 
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+
 suppressPackageStartupMessages({
   library(data.table)
   library(optparse)

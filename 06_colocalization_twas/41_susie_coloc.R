@@ -40,6 +40,10 @@
 #       --n-shards 40 --outdir $RESULTS_DIR/coloc
 # =============================================================================
 
+R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
+if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
+.libPaths(c(R_LIB, .libPaths()))
+
 suppressPackageStartupMessages({
   library(data.table)
   library(optparse)
