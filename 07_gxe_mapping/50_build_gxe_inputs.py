@@ -5,8 +5,9 @@
 Tier-1 GxE discovery runs on pooled multi-ancestry samples. This script
 builds the pooled inputs from the module-05 per-ancestry products:
 
-  1. Pooled phenotype BEDs (per modality): phenotype_id intersection across
-     ancestries, z-scored WITHIN each ancestry (equalizes scale without
+  1. Pooled phenotype BEDs (per modality): stable phenotype intersection
+     across ancestries (splicing/IR ancestry-local IDs are canonicalized to
+     genomic event IDs first), z-scored WITHIN each ancestry (equalizes scale without
      removing between-ancestry mean structure into the phenotypes — the
      ancestry dummies in the covariates absorb that), then concatenated.
      Written bgzipped + tabix-indexed as inputs/pooled_{MOD}.bed.gz.
@@ -73,6 +74,57 @@ def read_bed(path):
     return df
 
 
+def canonicalize_phenotype_ids(df, modality, ancestry):
+    """Replace ancestry-local splicing/IR IDs with stable genomic event IDs.
+
+    Module 03 harmonizes splicing and intron retention within each ancestry.
+    Consequently, LeafCutter meta-cluster numbers (clu_N) and MAJIQ IR
+    unified indices are ancestry-local and cannot be intersected literally
+    across ancestries.  The underlying junction/event coordinates embedded in
+    phenotype_id are stable and are used here for the pooled Tier-1 identity.
+    Other modalities already have stable IDs and are returned unchanged.
+    """
+    if modality == "splicing":
+        # assemble_bed.py emits:
+        #   {gene_id}__{chrom}_{start}_{end}_clu_{N}_{strand}
+        # Drop only the ancestry-local cluster number.
+        canonical = df["phenotype_id"].astype(str).str.replace(
+            r"_clu_\d+_([+-])$", r"_\1", regex=True
+        )
+    elif modality == "intron_retention":
+        # assemble_bed.py emits:
+        #   {tss_gene_id}__IR_{gene_base}_{seqid}_{start}_{end}_{strand}_{idx}
+        # Drop only the ancestry-local sequential unified index.
+        canonical = df["phenotype_id"].astype(str).str.replace(
+            r"_([+-])_\d+$", r"_\1", regex=True
+        )
+    else:
+        return df
+
+    changed = int((canonical != df["phenotype_id"].astype(str)).sum())
+    if changed == 0 and len(df):
+        sys.exit(
+            f"ERROR: {modality} phenotype IDs for {ancestry} do not match "
+            "the expected Module-03 ancestry-local ID format; refusing to "
+            "pool potentially non-equivalent phenotypes"
+        )
+
+    dup = canonical.duplicated(keep=False)
+    if dup.any():
+        examples = canonical[dup].head(5).tolist()
+        sys.exit(
+            f"ERROR: {modality} canonicalization creates duplicate phenotype "
+            f"IDs for {ancestry}: {examples}. Investigate upstream "
+            "harmonization before pooling."
+        )
+
+    df = df.copy()
+    df["phenotype_id"] = canonical
+    log(f"    {ancestry}: canonicalized {changed} {modality} phenotype IDs "
+        "for cross-ancestry matching")
+    return df
+
+
 def zscore_rows(x):
     """Row-wise z-score; rows with sd < 1e-8 return NaN (dropped upstream)."""
     mu = x.mean(1)
@@ -105,6 +157,11 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
             log(f"    {anc}: dropping {n_nonauto} non-autosomal phenotypes")
         df = df.loc[autosomal].copy()
 
+        # Splicing and IR are harmonized within ancestry upstream, so their
+        # literal phenotype IDs contain ancestry-local numbering.  Convert
+        # those IDs to stable genomic event IDs before ancestry intersection.
+        df = canonicalize_phenotype_ids(df, modality, anc)
+
         # restrict to samples with metadata (exposures/covariates need it)
         keep_cols = [c for c in df.columns[4:] if c in meta_ids]
         n_drop = len(df.columns) - 4 - len(keep_cols)
@@ -118,6 +175,12 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
     ids = set(blocks[0][1]["phenotype_id"])
     for _, df in blocks[1:]:
         ids &= set(df["phenotype_id"])
+    if not ids:
+        sys.exit(
+            f"ERROR: no cross-ancestry phenotype overlap for {modality} "
+            "after canonicalization; inspect upstream phenotype definitions"
+        )
+    log(f"    cross-ancestry phenotype intersection: {len(ids)}")
     base = blocks[0][1]
     base = base[base["phenotype_id"].isin(ids)]
     pos_ref = base[["phenotype_id", "#chr", "start", "end"]]
@@ -315,8 +378,24 @@ def build_base_covariates(samples, meta_collapsed, qtl_dir, pcair_dir,
         ct = pd.concat([d[sorted(common_cols)] for d in ct_blocks])
         ct = ct.reindex(samples)
         ct = ct.fillna(ct.mean())  # rare missing proportions -> pooled mean
+
+        # Match Module 05's production covariate policy: the maternal cell
+        # fraction is excluded, and the dominant placental cell type is also
+        # dropped as the compositional reference.  Determine the dominant
+        # reference from the full composition, then remove both terms before
+        # transformation/pruning.
         dominant = ct.mean().idxmax()
-        ct = ct.drop(columns=[dominant])
+        maternal = next(
+            (c for c in ct.columns if str(c).strip().lower() == "maternal"),
+            None,
+        )
+        drop_ct = [dominant]
+        if maternal is not None and maternal not in drop_ct:
+            drop_ct.append(maternal)
+        elif maternal is None:
+            log("  WARNING: maternal cell fraction column not found in "
+                "harmonized deconvolution inputs")
+        ct = ct.drop(columns=drop_ct)
         ct = np.arcsinh(ct)
         ct = ct - ct.mean()
         ct.index.name = "sample_id"
@@ -325,7 +404,9 @@ def build_base_covariates(samples, meta_collapsed, qtl_dir, pcair_dir,
         blocks.append(ct_t)
         for j, name in enumerate(ct_t.index):
             priority[name] = (2, j)
-        log(f"  cell types: {ct_t.shape[0]} (dropped dominant: {dominant})")
+        maternal_msg = maternal if maternal is not None else "not found"
+        log(f"  cell types: {ct_t.shape[0]} (dropped dominant: {dominant}; "
+            f"excluded maternal fraction: {maternal_msg})")
 
     cov = pd.concat(blocks)
     cov = cov.fillna(0.0)

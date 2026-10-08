@@ -46,6 +46,24 @@ def log(msg):
     print(f"[{pd.Timestamp.now():%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
 
 
+def canonicalize_phenotype_ids(ids, modality):
+    """Canonicalize ancestry-local splicing/IR phenotype IDs.
+
+    Module 03 assigns LeafCutter meta-cluster numbers and MAJIQ IR unified
+    indices separately within each ancestry.  Remove only those local numeric
+    labels so equivalent genomic events share one ID for Tier-2 selection and
+    cross-ancestry IVW meta-analysis.
+    """
+    s = pd.Index(ids).astype(str).to_series(index=range(len(ids)))
+    if modality == "splicing":
+        out = s.str.replace(r"_clu_\d+_([+-])$", r"_\1", regex=True)
+    elif modality == "intron_retention":
+        out = s.str.replace(r"_([+-])_\d+$", r"_\1", regex=True)
+    else:
+        return pd.Index(ids)
+    return pd.Index(out.values)
+
+
 def load_scanner_module():
     """Import 52_gxe_scan.py by path (digit-leading filename)."""
     spec = importlib.util.spec_from_file_location(
@@ -93,7 +111,9 @@ def prioritized_phenotypes(modality, ancestries, qtl_dir, results_dir,
             m &= coloc["coloc_call"].astype(bool)
         elif "PP.H4.abf" in coloc.columns:
             m &= coloc["PP.H4.abf"] >= pp_h4
-        phenos |= set(coloc.loc[m, "phenotype_id"])
+        coloc_ids = canonicalize_phenotype_ids(
+            coloc.loc[m, "phenotype_id"].astype(str).tolist(), modality)
+        phenos |= set(coloc_ids)
         log(f"  coloc PP.H4>={pp_h4}: {len(phenos)} phenotypes")
 
     twas_path = resolve_existing([
@@ -110,14 +130,20 @@ def prioritized_phenotypes(modality, ancestries, qtl_dir, results_dir,
             if modality == "expression":
                 phenos |= genes
             else:
-                groups = resolve_existing([
-                    os.path.join(qtl_dir, f"{ancestries[0]}_{modality}.phenotype_groups.txt")
-                ], "phenotype groups")
-                if groups:
+                # Splicing/IR IDs contain ancestry-local numbering upstream,
+                # and phenotype availability can differ by ancestry.  Read all
+                # available ancestry group files and canonicalize before union.
+                for anc in ancestries:
+                    groups = resolve_existing([
+                        os.path.join(qtl_dir, f"{anc}_{modality}.phenotype_groups.txt")
+                    ], f"phenotype groups ({anc})")
+                    if not groups:
+                        continue
                     gdf = pd.read_csv(groups, sep="\t", header=None,
                                       names=["phenotype_id", "gene_id"])
-                    phenos |= set(gdf.loc[gdf["gene_id"].isin(genes),
-                                          "phenotype_id"])
+                    ids = gdf.loc[gdf["gene_id"].isin(genes),
+                                  "phenotype_id"].astype(str).tolist()
+                    phenos |= set(canonicalize_phenotype_ids(ids, modality))
     log(f"  prioritized phenotypes ({modality}): {len(phenos)}")
     return phenos
 
@@ -138,6 +164,18 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
             return pd.DataFrame()
 
     pheno, pheno_pos = tensorqtl.read_phenotype_bed(bed)
+
+    # Canonicalize ancestry-local splicing/IR IDs before prioritized-phenotype
+    # filtering and before emitting rows that will be meta-analyzed.
+    canonical = canonicalize_phenotype_ids(pheno.index.tolist(), modality)
+    if canonical.duplicated().any():
+        dup = canonical[canonical.duplicated(keep=False)][:5].tolist()
+        sys.exit(f"ERROR: {anc} {modality} canonicalization creates duplicate "
+                 f"phenotype IDs: {dup}")
+    pheno.index = canonical
+    pheno_pos = pheno_pos.copy()
+    pheno_pos.index = canonical
+
     pheno = pheno[pheno.index.isin(pheno_keep)]
     pheno_pos = pheno_pos.loc[pheno.index]
 
