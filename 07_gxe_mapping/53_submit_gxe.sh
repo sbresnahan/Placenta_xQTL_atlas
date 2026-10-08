@@ -18,16 +18,16 @@
 #   bash 53_submit_gxe.sh           # everything
 #   STAGES="2 3" MODALITIES="expression" bash 53_submit_gxe.sh
 #
-# Required env: CONFIG, SCRIPTS_DIR, METADATA (cohort metadata .txt).
+# Required env: CONFIG, SCRIPTS_DIR.
 # Optional: OUTPUT_BASE, QTL_DIR, RESULTS_DIR, GXE_DIR, ANCESTRIES,
 #   MODALITIES, EXPOSURES (default: enabled rows of gxe_config.tsv),
-#   QUEUE, WALLTIME, CHROMS, FORCE, R_PACKAGE_LIB, CONDA_EXE, CONDA_ENV.
+#   COLLAPSED_ANCESTRY_MAP, QUEUE, WALLTIME, CHROMS, FORCE, R_PACKAGE_LIB,
+#   CONDA_EXE, CONDA_ENV.
 # =============================================================================
 set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
-METADATA="${METADATA:?ERROR: METADATA env var required (placenta_QTL_cohort_metadata.txt)}"
 OUTPUT_BASE="${OUTPUT_BASE:-$(dirname "$CONFIG")}"
 QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
 RESULTS_DIR="${RESULTS_DIR:-${OUTPUT_BASE}/qtl_results}"
@@ -35,6 +35,7 @@ GXE_DIR="${GXE_DIR:-${RESULTS_DIR}/gxe}"
 LOG_DIR="${LOG_DIR:-${OUTPUT_BASE}/logs}"
 ANCESTRIES="${ANCESTRIES:-EAS EUR}"
 MODALITIES="${MODALITIES:-expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability}"
+COLLAPSED_ANCESTRY_MAP="${COLLAPSED_ANCESTRY_MAP:-${OUTPUT_BASE}/replicate_collapsed/reports/ancestry_map_collapsed.tsv}"
 EXPOSURES="${EXPOSURES:-$(awk -F'\t' 'NR>1 && $6==1 {print $1}' "${SCRIPTS_DIR}/gxe_config.tsv")}"
 STAGES="${STAGES:-0 1 2 3 4 5 6}"
 QUEUE="${QUEUE:-medium}"
@@ -59,6 +60,7 @@ echo "  GXE_DIR:    $GXE_DIR"
 echo "  MODALITIES: $MODALITIES"
 echo "  EXPOSURES:  $EXPOSURES"
 echo "  STAGES:     $STAGES"
+echo "  COLLAPSED_ANCESTRY_MAP: $COLLAPSED_ANCESTRY_MAP"
 
 has_stage() { case " $STAGES " in *" $1 "*) return 0;; *) return 1;; esac; }
 
@@ -71,7 +73,7 @@ if has_stage 0; then
         J=$(bsub -q "$QUEUE" -n 4 -M 32G -R "rusage[mem=32G]" -W 4:00 \
             -J "gxe_inputs" \
             -o "${LOG_DIR}/gxe_inputs.%J.out" -e "${LOG_DIR}/gxe_inputs.%J.err" \
-            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,METADATA=$METADATA,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,COLLAPSED_ANCESTRY_MAP=$COLLAPSED_ANCESTRY_MAP,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
             "bash ${SCRIPTS_DIR}/50a_run_build_gxe_inputs.sh")
         DEP0=$(echo "$J" | grep -o '[0-9]\+' | head -1)
         echo "  stage 0: gxe_inputs job $DEP0"
@@ -86,7 +88,7 @@ if has_stage 1; then
     J=$(bsub -q "$QUEUE" -n 4 -M 32G -R "rusage[mem=32G]" -W 8:00 \
         -J "gxe_hcp[1-${N_MODS}]" $DEP \
         -o "${LOG_DIR}/gxe_hcp.%J.%I.out" -e "${LOG_DIR}/gxe_hcp.%J.%I.err" \
-        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,METADATA=$METADATA,FORCE=$FORCE,R_PACKAGE_LIB=$R_PACKAGE_LIB,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,FORCE=$FORCE,R_PACKAGE_LIB=$R_PACKAGE_LIB,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
         "bash ${SCRIPTS_DIR}/51_pooled_hcp.sh")
     DEP1=$(echo "$J" | grep -o '[0-9]\+' | head -1)
     echo "  stage 1: gxe_hcp array $DEP1"

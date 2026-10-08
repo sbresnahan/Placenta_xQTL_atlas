@@ -42,13 +42,24 @@ builds the pooled inputs from the module-05 per-ancestry products:
 Genotypes are NOT touched: the scanner reads per-ancestry pgens directly
 (per-chromosome, variant-ID-intersected, ancestry-block stacked).
 
+Metadata provenance:
+  Individual-level metadata are taken from the Module-05 final
+  {ANC}_metadata.tsv files and restricted to the retained RNA run in
+  replicate_collapsed/reports/ancestry_map_collapsed.tsv. This keeps
+  exposures/demographics aligned to the same representative run used by the
+  replicate-collapse workflow. pooled_metadata.tsv retains same-cohort
+  technical-replicate rnaseq_id rows for the final individuals so
+  hcp_from_matrix.R can average their Picard metrics, but excludes non-primary
+  cross-protocol rows using the retained run's cohort.
+
 Usage:
   python3 50_build_gxe_inputs.py --qtl-dir <qtl_inputs> \
-      --results-dir <qtl_results> --metadata <cohort metadata.txt> \
+      --results-dir <qtl_results> \
+      --collapsed-ancestry-map <replicate_collapsed/reports/ancestry_map_collapsed.tsv> \
       --pcair-dir <genotype_pcs> [--ancestries "EAS EUR"] [--modalities ...]
 
   python3 50_build_gxe_inputs.py --qtl-dir ... --results-dir ... \
-      --metadata ... --finalize-covariates --modality expression \
+      --finalize-covariates --modality expression \
       --hcp-file inputs/pooled_hcp_expression.tsv
 """
 
@@ -227,15 +238,173 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
     return list(out_df.columns[4:])
 
 
-def collapse_metadata(meta):
-    """One row per array_id; warn on discordant sample-level columns."""
-    cols = [c for c in ["ancestry", "cohort", "sex"] if c in meta.columns]
-    for c in cols:
-        n_disc = meta.groupby("array_id")[c].nunique().gt(1).sum()
-        if n_disc:
-            log(f"  WARNING: {n_disc} array_ids with discordant '{c}' across "
-                f"replicates — using the first value")
-    return meta.drop_duplicates("array_id").set_index("array_id")
+def load_module05_metadata(qtl_dir, ancestries, collapsed_ancestry_map,
+                           exposure_config):
+    """Load metadata with the same provenance as the Module-05 QTL inputs.
+
+    Module 05 writes {ANC}_metadata.tsv after the final RNA/DNA intersection.
+    Those files can retain multiple rnaseq_id rows for one array_id. For
+    individual-level fields (exposures, ancestry, cohort, sex), select the
+    retained RNA run from collapse_replicates.py's ancestry_map_collapsed.tsv.
+
+    Return:
+      meta_all: all final Module-05 rnaseq rows (used by HCP QC aggregation)
+      meta_one: one retained-run row per array_id (used by GxE metadata)
+    """
+    meta_blocks = []
+    for anc in ancestries:
+        path = os.path.join(qtl_dir, f"{anc}_metadata.tsv")
+        if not os.path.exists(path):
+            sys.exit(f"ERROR: Module-05 metadata not found: {path}")
+        df = pd.read_csv(path, sep="\t")
+        missing = {"rnaseq_id", "array_id"} - set(df.columns)
+        if missing:
+            sys.exit(f"ERROR: {path} missing required columns: {sorted(missing)}")
+        if "ancestry" in df.columns:
+            bad = df[
+                df["ancestry"].notna()
+                & (df["ancestry"].astype(str) != str(anc))
+            ]
+            if len(bad):
+                sys.exit(
+                    f"ERROR: {path} contains {len(bad)} row(s) whose ancestry "
+                    f"does not match file stratum {anc}"
+                )
+        df = df.copy()
+        df["ancestry"] = anc
+        meta_blocks.append(df)
+        log(f"  Module-05 metadata {anc}: {len(df)} rnaseq rows, "
+            f"{df['array_id'].nunique()} array_ids")
+
+    meta_all = pd.concat(meta_blocks, ignore_index=True)
+    if meta_all["rnaseq_id"].duplicated().any():
+        bad = meta_all.loc[meta_all["rnaseq_id"].duplicated(keep=False),
+                           "rnaseq_id"].astype(str).unique()[:5]
+        sys.exit(
+            "ERROR: rnaseq_id appears more than once across Module-05 metadata "
+            f"files (examples: {list(bad)})"
+        )
+    id_counts = meta_all.groupby("rnaseq_id")["array_id"].nunique()
+    if (id_counts > 1).any():
+        bad = id_counts[id_counts > 1].index.astype(str).tolist()[:5]
+        sys.exit(
+            "ERROR: rnaseq_id maps to multiple array_ids in Module-05 metadata "
+            f"(examples: {bad})"
+        )
+
+    if not os.path.exists(collapsed_ancestry_map):
+        sys.exit(
+            "ERROR: collapsed ancestry map not found: "
+            f"{collapsed_ancestry_map}\n"
+            "Run Module-05 collapse_replicates.py first or pass "
+            "--collapsed-ancestry-map explicitly."
+        )
+    amap = pd.read_csv(collapsed_ancestry_map, sep="\t")
+    required = {"sample_id", "assigned_ancestry", "cohort"}
+    missing = required - set(amap.columns)
+    if missing:
+        sys.exit(
+            f"ERROR: collapsed ancestry map missing columns {sorted(missing)}: "
+            f"{collapsed_ancestry_map}"
+        )
+    if amap["sample_id"].duplicated().any():
+        bad = amap.loc[amap["sample_id"].duplicated(keep=False),
+                       "sample_id"].astype(str).unique()[:5]
+        sys.exit(
+            "ERROR: collapsed ancestry map has duplicate sample_id rows "
+            f"(examples: {list(bad)})"
+        )
+
+    retained = amap[["sample_id", "assigned_ancestry", "cohort"]].rename(
+        columns={"sample_id": "rnaseq_id",
+                 "assigned_ancestry": "collapsed_ancestry",
+                 "cohort": "collapsed_cohort"}
+    )
+    meta_retained = meta_all.merge(retained, on="rnaseq_id", how="inner",
+                                   validate="one_to_one")
+    if meta_retained.empty:
+        sys.exit(
+            "ERROR: no overlap between Module-05 metadata rnaseq_id values and "
+            f"collapsed ancestry map: {collapsed_ancestry_map}"
+        )
+
+    # The collapsed map is the authority for the retained run's ancestry/cohort.
+    anc_mismatch = (
+        meta_retained["ancestry"].astype(str)
+        != meta_retained["collapsed_ancestry"].astype(str)
+    )
+    if anc_mismatch.any():
+        ex = meta_retained.loc[anc_mismatch,
+                               ["rnaseq_id", "array_id", "ancestry",
+                                "collapsed_ancestry"]].head(5)
+        sys.exit(
+            "ERROR: Module-05 metadata ancestry disagrees with collapsed "
+            f"ancestry map for {int(anc_mismatch.sum())} retained run(s):\n"
+            + ex.to_string(index=False)
+        )
+    meta_retained["ancestry"] = meta_retained["collapsed_ancestry"]
+
+    if "cohort" in meta_retained.columns:
+        cohort_mismatch = (
+            meta_retained["cohort"].notna()
+            & meta_retained["collapsed_cohort"].notna()
+            & (meta_retained["cohort"].astype(str)
+               != meta_retained["collapsed_cohort"].astype(str))
+        )
+        if cohort_mismatch.any():
+            ex = meta_retained.loc[cohort_mismatch,
+                                   ["rnaseq_id", "array_id", "cohort",
+                                    "collapsed_cohort"]].head(5)
+            sys.exit(
+                "ERROR: Module-05 metadata cohort disagrees with collapsed "
+                f"ancestry map for {int(cohort_mismatch.sum())} retained "
+                "run(s):\n" + ex.to_string(index=False)
+            )
+    meta_retained["cohort"] = meta_retained["collapsed_cohort"]
+    meta_retained = meta_retained.drop(
+        columns=["collapsed_ancestry", "collapsed_cohort"]
+    )
+
+    # There must now be exactly one retained RNA run per individual.
+    dup_array = meta_retained["array_id"].duplicated(keep=False)
+    if dup_array.any():
+        ex = meta_retained.loc[dup_array,
+                               ["rnaseq_id", "array_id", "ancestry",
+                                "cohort"]].head(10)
+        sys.exit(
+            "ERROR: collapsed ancestry map leaves >1 retained rnaseq_id for "
+            "the same array_id; this violates the Module-05 replicate-collapse "
+            "contract. Examples:\n" + ex.to_string(index=False)
+        )
+
+    # Exposure/demographic values come from the retained run. Still verify that
+    # technical-replicate metadata agree for the individual-level fields Module
+    # 07 may use; disagreement is a provenance error, not something to average.
+    cfg = pd.read_csv(exposure_config, sep="\t")
+    if "enabled" in cfg.columns:
+        cfg = cfg[cfg["enabled"] == 1]
+    exposure_cols = set(cfg["column"].dropna().astype(str)) \
+        if "column" in cfg.columns else set()
+    check_cols = [c for c in sorted(
+        exposure_cols | {"ancestry", "sex", "GA", "ppBMI", "gdm", "ogtt"}
+    ) if c in meta_all.columns]
+    for c in check_cols:
+        nuniq = meta_all.groupby("array_id")[c].nunique(dropna=True)
+        bad = nuniq[nuniq > 1]
+        if len(bad):
+            sys.exit(
+                f"ERROR: {len(bad)} final Module-05 array_id(s) have "
+                f"discordant individual-level metadata '{c}' across rnaseq "
+                "rows; refusing to choose/average values. Examples: "
+                f"{bad.index.astype(str).tolist()[:5]}"
+            )
+
+    meta_one = meta_retained.set_index("array_id", drop=False)
+    log(
+        f"  retained-run metadata: {len(meta_one)} array_ids from "
+        f"{collapsed_ancestry_map}"
+    )
+    return meta_all, meta_one
 
 
 def build_exposures(config_path, meta_collapsed, samples, out_dir):
@@ -454,8 +623,17 @@ def main():
     p = argparse.ArgumentParser(description="Build pooled GxE inputs")
     p.add_argument("--qtl-dir", required=True)
     p.add_argument("--results-dir", required=True)
-    p.add_argument("--metadata", required=True,
-                   help="placenta_QTL_cohort_metadata.txt")
+    p.add_argument(
+        "--collapsed-ancestry-map", default=None,
+        help=("Module-05 replicate-collapsed ancestry map. Default: "
+              "{OUTPUT_BASE}/replicate_collapsed/reports/"
+              "ancestry_map_collapsed.tsv")
+    )
+    p.add_argument(
+        "--metadata", default=None,
+        help=("DEPRECATED: Stage 0 now reads {ANC}_metadata.tsv from --qtl-dir "
+              "and the collapsed ancestry map to match Module-05 provenance")
+    )
     p.add_argument("--pcair-dir", default=None,
                    help="genotype PCs dir (default: {OUTPUT_BASE}/genotype_pcs)")
     p.add_argument("--ancestries", default="EAS EUR")
@@ -485,10 +663,18 @@ def main():
     pcair_dir = args.pcair_dir or os.path.join(
         os.path.dirname(args.results_dir.rstrip("/")), "genotype_pcs")
 
-    meta = pd.read_csv(args.metadata, sep="\t")
-    log(f"metadata: {len(meta)} rows, columns: {list(meta.columns)}")
-    meta_ids = set(meta["array_id"])
-    meta_c = collapse_metadata(meta)
+    if args.metadata:
+        log("WARNING: --metadata is deprecated and ignored; using Module-05 "
+            "{ANC}_metadata.tsv plus the collapsed ancestry map")
+    output_base = os.path.dirname(args.qtl_dir.rstrip("/"))
+    collapsed_ancestry_map = args.collapsed_ancestry_map or os.path.join(
+        output_base, "replicate_collapsed", "reports",
+        "ancestry_map_collapsed.tsv"
+    )
+    meta, meta_c = load_module05_metadata(
+        args.qtl_dir, ancestries, collapsed_ancestry_map, args.gxe_config
+    )
+    meta_ids = set(meta_c.index)
 
     # 1. pooled BEDs (sample order = ancestry blocks, BED order within)
     samples = None
@@ -525,12 +711,31 @@ def main():
     log(f"wrote pooled_sample_manifest.tsv: {len(manifest)} samples")
 
     # 3. pooled metadata for hcp_from_matrix.R (rnaseq_id level)
-    pm = meta[meta["array_id"].isin(set(manifest["array_id"]))]
+    pm = meta[meta["array_id"].isin(set(manifest["array_id"]))].copy()
+    # Same-cohort technical replicates contribute QC metrics to the collapsed
+    # individual, matching hcp_from_matrix.R's averaging. Cross-protocol
+    # non-primary runs are excluded: collapse_replicates.py's default policy
+    # keeps the retained run/cohort as the individual's representation.
+    if "cohort" in pm.columns:
+        retained_cohort = meta_c["cohort"].to_dict()
+        expected = pm["array_id"].map(retained_cohort)
+        cross_protocol = (
+            pm["cohort"].notna() & expected.notna()
+            & (pm["cohort"].astype(str) != expected.astype(str))
+        )
+        n_cross_drop = int(cross_protocol.sum())
+        if n_cross_drop:
+            log(f"  pooled HCP metadata: dropping {n_cross_drop} non-primary "
+                "cross-protocol rnaseq row(s)")
+            pm = pm.loc[~cross_protocol].copy()
     pm_cols = [c for c in ["rnaseq_id", "array_id", "ancestry", "cohort", "sex"]
                if c in pm.columns]
     pm[pm_cols].to_csv(os.path.join(inputs_dir, "pooled_metadata.tsv"),
                        sep="\t", index=False)
-    log(f"wrote pooled_metadata.tsv: {len(pm)} rnaseq rows")
+    n_rep_extra = len(pm) - pm["array_id"].nunique()
+    log(f"wrote pooled_metadata.tsv: {len(pm)} rnaseq rows for "
+        f"{pm['array_id'].nunique()} array_ids ({n_rep_extra} same-cohort "
+        "technical-replicate row(s) retained for HCP QC averaging)")
 
     # 4. exposures
     build_exposures(args.gxe_config, meta_c, list(manifest["array_id"]),

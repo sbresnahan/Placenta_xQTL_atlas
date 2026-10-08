@@ -146,7 +146,6 @@ fi
 # ---- finalize per-modality covariates ----
 python3 "${SCRIPTS_DIR}/50_build_gxe_inputs.py" \
     --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" \
-    --metadata "${METADATA:-${OUTPUT_BASE}/placenta_QTL_cohort_metadata.txt}" \
     --gxe-dir "$GXE_DIR" \
     --finalize-covariates --modality "$MODALITY" --hcp-file "$HCP_OUT"
 echo "=== done: ${MODALITY} ==="

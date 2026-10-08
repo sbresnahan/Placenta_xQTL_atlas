@@ -76,7 +76,9 @@ columns are added to the cohort metadata (see docs/data_availability.md).
 ```bash
 export CONFIG=/path/to/config.yml
 export SCRIPTS_DIR=$PWD
-export METADATA=/path/to/placenta_QTL_cohort_metadata.txt
+# Stage 0 reads Module-05 {ANC}_metadata.tsv and the retained-run map.
+# Override only if the collapse staging tree is elsewhere:
+# export COLLAPSED_ANCESTRY_MAP="$OUTPUT_BASE/replicate_collapsed/reports/ancestry_map_collapsed.tsv"
 
 # everything (stages 0-6):
 bash 53_submit_gxe.sh

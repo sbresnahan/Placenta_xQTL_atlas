@@ -6,21 +6,21 @@
 # required by 50_build_gxe_inputs.py. Do not rely on the submit shell's active
 # conda environment; LSF jobs start with a clean/non-interactive shell context.
 #
-# Required env: CONFIG, SCRIPTS_DIR, METADATA
+# Required env: CONFIG, SCRIPTS_DIR
 # Optional: OUTPUT_BASE, QTL_DIR, RESULTS_DIR, GXE_DIR, ANCESTRIES, MODALITIES,
-#   CONDA_EXE, CONDA_ENV.
+#   COLLAPSED_ANCESTRY_MAP, CONDA_EXE, CONDA_ENV.
 # =============================================================================
 set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
-METADATA="${METADATA:?ERROR: METADATA env var required}"
 OUTPUT_BASE="${OUTPUT_BASE:-$(dirname "$CONFIG")}"
 QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
 RESULTS_DIR="${RESULTS_DIR:-${OUTPUT_BASE}/qtl_results}"
 GXE_DIR="${GXE_DIR:-${RESULTS_DIR}/gxe}"
 ANCESTRIES="${ANCESTRIES:-EAS EUR}"
 MODALITIES="${MODALITIES:-expression isoforms isoform_expression splicing intron_retention alt_TSS alt_polyA RNA_editing stability}"
+COLLAPSED_ANCESTRY_MAP="${COLLAPSED_ANCESTRY_MAP:-${OUTPUT_BASE}/replicate_collapsed/reports/ancestry_map_collapsed.tsv}"
 CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
 CONDA_ENV="${CONDA_ENV:-tensorqtl}"
 
@@ -46,7 +46,7 @@ PYENV
 exec python3 "${SCRIPTS_DIR}/50_build_gxe_inputs.py" \
     --qtl-dir "$QTL_DIR" \
     --results-dir "$RESULTS_DIR" \
-    --metadata "$METADATA" \
+    --collapsed-ancestry-map "$COLLAPSED_ANCESTRY_MAP" \
     --ancestries "$ANCESTRIES" \
     --modalities "$MODALITIES" \
     --gxe-dir "$GXE_DIR"
