@@ -16,7 +16,7 @@
 #BSUB -R "rusage[mem=48G]"
 #BSUB -W 12:00
 
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR required}"

@@ -23,7 +23,7 @@
 #   MODALITIES, EXPOSURES (default: enabled rows of gxe_config.tsv),
 #   QUEUE, WALLTIME, CHROMS, FORCE, R_PACKAGE_LIB, CONDA_EXE, CONDA_ENV.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"

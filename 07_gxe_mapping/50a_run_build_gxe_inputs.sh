@@ -10,7 +10,7 @@
 # Optional: OUTPUT_BASE, QTL_DIR, RESULTS_DIR, GXE_DIR, ANCESTRIES, MODALITIES,
 #   CONDA_EXE, CONDA_ENV.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"

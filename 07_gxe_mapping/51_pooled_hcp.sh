@@ -27,7 +27,7 @@
 #   (default "expression isoform_expression"), RSCRIPT, R_PACKAGE_LIB,
 #   MAX_PHENOTYPES, CONDA_EXE, CONDA_ENV.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
