@@ -87,10 +87,16 @@ if (file.access(R_LIB, 2L) != 0L) stop("R package library is not writable: ", R_
 .libPaths(c(R_LIB, .libPaths()))
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
-# RcppParallel 6.x moved to oneTBB and changed TBB ABI. Any compiled package
-# built against a different RcppParallel/TBB stack must be rebuilt. Install a
-# coherent RcppParallel -> Rfast pair into the pipeline library in a fresh R
-# process so no stale TBB shared library remains loaded while replacing them.
+# RcppParallel 6.x moved to oneTBB, changed TBB ABI, and now requires CMake.
+# The R 4.3.1 singularity image used by this pipeline does not provide CMake.
+# Pin the final pre-6.x release instead, then rebuild Rfast against that exact
+# RcppParallel/TBB installation so the compiled pair is ABI-consistent.
+RCPP_PARALLEL_VERSION <- "5.1.11-2"
+RCPP_PARALLEL_URL <- paste0(
+  "https://cran.r-project.org/src/contrib/Archive/RcppParallel/",
+  "RcppParallel_", RCPP_PARALLEL_VERSION, ".tar.gz"
+)
+
 for (p in c("Rfast", "RcppParallel")) {
   pkg_dir <- file.path(R_LIB, p)
   if (dir.exists(pkg_dir)) {
@@ -99,13 +105,23 @@ for (p in c("Rfast", "RcppParallel")) {
   }
 }
 
-for (p in c("RcppParallel", "Rfast")) {
-  message("rebuilding ", p, " from source -> ", R_LIB)
-  install.packages(p, lib = R_LIB, dependencies = NA, type = "source")
-  if (!p %in% rownames(installed.packages(lib.loc = R_LIB))) {
-    stop("source rebuild failed for ", p,
-         "; inspect the installation output above for the underlying error")
-  }
+message("installing pinned RcppParallel ", RCPP_PARALLEL_VERSION,
+        " from CRAN archive -> ", R_LIB)
+install.packages(RCPP_PARALLEL_URL, repos = NULL, lib = R_LIB,
+                 type = "source")
+if (!"RcppParallel" %in% rownames(installed.packages(lib.loc = R_LIB))) {
+  stop("source rebuild failed for RcppParallel; inspect the installation output above")
+}
+if (as.character(packageVersion("RcppParallel")) != RCPP_PARALLEL_VERSION) {
+  stop("expected RcppParallel ", RCPP_PARALLEL_VERSION,
+       " but found ", as.character(packageVersion("RcppParallel")))
+}
+
+message("rebuilding Rfast from source against RcppParallel ",
+        RCPP_PARALLEL_VERSION, " -> ", R_LIB)
+install.packages("Rfast", lib = R_LIB, dependencies = NA, type = "source")
+if (!"Rfast" %in% rownames(installed.packages(lib.loc = R_LIB))) {
+  stop("source rebuild failed for Rfast; inspect the installation output above")
 }
 EOF
 
