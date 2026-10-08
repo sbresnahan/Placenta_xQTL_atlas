@@ -21,7 +21,7 @@
 # Required env: CONFIG, SCRIPTS_DIR, METADATA (cohort metadata .txt).
 # Optional: OUTPUT_BASE, QTL_DIR, RESULTS_DIR, GXE_DIR, ANCESTRIES,
 #   MODALITIES, EXPOSURES (default: enabled rows of gxe_config.tsv),
-#   QUEUE, WALLTIME, CHROMS, FORCE, R_PACKAGE_LIB.
+#   QUEUE, WALLTIME, CHROMS, FORCE, R_PACKAGE_LIB, CONDA_EXE, CONDA_ENV.
 # =============================================================================
 set -euo pipefail
 
@@ -42,6 +42,8 @@ TEST="${TEST:-0}"
 FORCE="${FORCE:-0}"
 CHROMS="${CHROMS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22}"
 R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
+CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
+CONDA_ENV="${CONDA_ENV:-tensorqtl}"
 
 if [ "$TEST" = "1" ]; then
     MODALITIES="expression"; CHROMS="21"; STAGES="${STAGES:-2 3}"
@@ -69,8 +71,8 @@ if has_stage 0; then
         J=$(bsub -q "$QUEUE" -n 4 -M 32G -R "rusage[mem=32G]" -W 4:00 \
             -J "gxe_inputs" \
             -o "${LOG_DIR}/gxe_inputs.%J.out" -e "${LOG_DIR}/gxe_inputs.%J.err" \
-            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES" \
-            "python3 ${SCRIPTS_DIR}/50_build_gxe_inputs.py --qtl-dir $QTL_DIR --results-dir $RESULTS_DIR --metadata $METADATA --ancestries '$ANCESTRIES' --modalities '$MODALITIES' --gxe-dir $GXE_DIR")
+            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,METADATA=$METADATA,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+            "bash ${SCRIPTS_DIR}/50a_run_build_gxe_inputs.sh")
         DEP0=$(echo "$J" | grep -o '[0-9]\+' | head -1)
         echo "  stage 0: gxe_inputs job $DEP0"
     fi
@@ -84,7 +86,7 @@ if has_stage 1; then
     J=$(bsub -q "$QUEUE" -n 4 -M 32G -R "rusage[mem=32G]" -W 8:00 \
         -J "gxe_hcp[1-${N_MODS}]" $DEP \
         -o "${LOG_DIR}/gxe_hcp.%J.%I.out" -e "${LOG_DIR}/gxe_hcp.%J.%I.err" \
-        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,METADATA=$METADATA,FORCE=$FORCE,R_PACKAGE_LIB=$R_PACKAGE_LIB" \
+        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITIES=$MODALITIES,METADATA=$METADATA,FORCE=$FORCE,R_PACKAGE_LIB=$R_PACKAGE_LIB,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
         "bash ${SCRIPTS_DIR}/51_pooled_hcp.sh")
     DEP1=$(echo "$J" | grep -o '[0-9]\+' | head -1)
     echo "  stage 1: gxe_hcp array $DEP1"
@@ -103,7 +105,7 @@ if has_stage 2 || has_stage 3; then
                     -J "gxe_t1_${MOD}_${EXP}[1-${N_CHROMS}]" $DEP \
                     -o "${LOG_DIR}/gxe_t1_${MOD}_${EXP}.%J.%I.out" \
                     -e "${LOG_DIR}/gxe_t1_${MOD}_${EXP}.%J.%I.err" \
-                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,MODE=scan,FORCE=$FORCE" \
+                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,MODE=scan,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
                     "bash ${SCRIPTS_DIR}/53a_run_gxe_scan.sh")
                 SCAN_DEP=$(echo "$J" | grep -o '[0-9]\+' | head -1)
                 echo "  stage 2: gxe_t1_${MOD}_${EXP} array $SCAN_DEP"
@@ -115,7 +117,7 @@ if has_stage 2 || has_stage 3; then
                     -J "gxe_merge_${MOD}_${EXP}" $MDEP \
                     -o "${LOG_DIR}/gxe_merge_${MOD}_${EXP}.%J.out" \
                     -e "${LOG_DIR}/gxe_merge_${MOD}_${EXP}.%J.err" \
-                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,MODALITY=$MOD,EXPOSURE=$EXP,MODE=merge,R_PACKAGE_LIB=$R_PACKAGE_LIB" \
+                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,MODALITY=$MOD,EXPOSURE=$EXP,MODE=merge,R_PACKAGE_LIB=$R_PACKAGE_LIB,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
                     "bash ${SCRIPTS_DIR}/53a_run_gxe_scan.sh")
                 MERGE_JOBS+=($(echo "$J" | grep -o '[0-9]\+' | head -1))
                 echo "  stage 3: gxe_merge_${MOD}_${EXP} job ${MERGE_JOBS[-1]}"
@@ -132,7 +134,7 @@ if has_stage 4; then
                 -J "gxe_t2_${MOD}_${EXP}" \
                 -o "${LOG_DIR}/gxe_t2_${MOD}_${EXP}.%J.out" \
                 -e "${LOG_DIR}/gxe_t2_${MOD}_${EXP}.%J.err" \
-                -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,POST_MODE=tier2" \
+                -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,POST_MODE=tier2,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
                 "bash ${SCRIPTS_DIR}/53b_run_post.sh")
             echo "  stage 4: gxe_t2_${MOD}_${EXP} job $(echo "$J" | grep -o '[0-9]\+' | head -1)"
         done
@@ -145,7 +147,7 @@ if has_stage 5; then
         J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 2:00 \
             -J "gxe_${PM}" \
             -o "${LOG_DIR}/gxe_${PM}.%J.out" -e "${LOG_DIR}/gxe_${PM}.%J.err" \
-            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,POST_MODE=$PM" \
+            -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,POST_MODE=$PM,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
             "bash ${SCRIPTS_DIR}/53b_run_post.sh")
         echo "  stage 5: gxe_${PM} job $(echo "$J" | grep -o '[0-9]\+' | head -1)"
     done
@@ -160,7 +162,7 @@ if has_stage 6; then
     J=$(bsub -q "$QUEUE" -n 2 -M 16G -R "rusage[mem=16G]" -W 2:00 \
         -J "gxe_aggregate" $ADEP \
         -o "${LOG_DIR}/gxe_aggregate.%J.out" -e "${LOG_DIR}/gxe_aggregate.%J.err" \
-        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,POST_MODE=aggregate" \
+        -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,POST_MODE=aggregate,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
         "bash ${SCRIPTS_DIR}/53b_run_post.sh")
     echo "  stage 6: gxe_aggregate job $(echo "$J" | grep -o '[0-9]\+' | head -1)"
 fi

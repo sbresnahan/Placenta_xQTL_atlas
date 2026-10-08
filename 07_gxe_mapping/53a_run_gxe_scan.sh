@@ -8,7 +8,7 @@
 # merge: concatenates chr parquets + Storey q-values
 # Optional: OUTPUT_BASE, QTL_DIR, RESULTS_DIR, GXE_DIR, ANCESTRIES,
 #   CIS_WINDOW, MAF_THRESHOLD, PERM_BLOCKS, STOP_P, SEED, DOSAGES=1,
-#   R_PACKAGE_LIB.
+#   R_PACKAGE_LIB, CONDA_EXE, CONDA_ENV.
 # =============================================================================
 #BSUB -q medium
 #BSUB -n 4
@@ -37,10 +37,14 @@ STOP_P="${STOP_P:-0.10}"
 SEED="${SEED:-12345}"
 DOSAGES="${DOSAGES:-0}"
 R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
+CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
+CONDA_ENV="${CONDA_ENV:-tensorqtl}"
 
 source /etc/profile.d/modules.sh
-eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
-conda activate tensorqtl
+[ -x "$CONDA_EXE" ] || { echo "ERROR: conda executable not found/executable: $CONDA_EXE"; exit 1; }
+eval "$("$CONDA_EXE" shell.bash hook)"
+conda activate "$CONDA_ENV"
+command -v python3 >/dev/null || { echo "ERROR: python3 not found after conda activation"; exit 1; }
 
 PGENS=()
 for ANC in $ANCESTRIES; do

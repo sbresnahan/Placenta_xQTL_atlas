@@ -3,6 +3,7 @@
 # 53b_run_post.sh — LSF worker for the post-scan steps (dispatched by
 # POST_MODE): tier2 | sensitivity | tnt | aggregate. Submitted by
 # 53_submit_gxe.sh.
+# Optional env: CONDA_EXE, CONDA_ENV.
 # =============================================================================
 #BSUB -q medium
 #BSUB -n 4
@@ -20,10 +21,14 @@ RESULTS_DIR="${RESULTS_DIR:-${OUTPUT_BASE}/qtl_results}"
 GXE_DIR="${GXE_DIR:-${RESULTS_DIR}/gxe}"
 POST_MODE="${POST_MODE:?ERROR: POST_MODE required}"
 ANCESTRIES="${ANCESTRIES:-EAS EUR}"
+CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
+CONDA_ENV="${CONDA_ENV:-tensorqtl}"
 
 source /etc/profile.d/modules.sh
-eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
-conda activate tensorqtl
+[ -x "$CONDA_EXE" ] || { echo "ERROR: conda executable not found/executable: $CONDA_EXE"; exit 1; }
+eval "$("$CONDA_EXE" shell.bash hook)"
+conda activate "$CONDA_ENV"
+command -v python3 >/dev/null || { echo "ERROR: python3 not found after conda activation"; exit 1; }
 
 case "$POST_MODE" in
   tier2)

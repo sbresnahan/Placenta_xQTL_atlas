@@ -25,7 +25,7 @@
 # Optional env: CONFIG, SCRIPTS_DIR, OUTPUT_BASE, QTL_DIR, RESULTS_DIR,
 #   GXE_DIR, MODALITIES, HCP_K (override), COHORT_DUMMY_MODALITIES
 #   (default "expression isoform_expression"), RSCRIPT, R_PACKAGE_LIB,
-#   MAX_PHENOTYPES.
+#   MAX_PHENOTYPES, CONDA_EXE, CONDA_ENV.
 # =============================================================================
 set -euo pipefail
 
@@ -45,6 +45,16 @@ RSCRIPT="${RSCRIPT:-${REPO_ROOT}/bin/Rscript_sif}"
 R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
 QC_METRICS="${QC_METRICS:-${OUTPUT_BASE}/hcp/all_qc_metrics.tsv}"
 MODULE05="${MODULE05:-${REPO_ROOT}/05_qtl_mapping}"
+CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
+CONDA_ENV="${CONDA_ENV:-tensorqtl}"
+
+# LSF workers must initialize their own software environment. Do not rely on
+# the interactive submit shell having tensorqtl activated.
+source /etc/profile.d/modules.sh
+[ -x "$CONDA_EXE" ] || { echo "ERROR: conda executable not found/executable: $CONDA_EXE"; exit 1; }
+eval "$("$CONDA_EXE" shell.bash hook)"
+conda activate "$CONDA_ENV"
+command -v python3 >/dev/null || { echo "ERROR: python3 not found after conda activation"; exit 1; }
 
 # ---- resolve modality (env var or LSF array index) ----
 if [ -z "${MODALITY:-}" ]; then
