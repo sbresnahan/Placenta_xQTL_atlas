@@ -112,9 +112,14 @@ install.packages(RCPP_PARALLEL_URL, repos = NULL, lib = R_LIB,
 if (!"RcppParallel" %in% rownames(installed.packages(lib.loc = R_LIB))) {
   stop("source rebuild failed for RcppParallel; inspect the installation output above")
 }
-if (as.character(packageVersion("RcppParallel")) != RCPP_PARALLEL_VERSION) {
-  stop("expected RcppParallel ", RCPP_PARALLEL_VERSION,
-       " but found ", as.character(packageVersion("RcppParallel")))
+# R normalizes the CRAN archive version separator: the archive named
+# 5.1.11-2 is reported by packageVersion() as 5.1.11.2. Compare against
+# the normalized representation rather than the tarball filename version.
+RCPP_PARALLEL_R_VERSION <- gsub("-", ".", RCPP_PARALLEL_VERSION, fixed = TRUE)
+if (as.character(packageVersion("RcppParallel")) != RCPP_PARALLEL_R_VERSION) {
+  stop("expected RcppParallel ", RCPP_PARALLEL_R_VERSION,
+       " (archive ", RCPP_PARALLEL_VERSION, ") but found ",
+       as.character(packageVersion("RcppParallel")))
 }
 
 message("rebuilding Rfast from source against RcppParallel ",
