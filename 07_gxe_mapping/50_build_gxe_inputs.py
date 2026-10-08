@@ -91,6 +91,20 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
             sys.exit(f"ERROR: BED not found: {path}")
         df = read_bed(path)
         df["#chr"] = df["#chr"].astype(str)
+
+        # Module 07 is autosomal only.  Upstream phenotype BEDs can contain
+        # chrX/chrY/other contigs, so remove them before phenotype
+        # intersection, positional consistency checks, and BED sorting.
+        chrom_num = pd.to_numeric(
+            df["#chr"].str.replace(r"^chr", "", case=False, regex=True),
+            errors="coerce",
+        )
+        autosomal = chrom_num.between(1, 22) & (chrom_num % 1 == 0)
+        n_nonauto = int((~autosomal).sum())
+        if n_nonauto:
+            log(f"    {anc}: dropping {n_nonauto} non-autosomal phenotypes")
+        df = df.loc[autosomal].copy()
+
         # restrict to samples with metadata (exposures/covariates need it)
         keep_cols = [c for c in df.columns[4:] if c in meta_ids]
         n_drop = len(df.columns) - 4 - len(keep_cols)
@@ -130,10 +144,13 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
         pos_ref = pos_ref[pos_ref["phenotype_id"].isin(pooled.index)]
     out_df = pd.concat([pos_ref.set_index("phenotype_id").loc[pooled.index]
                         .reset_index(), pooled.reset_index(drop=True)], axis=1)
-    out_df = out_df.sort_values(["#chr", "start"],
-                                key=lambda s: s.astype(str).str.replace(
-                                    "^chr", "", regex=True).astype(int)
-                                if s.name == "#chr" else s)
+    out_df = out_df.sort_values(
+        ["#chr", "start"],
+        key=lambda s: pd.to_numeric(
+            s.astype(str).str.replace(r"^chr", "", case=False, regex=True),
+            errors="raise",
+        ) if s.name == "#chr" else s,
+    )
     plain = os.path.join(out_dir, f"pooled_{modality}.bed")
     out_df.to_csv(plain, sep="\t", index=False, float_format="%.6g")
     subprocess.run(["bgzip", "-f", plain], check=True)

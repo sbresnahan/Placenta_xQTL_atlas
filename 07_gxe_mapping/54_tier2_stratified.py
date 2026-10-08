@@ -140,6 +140,20 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
     pheno, pheno_pos = tensorqtl.read_phenotype_bed(bed)
     pheno = pheno[pheno.index.isin(pheno_keep)]
     pheno_pos = pheno_pos.loc[pheno.index]
+
+    # Module 07 is autosomal only.  Tier 2 reads the original ancestry BEDs
+    # directly (rather than the pooled Stage-0 BED), so enforce chr1-22 here
+    # independently as well.
+    pos_chrom = pheno_pos["chr"].astype(str).str.replace(
+        r"^chr", "", case=False, regex=True)
+    chrom_num = pd.to_numeric(pos_chrom, errors="coerce")
+    autosomal = chrom_num.between(1, 22) & (chrom_num % 1 == 0)
+    n_nonauto = int((~autosomal).sum())
+    if n_nonauto:
+        log(f"  {anc}: dropping {n_nonauto} prioritized non-autosomal phenotypes")
+    pheno = pheno.loc[autosomal.values]
+    pheno_pos = pheno_pos.loc[autosomal.values]
+
     if len(pheno) == 0:
         log(f"  {anc}: no prioritized phenotypes in the BED")
         return pd.DataFrame()
@@ -173,8 +187,9 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
     e_t = torch.tensor(e.values.astype(np.float32), device=device)
 
     rows = []
-    pos_chrom = pheno_pos["chr"].astype(str).str.replace("^chr", "", regex=True)
-    for chrom in sorted(pos_chrom.unique(), key=lambda x: int(x)):
+    pos_chrom = pheno_pos["chr"].astype(str).str.replace(
+        r"^chr", "", case=False, regex=True)
+    for chrom in sorted(pos_chrom.unique(), key=int):
         m = (pos_chrom == chrom).values
         G, var_ids, var_pos, gsamples = scanner.load_chromosome_genotypes(
             {anc: pgen}, {anc: samples}, chrom,
