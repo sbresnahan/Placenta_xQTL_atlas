@@ -18,9 +18,10 @@
 #   SKIP_R=1    — skip R package installation (FUSION clone only)
 #
 # Notes:
-#   - colocboost is GitHub-only (StatFunGen/colocboost; Cao et al. 2025,
-#     medRxiv 2025.04.17.25326042) and is installed with remotes::install_github.
-#   - plink2R (gabraham/plink2R) is required by FUSION.assoc_test.R to read
+#   - colocboost is installed from CRAN. Its hard imports include Rfast and
+#     matrixStats; installing from CRAN lets R resolve those dependencies.
+#   - plink2R (gabraham/plink2R) is GitHub-only and is required by
+#     FUSION.assoc_test.R to read
 #     LD reference panels in plink format.
 #   - susieR >= 0.12.35 and coloc >= 5.2.1 are required for coloc.susie.
 # =============================================================================
@@ -48,22 +49,28 @@ message("R package library: ", .libPaths()[1])
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 need_cran <- c("coloc", "susieR", "glmnet", "optparse", "data.table",
-               "R.utils", "remotes", "matrixStats", "irlba")
+               "R.utils", "remotes", "matrixStats", "irlba", "Rfast",
+               "colocboost")
 have <- rownames(installed.packages(lib.loc = R_LIB))
 for (p in need_cran[!need_cran %in% have]) {
   message("installing ", p, " -> ", R_LIB)
-  install.packages(p, lib = R_LIB)
+  install.packages(p, lib = R_LIB, dependencies = NA)
+  if (!p %in% rownames(installed.packages(lib.loc = R_LIB))) {
+    stop("CRAN installation failed for ", p,
+         "; inspect the installation output above for the underlying error")
+  }
 }
 # Version gates: coloc.susie requires coloc >= 5.2; susieR >= 0.12.35
 stopifnot(packageVersion("coloc") >= "5.2.0")
 stopifnot(packageVersion("susieR") >= "0.12.0")
 message("CRAN packages OK: coloc ", as.character(packageVersion("coloc")),
         ", susieR ", as.character(packageVersion("susieR")),
-        ", glmnet ", as.character(packageVersion("glmnet")))
+        ", glmnet ", as.character(packageVersion("glmnet")),
+        ", colocboost ", as.character(packageVersion("colocboost")))
 EOF
 
     echo ""
-    echo "== Step 2: GitHub packages (colocboost, plink2R) =="
+    echo "== Step 2: GitHub package (plink2R) =="
     "$RSCRIPT" - <<'EOF'
 R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
 if (!dir.exists(R_LIB)) stop("R package library does not exist: ", R_LIB)
@@ -73,19 +80,15 @@ message("R package library: ", .libPaths()[1])
 
 suppressPackageStartupMessages(library(remotes))
 have <- rownames(installed.packages(lib.loc = R_LIB))
-if (!"colocboost" %in% have) {
-  message("installing StatFunGen/colocboost -> ", R_LIB)
-  remotes::install_github("StatFunGen/colocboost", lib = R_LIB,
-                          upgrade = "never")
-}
 if (!"plink2R" %in% have) {
   message("installing gabraham/plink2R (FUSION LD-reference reader) -> ", R_LIB)
   remotes::install_github("gabraham/plink2R", subdir = "plink2R",
                           lib = R_LIB, upgrade = "never")
 }
-stopifnot("colocboost" %in% rownames(installed.packages(lib.loc = R_LIB)))
-stopifnot("plink2R" %in% rownames(installed.packages(lib.loc = R_LIB)))
-message("GitHub packages OK")
+if (!"plink2R" %in% rownames(installed.packages(lib.loc = R_LIB))) {
+  stop("GitHub installation failed for plink2R; inspect the installation output above")
+}
+message("GitHub package OK: plink2R")
 EOF
 fi
 
