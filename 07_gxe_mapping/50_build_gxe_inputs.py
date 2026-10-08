@@ -144,6 +144,10 @@ def build_pooled_bed(modality, ancestries, qtl_dir, out_dir, meta_ids):
         pos_ref = pos_ref[pos_ref["phenotype_id"].isin(pooled.index)]
     out_df = pd.concat([pos_ref.set_index("phenotype_id").loc[pooled.index]
                         .reset_index(), pooled.reset_index(drop=True)], axis=1)
+    # Preserve the standard tensorQTL BED column order so bgzip/tabix see
+    # chromosome/start/end in columns 1-3 and the header begins with #chr.
+    sample_cols = list(pooled.columns)
+    out_df = out_df[["#chr", "start", "end", "phenotype_id"] + sample_cols]
     out_df = out_df.sort_values(
         ["#chr", "start"],
         key=lambda s: pd.to_numeric(
