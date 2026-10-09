@@ -137,17 +137,17 @@ def run_chromosome(args):
         write_stats=True,
         verbose=True,
     )
-    # tensorQTL writes {prefix}.cis_qtl_pairs.{chr}.parquet plus a top-assoc
-    # table whose extension is version-dependent (.tsv vs .txt.gz) — glob
-    tmp_files = {kind: list(tmp_dir.glob(pat))
-                 for kind, pat in [("pairs", "*.cis_qtl_pairs.*.parquet"),
-                                   ("top-assoc", "*.cis_qtl_top_assoc*")]}
-    for kind, files in tmp_files.items():
-        if len(files) != 1:
-            sys.exit(f"ERROR: expected 1 {kind} file in {tmp_dir}, found "
-                     f"{len(files)}: {[f.name for f in files]}")
-    pairs = pd.read_parquet(tmp_files["pairs"][0])
-    top = pd.read_csv(tmp_files["top-assoc"][0], sep="\t")  # gzip inferred
+    # tensorQTL writes {prefix}.cis_qtl_pairs.{chr}.parquet; the
+    # cis_qtl_top_assoc file is only written in interaction mode, so derive
+    # per-phenotype leads from the pairs table (min nominal p per
+    # phenotype) — version-independent
+    pair_files = list(tmp_dir.glob("*.cis_qtl_pairs.*.parquet"))
+    if len(pair_files) != 1:
+        sys.exit(f"ERROR: expected 1 pairs parquet in {tmp_dir}, "
+                 f"found {len(pair_files)}")
+    pairs = pd.read_parquet(pair_files[0])
+    p = pairs.dropna(subset=["pval_nominal"])
+    top = p.loc[p.groupby("phenotype_id")["pval_nominal"].idxmin()]
     pairs.to_parquet(shard_path)
     top.to_csv(top_shard, sep="\t", index=False)
     for f in tmp_dir.iterdir():
