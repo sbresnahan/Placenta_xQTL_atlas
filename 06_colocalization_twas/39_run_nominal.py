@@ -109,11 +109,18 @@ def run_chromosome(args):
     out_dir.mkdir(parents=True, exist_ok=True)
     shard_path = out_dir / f"{args.ancestry}_{args.modality}.nominal.chr{chrom}.parquet"
     top_shard = out_dir / f"{args.ancestry}_{args.modality}.nominal.chr{chrom}.top.tsv"
-    if shard_path.exists() and not args.force:
+    # both outputs must exist — a crash between the two writes (observed
+    # with the top-assoc filename mismatch) must not look "done"
+    if shard_path.exists() and top_shard.exists() and not args.force:
         print(f"  shard exists: {shard_path.name} (use --force to rerun)")
         return
 
     tmp_dir = out_dir / f"tmp_{args.modality}_chr{chrom}"
+    if tmp_dir.exists():
+        # clear leftovers from a crashed run so the globs below only see
+        # this run's files
+        for stale in tmp_dir.iterdir():
+            stale.unlink()
     tmp_dir.mkdir(exist_ok=True)
     cis.map_nominal(
         genotype_df=genotype_df,
@@ -130,15 +137,18 @@ def run_chromosome(args):
         write_stats=True,
         verbose=True,
     )
-    # tensorQTL writes {prefix}.cis_qtl_pairs.{chr}.parquet + {prefix}.cis_qtl_top_assoc.tsv
-    pair_files = list(tmp_dir.glob("*.cis_qtl_pairs.*.parquet"))
-    if len(pair_files) != 1:
-        sys.exit(f"ERROR: expected 1 pairs parquet in {tmp_dir}, "
-                 f"found {len(pair_files)}")
-    pairs = pd.read_parquet(pair_files[0])
+    # tensorQTL writes {prefix}.cis_qtl_pairs.{chr}.parquet plus a top-assoc
+    # table whose extension is version-dependent (.tsv vs .txt.gz) — glob
+    tmp_files = {kind: list(tmp_dir.glob(pat))
+                 for kind, pat in [("pairs", "*.cis_qtl_pairs.*.parquet"),
+                                   ("top-assoc", "*.cis_qtl_top_assoc*")]}
+    for kind, files in tmp_files.items():
+        if len(files) != 1:
+            sys.exit(f"ERROR: expected 1 {kind} file in {tmp_dir}, found "
+                     f"{len(files)}: {[f.name for f in files]}")
+    pairs = pd.read_parquet(tmp_files["pairs"][0])
+    top = pd.read_csv(tmp_files["top-assoc"][0], sep="\t")  # gzip inferred
     pairs.to_parquet(shard_path)
-    top = pd.read_csv(tmp_dir / f"{args.ancestry}_{args.modality}.cis_qtl_top_assoc.tsv",
-                      sep="\t")
     top.to_csv(top_shard, sep="\t", index=False)
     for f in tmp_dir.iterdir():
         f.unlink()
