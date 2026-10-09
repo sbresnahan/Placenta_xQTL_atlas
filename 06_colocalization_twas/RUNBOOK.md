@@ -150,8 +150,8 @@ it before running (the step has no shell driver).
 | Step | Runs on | Required environment | How it is provided |
 |---|---|---|---|
 | 36 install | login | R 4.3.1 singularity container; `git`; internet | `$RSCRIPT` wrapper; no conda env |
-| 37 fetch | login | conda env `tensorqtl` (pandas); internet | **in-script** (`PYENV` override; `PYENV=none` skips) |
-| 38 harmonize | login | conda env `tensorqtl` (pandas, numpy) + `bgzip`/`tabix` | **manual**: `conda activate tensorqtl` + `module load samtools` |
+| 37 fetch | login (<1 GB: streams to disk) | conda env `tensorqtl` (pandas); internet | **in-script** (`PYENV` override; `PYENV=none` skips) |
+| 38 harmonize | **interactive node** | conda env `tensorqtl` (pandas, numpy) + `bgzip`/`tabix` | **manual**: `conda activate tensorqtl` + `module load samtools` |
 | 39 nominal | login driver | driver: `python3` stdlib only (collapse audit) + LSF | — |
 | 39 workers | compute | conda env `tensorqtl` (tensorQTL, torch); merge job adds `module load samtools` | in-script (bsub heredocs) |
 | 40/42 coloc | login driver | conda env `tensorqtl` (pandas for step 40) | **in-script** (`PYENV` override) |
@@ -162,11 +162,32 @@ it before running (the step has no shell driver).
 | 46/47a workers | compute | `module load plink samtools`; R via `$RSCRIPT` | in-script (47a) |
 | 48 FUSION | login driver | `plink2` (LD reference build) | in-script: `module load plink` attempted if missing |
 | 48a workers | compute | R via `$RSCRIPT` through `48b_fusion_assoc.R` (sets `.libPaths()` in R) | in-script |
-| 49 aggregate | login | conda env `tensorqtl` (pandas, numpy, scipy) | **manual**: `conda activate tensorqtl` |
+| 49 aggregate | **interactive node** | conda env `tensorqtl` (pandas, numpy, scipy) | **manual**: `conda activate tensorqtl` |
 
 The `tensorqtl` conda env is created by module-05 `21_install_tensorqtl.sh`
 (python 3.10; provides pandas/numpy/scipy). Any env with those packages works;
 override with `PYENV=<name>` for the scripts that self-activate.
+
+## 0.2 Where to run: the 1 GB login-node rule
+
+Seadragon policy: anything needing more than ~1 GB RAM belongs on a
+compute/interactive node, not a login node. For this module:
+
+- **Login node**: driver scripts that only submit LSF jobs (the 39/42/45/47/48
+  submitters), the collapsed-replicate audit, file placement, and step 37
+  (downloads stream to disk in 1 MB chunks — I/O-bound, well under 1 GB).
+  Steps 36/37 must stay on login nodes regardless: only login nodes have
+  internet access.
+- **Interactive node**: the two manual steps that load full GWAS or result
+  tables into memory — step 38 (several GB per trait) and step 49. Request
+  one with the same LSF incantation module 05 uses:
+
+  ```bash
+  bsub -Is -q medium -n 4 -M 32 -R "rusage[mem=32]" -W 12:00 bash
+  ```
+
+  Adjust `-M`/`rusage` (GB) and `-W` (walltime) per step; suggested values
+  are given in each step's section.
 
 **R package library rule for this module:** any R script or `Rscript -e`
 snippet must begin with
@@ -332,6 +353,8 @@ test -f "${FUSION_DIR}/FUSION.assoc_test.R"
 # 2. Step 37 — fetch GWAS summary statistics
 
 Run on the **login node** because compute nodes do not have internet access.
+This is compatible with the 1 GB login-node rule: downloads stream to disk
+in 1 MB chunks, so the step is I/O-bound with a minimal memory footprint.
 
 **Required environment:** `37_fetch_gwas.py` imports pandas, which the
 login-node system `python3` does not provide. The driver now activates the
@@ -422,9 +445,16 @@ ls -lh "${GWAS_DIR}/raw/"*.txt.gz "${GWAS_DIR}/raw/"*.vcf.gz
 
 # 3. Step 38 — harmonize GWAS to GRCh38 and atlas variants
 
-There is no shell driver for Step 38. Run the Python script directly.
+There is no shell driver for Step 38. Run the Python script directly **on an
+interactive node** — each GWAS is loaded into memory in full (the 11 JECS
+files alone are ~640 MB gzipped each; peak usage is several GB per trait),
+which exceeds the 1 GB login-node limit:
 
-**Required environment (manual):**
+```bash
+bsub -Is -q medium -n 4 -M 32 -R "rusage[mem=32]" -W 12:00 bash
+```
+
+**Required environment (manual, inside the interactive session):**
 
 ```bash
 source /etc/profile.d/modules.sh
@@ -1185,7 +1215,15 @@ cell-type annotation
 
 There is no shell wrapper; analysis controls are direct command-line flags.
 
-**Required environment (manual):**
+Step 49 concatenates all per-shard coloc/TWAS results across traits and
+ancestries and can exceed the 1 GB login-node limit — run it **on an
+interactive node**:
+
+```bash
+bsub -Is -q medium -n 2 -M 16 -R "rusage[mem=16]" -W 4:00 bash
+```
+
+**Required environment (manual, inside the interactive session):**
 
 ```bash
 conda activate tensorqtl     # pandas, numpy, scipy
@@ -1445,7 +1483,9 @@ python3 check_collapsed_inputs.py \
 # Login node: network access required; script self-activates the pandas env.
 bash 37_fetch_gwas.sh
 
-# Harmonize (manual env: conda activate tensorqtl; module load samtools).
+# Harmonize ON AN INTERACTIVE NODE (>1 GB; section 3):
+#   bsub -Is -q medium -n 4 -M 32 -R "rusage[mem=32]" -W 12:00 bash
+#   then: conda activate tensorqtl; module load samtools
 python3 38_harmonize_gwas.py \
     --catalog gwas_catalog.tsv \
     --raw-dir "${GWAS_DIR}/raw" \
@@ -1474,7 +1514,9 @@ TEST=0 bash 47_submit_isotwas.sh
 TEST=1 bash 48_fusion_twas.sh
 TEST=0 bash 48_fusion_twas.sh
 
-# Final aggregation (manual env: conda activate tensorqtl).
+# Final aggregation ON AN INTERACTIVE NODE (>1 GB; section 9):
+#   bsub -Is -q medium -n 2 -M 16 -R "rusage[mem=16]" -W 4:00 bash
+#   then: conda activate tensorqtl
 python3 49_aggregate_coloc_twas.py \
     --results-dir "$RESULTS_DIR" \
     --qtl-dir "$QTL_DIR"
