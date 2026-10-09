@@ -1157,41 +1157,46 @@ the target queue’s range.</p>
 <td>Per-modality merge job</td>
 </tr>
 <tr class="odd">
+<td><code>MERGE_ONLY</code></td>
+<td><code>0</code></td>
+<td><code>1</code> = submit only merge jobs (shards must exist)</td>
+</tr>
+<tr class="even">
 <td><code>THREADS</code></td>
 <td><code>4</code></td>
 <td>LSF CPU request</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>MEM</code></td>
 <td><code>32G</code></td>
 <td>LSF memory request</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>GPU</code></td>
 <td><code>0</code></td>
 <td>Set <code>1</code> for GPU submission</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>GPU_QUEUE</code></td>
 <td><code>gpu</code></td>
 <td>GPU queue</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>MAF_THRESHOLD</code></td>
 <td><code>0.01</code></td>
 <td>tensorQTL MAF threshold</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>TEST</code></td>
 <td><code>0</code></td>
 <td><code>1</code> = EAS/expression/chr21</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>FORCE</code></td>
 <td><code>0</code></td>
 <td><code>1</code> = rerun existing chromosome shards</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>SKIP_COLLAPSE_CHECK</code></td>
 <td><code>0</code></td>
 <td><code>1</code> = skip the collapsed-replicate audit</td>
@@ -1241,6 +1246,14 @@ ANCESTRIES=&quot;EAS&quot; \
 MODALITIES=&quot;expression&quot; \
 CHROMS=&quot;21&quot; \
 bash 39_run_nominal.sh</code></pre>
+</div>
+<div id="recovery-merge-failed-but-shards-are-done" class="section level3">
+<h3>Recovery: merge failed but shards are done</h3>
+<p>If every chromosome shard completed but the merge jobs failed (or
+were killed), do not rerun the arrays — resubmit only the merges:</p>
+<pre class="bash"><code>MERGE_ONLY=1 bash 39_run_nominal.sh</code></pre>
+<p>This submits one dependency-free merge job per ancestry × modality
+that has shards on disk and no merged store yet.</p>
 </div>
 <div id="worker-options-not-exposed-by-39_run_nominal.sh" class="section level3">
 <h3>Worker options not exposed by <code>39_run_nominal.sh</code></h3>

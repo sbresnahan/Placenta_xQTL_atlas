@@ -103,6 +103,9 @@ for ANC in $ANCESTRIES; do
         echo "  SKIP ${ANC}/${MOD}: array already running/pending"
         continue
     fi
+    # ENV_STR must be set before any submit_merge call (MERGE_ONLY branch
+    # below) — an empty -env value is rejected by LSF
+    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},QTL_DIR=${QTL_DIR},RESULTS_DIR=${RESULTS_DIR},ANC=${ANC},MOD=${MOD},MAF_THRESHOLD=${MAF_THRESHOLD},FORCE=${FORCE}"
     if [ "${MERGE_ONLY:-0}" = "1" ]; then
         # recovery mode (e.g. after a merge-step failure): shards are done,
         # submit only the merge job with no dependency
@@ -122,7 +125,6 @@ for ANC in $ANCESTRIES; do
     else
         QUEUE_USE="$QUEUE"
     fi
-    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},QTL_DIR=${QTL_DIR},RESULTS_DIR=${RESULTS_DIR},ANC=${ANC},MOD=${MOD},MAF_THRESHOLD=${MAF_THRESHOLD},FORCE=${FORCE}"
     # array of chromosome shards
     bsub -J "${JOB}[1-${N_CHROMS}]" -q "$QUEUE_USE" -n "$THREADS" -W "$WALLTIME" \
          -M "$MEM" -R "rusage[mem=${MEM}]" $EXTRA \
