@@ -100,7 +100,10 @@ def prioritized_phenotypes(modality, ancestries, qtl_dir, results_dir,
     """Union of coloc-called phenotype_ids and TWAS-significant genes'
     phenotypes for this modality."""
     phenos = set()
+    # Module 06 (49_aggregate_coloc_twas.py) writes to coloc/aggregated/;
+    # keep the older coloc/aggregate/ and coloc/ layouts as fallbacks.
     coloc_path = resolve_existing([
+        os.path.join(results_dir, "coloc", "aggregated", "coloc_results.tsv.gz"),
         os.path.join(results_dir, "coloc", "aggregate", "coloc_results.tsv.gz"),
         os.path.join(results_dir, "coloc", "coloc_results.tsv.gz"),
     ], "coloc results")
@@ -117,13 +120,16 @@ def prioritized_phenotypes(modality, ancestries, qtl_dir, results_dir,
         log(f"  coloc PP.H4>={pp_h4}: {len(phenos)} phenotypes")
 
     twas_path = resolve_existing([
+        os.path.join(results_dir, "coloc", "aggregated", "twas_gene_results.tsv.gz"),
         os.path.join(results_dir, "coloc", "aggregate", "twas_gene_results.tsv.gz"),
         os.path.join(results_dir, "coloc", "twas_gene_results.tsv.gz"),
     ], "TWAS gene results")
     if twas_path:
         twas = pd.read_csv(twas_path, sep="\t")
         qcol = "acat_q" if "acat_q" in twas.columns else None
-        gcol = next((c for c in ["gene", "gene_id", "id"] if c in twas.columns), None)
+        # module 06 writes the gene column as "GENE" (FUSION .pos convention)
+        gcol = next((c for c in ["gene", "gene_id", "id", "GENE"]
+                     if c in twas.columns), None)
         if qcol and gcol:
             genes = set(twas.loc[twas[qcol] <= twas_q, gcol])
             log(f"  TWAS acat_q<={twas_q}: {len(genes)} genes")

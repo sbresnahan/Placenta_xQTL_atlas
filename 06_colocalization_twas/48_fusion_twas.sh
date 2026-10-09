@@ -52,6 +52,19 @@ FORCE_RUN="${FORCE_RUN:-0}"
 RSCRIPT="${RSCRIPT:-${REPO_ROOT}/bin/Rscript_sif}"
 PLINK2="${PLINK2:-plink2}"
 
+# --- Toolchain ---------------------------------------------------------------
+# Step 1 builds the 1KG LD references with plink2 on the login node. Load the
+# seadragon module when plink2 is not already on PATH.
+if ! command -v "$PLINK2" >/dev/null 2>&1; then
+    source /etc/profile.d/modules.sh
+    module load plink
+fi
+if ! command -v "$PLINK2" >/dev/null 2>&1; then
+    echo "ERROR: '$PLINK2' not on PATH (tried 'module load plink')." >&2
+    echo "  Load a module/env providing plink2 or set PLINK2=/path/to/plink2." >&2
+    exit 1
+fi
+
 mkdir -p "$LDREF_DIR" "${GWAS_DIR}/fusion" "$LOG_DIR"
 
 echo "=== 48_fusion_twas.sh ==="

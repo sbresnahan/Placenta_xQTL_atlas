@@ -489,13 +489,11 @@ ancestries</strong>;</li>
 <code>.tbi</code>;</li>
 <li>builds <code>{ANC}_sample_manifest.tsv</code> from the retained
 Module-05 metadata;</li>
-<li>writes <code>{ANC}_metadata.tsv</code> for provenance/QC;</li>
+<li>writes <code>{ANC}_metadata.tsv</code> for HCP QC aggregation;</li>
+<li>builds <code>{ANC}_covariates_base.tsv</code>;</li>
 <li>writes one common <code>exposures.tsv</code> whose continuous
 exposures are scaled across all retained ancestries.</li>
 </ol>
-<p>Stage 0 does <strong>not</strong> rebuild genotype PCs/cell fractions
-or estimate HCPs. Those optimized covariates are reused from Module 5 in
-Stage 1.</p>
 <p>Expected output examples:</p>
 <pre class="text"><code>${GXE_DIR}/inputs/EAS_expression.bed.gz
 ${GXE_DIR}/inputs/EUR_expression.bed.gz
@@ -505,6 +503,8 @@ ${GXE_DIR}/inputs/EAS_intron_retention.bed.gz
 ${GXE_DIR}/inputs/EUR_intron_retention.bed.gz
 ${GXE_DIR}/inputs/EAS_sample_manifest.tsv
 ${GXE_DIR}/inputs/EUR_sample_manifest.tsv
+${GXE_DIR}/inputs/EAS_covariates_base.tsv
+${GXE_DIR}/inputs/EUR_covariates_base.tsv
 ${GXE_DIR}/inputs/exposures.tsv</code></pre>
 <div id="critical-stage-0-qc" class="section level3">
 <h3>4.1 Critical Stage-0 QC</h3>
@@ -539,28 +539,34 @@ EUR feature counts. No log line should report a
 done</code></pre>
 <p>The manifest should have one row per <code>array_id</code>.
 <code>{ANC}_metadata.tsv</code> may have more RNA-seq rows than the
-manifest because it preserves the Module-05 metadata provenance. It is
-not used to estimate new HCPs.</p>
+manifest because same-cohort technical replicate rows are kept for HCP
+QC averaging.</p>
+</div>
+<div id="cell-fraction-qc" class="section level3">
+<h3>4.3 Cell-fraction QC</h3>
+<p>Stage 0 should log, separately by ancestry, the dominant cell type
+dropped as the compositional reference and the exclusion of the maternal
+fraction, for example:</p>
+<pre class="text"><code>EAS cell types: 6 (dropped dominant: Syncytiotrophoblast; excluded maternal fraction: Maternal)</code></pre>
+<p>The dominant reference may differ by ancestry; that is acceptable
+because covariates are fit within ancestry.</p>
 </div>
 </div>
-<div id="stage-1-reuse-module-05-optimized-covariates" class="section level2">
-<h2>5. Stage 1 — reuse Module-05 optimized covariates</h2>
+<div id="stage-1-ancestrymodality-specific-hcp-factors" class="section level2">
+<h2>5. Stage 1 — ancestry/modality-specific HCP factors</h2>
 <p>Submit:</p>
 <pre class="bash"><code>STAGES=&quot;1&quot; FORCE=1 bash 53_submit_gxe.sh</code></pre>
-<p>The historical filename <code>51_pooled_hcp.sh</code> is retained
-only for compatibility. It <strong>does not run HCP estimation</strong>.
-For each ancestry × modality it reads:</p>
-<pre class="text"><code>${QTL_DIR}/{ANC}_covariates_{MOD}.tsv</code></pre>
-<p>and subsets/reorders that already-optimized Module-05 table to the
-exact sample columns in
-<code>${GXE_DIR}/inputs/{ANC}_{MOD}.bed.gz</code>, writing:</p>
-<pre class="text"><code>inputs/EAS_covariates_expression.tsv
+<p>The historical filename <code>51_pooled_hcp.sh</code> is retained for
+compatibility, but the worker now runs <strong>one ancestry ×
+modality</strong>. Expected outputs include:</p>
+<pre class="text"><code>inputs/EAS_hcp_expression.tsv
+inputs/EUR_hcp_expression.tsv
+inputs/EAS_covariates_expression.tsv
 inputs/EUR_covariates_expression.tsv
 ...</code></pre>
-<p>The staged table must preserve Module 5’s complete covariate row set
-(including its optimized HCP rows) with no re-pruning. Modality-specific
-BED sample sets may differ by one or more individuals; Stage 1 handles
-that by column subsetting only.</p>
+<p>For each modality, finalized covariates are restricted to that
+modality’s actual sample columns. This is required because modalities
+can differ by one or more samples.</p>
 <p>QC:</p>
 <pre class="bash"><code>for ANC in EAS EUR; do
   for MOD in expression splicing intron_retention; do
@@ -568,9 +574,6 @@ that by column subsetting only.</p>
     test -s &quot;$C&quot; || echo &quot;MISSING $C&quot;
     printf &#39;%s %s: &#39; &quot;$ANC&quot; &quot;$MOD&quot;
     awk &#39;END{print NR-1 &quot; covariates&quot;}&#39; &quot;$C&quot;
-    SRC=&quot;$QTL_DIR/${ANC}_covariates_${MOD}.tsv&quot;
-    diff &lt;(cut -f1 &quot;$SRC&quot;) &lt;(cut -f1 &quot;$C&quot;) &gt;/dev/null || \
-      echo &quot;COVARIATE ROW MISMATCH: $ANC $MOD&quot;
   done
 done</code></pre>
 </div>
@@ -717,9 +720,8 @@ design, rebuild them:</p>
 <ul>
 <li>Stage-2 chromosome workers skip an existing parquet unless
 <code>FORCE=1</code>.</li>
-<li>Stage-1 covariate-staging workers skip an existing ancestry/modality
-covariate file unless <code>FORCE=1</code>. Stage 1 never re-estimates
-HCPs.</li>
+<li>Stage-1 HCP workers skip an existing finalized ancestry/modality
+covariate file unless <code>FORCE=1</code>.</li>
 <li>Stage-4 synthesis skips an existing <code>.meta.tsv.gz</code> unless
 <code>FORCE=1</code>.</li>
 <li>Use <code>FORCE=1</code> after any input/covariate/metadata logic

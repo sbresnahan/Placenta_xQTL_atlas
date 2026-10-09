@@ -33,12 +33,33 @@
 #   FORCE_TASKS=1 — rebuild task lists even if present
 #   FORCE_RUN=1   — re-run tasks with existing .done markers (worker deletes
 #                   them first via FORCE_RUN passthrough)
+#   PYENV       — conda env providing pandas for step 40 (default tensorqtl;
+#                 PYENV=none skips activation)
+#
+# TEST=1 submits only array index 1 while keeping the true N_SHARDS in the
+# worker environment, so the pilot processes ~SHARD_SIZE tasks (NOT the whole
+# modality).
 # =============================================================================
 set -euo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
 REPO_ROOT="$(cd "${SCRIPTS_DIR}/.." && pwd)"
+
+# --- Python environment ------------------------------------------------------
+# Step 1 runs 40_prepare_coloc_loci.py, which requires pandas (absent from
+# the login-node system python3). Activate the pipeline conda env.
+PYENV="${PYENV:-tensorqtl}"
+if [ "$PYENV" != "none" ]; then
+    source /etc/profile.d/modules.sh
+    eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+    conda activate "$PYENV"
+fi
+if ! python3 -c "import pandas" 2>/dev/null; then
+    echo "ERROR: python3 cannot import pandas (needed by 40_prepare_coloc_loci.py)." >&2
+    echo "  conda activate tensorqtl   (module-05 script 21), or PYENV=<env>" >&2
+    exit 1
+fi
 OUTPUT_BASE="${OUTPUT_BASE:-$(dirname "$CONFIG")}"
 QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
 RESULTS_DIR="${RESULTS_DIR:-${OUTPUT_BASE}/qtl_results}"
@@ -103,7 +124,11 @@ for MOD in $MODALITIES; do
         continue
     fi
     N_SHARDS=$(( (N_TASKS + SHARD_SIZE - 1) / SHARD_SIZE ))
-    if [ "$TEST" = "1" ]; then N_SHARDS=1; fi
+    # TEST=1: submit ONLY array index 1 but keep the true N_SHARDS in the
+    # worker environment. The R worker assigns tasks round-robin by
+    # N_SHARDS, so N_SHARDS=1 would assign EVERY task to the pilot shard.
+    ARRAY_SPEC="1-${N_SHARDS}"
+    if [ "$TEST" = "1" ]; then ARRAY_SPEC="1"; fi
 
     # skip if every shard already has diagnostics (all tasks attempted)
     DONE_SHARDS=0
@@ -120,21 +145,23 @@ for MOD in $MODALITIES; do
     fi
 
     ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},RESULTS_DIR=${RESULTS_DIR},COLOC_DIR=${COLOC_DIR},TASKS=${TASKS},N_SHARDS=${N_SHARDS},MIN_VARIANTS=${MIN_VARIANTS},PP_H4=${PP_H4},FORCE_RUN=${FORCE_RUN},RSCRIPT=${RSCRIPT}"
-    bsub -J "coloc_${MOD}[1-${N_SHARDS}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
+    bsub -J "coloc_${MOD}[${ARRAY_SPEC}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
          -o "${LOG_DIR}/coloc_${MOD}_%J_%I.out" \
          -e "${LOG_DIR}/coloc_${MOD}_%J_%I.err" \
          -env "$ENV_STR" \
          < "${SCRIPTS_DIR}/42a_run_coloc_shard.sh"
-    echo "  ${MOD}: ${N_TASKS} tasks -> array of ${N_SHARDS} shards"
+    echo "  ${MOD}: ${N_TASKS} tasks -> array of ${N_SHARDS} shards (submitted: ${ARRAY_SPEC})"
     N=$((N + 1))
     if [ "$TEST" = "1" ]; then
         echo ""
-        echo "TEST=1: submitted one pilot shard (coloc_${MOD}[1])."
-        echo "Check per-task wall times before submitting the rest:"
+        echo "TEST=1: submitted one pilot shard (coloc_${MOD}[1] of ${N_SHARDS})."
+        echo "The pilot processes ~SHARD_SIZE tasks. Check per-task wall times"
+        echo "before submitting the rest:"
         echo "  tail ${LOG_DIR}/coloc_${MOD}_<jobid>_1.out"
         exit 0
     fi
 done
 echo ""
 echo "Submitted arrays for $N modalities. Aggregate when done:"
-echo "  bash 48_aggregate_coloc_twas.py --help"
+echo "  python3 ${SCRIPTS_DIR}/49_aggregate_coloc_twas.py \\"
+echo "      --results-dir ${RESULTS_DIR} --qtl-dir ${QTL_DIR}"

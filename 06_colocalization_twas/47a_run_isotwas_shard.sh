@@ -6,8 +6,16 @@
 #   WEIGHT_SET, N_SHARDS, QTL_DIR, ISOTWAS_DIR, R2_MIN,
 #   FORCE_RUN, RSCRIPT, SCRIPTS_DIR
 # $LSB_JOBINDEX selects the shard.
+#
+# Compute-node environment: seadragon modules 'plink' (plink2) and 'samtools'
+# (tabix; 46_isotwas_train.R calls plink2 for dosages and reads bgzipped
+# BEDs). R runs via $RSCRIPT (singularity wrapper); the R script sets its own
+# .libPaths() — bash-level R_LIBS_* is not relied upon.
 # =============================================================================
 set -euo pipefail
+
+source /etc/profile.d/modules.sh
+module load plink samtools
 
 SHARD_INDEX="${LSB_JOBINDEX:?ERROR: LSB_JOBINDEX not set (submit as a job array)}"
 

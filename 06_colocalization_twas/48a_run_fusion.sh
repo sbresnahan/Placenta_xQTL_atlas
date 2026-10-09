@@ -17,7 +17,11 @@ FINAL="${OUT_DIR}/${WEIGHT_SET}_${TRAIT_ID}.twas.tsv"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# FUSION.assoc_test.R sources utils/ via here(): run from FUSION_DIR
+# FUSION.assoc_test.R is an external script without an in-R .libPaths() call,
+# and bash-level R_LIBS_* is not reliably propagated here. Run it through the
+# repo wrapper 48b_fusion_assoc.R, which sets .libPaths() inside R and then
+# sources FUSION.assoc_test.R (optparse still sees the flags below via
+# commandArgs(trailingOnly=TRUE)). FUSION_DIR is already in the environment.
 cd "$FUSION_DIR"
 
 for CHR in $(seq 1 22); do
@@ -26,7 +30,7 @@ for CHR in $(seq 1 22); do
         echo "  WARNING: no LD ref for chr${CHR}; skipped" >&2
         continue
     fi
-    "$RSCRIPT" "${FUSION_DIR}/FUSION.assoc_test.R" \
+    "$RSCRIPT" "${SCRIPTS_DIR}/48b_fusion_assoc.R" \
         --sumstats "$SUMSTATS" \
         --weights "$POS" \
         --weights_dir "$WGT_DIR" \

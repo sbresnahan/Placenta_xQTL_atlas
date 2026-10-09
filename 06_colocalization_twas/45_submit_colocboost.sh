@@ -31,12 +31,33 @@
 #   MERGE_GAP    — locus-merge gap in bp, default 100000
 #   FORCE_PREP=1 — rebuild manifests even if present
 #   FORCE_RUN=1  — re-run regions with existing .done markers
+#   PYENV      — conda env providing pandas for step 43 (default tensorqtl;
+#                PYENV=none skips activation)
+#
+# TEST=1 submits only array index 1 while keeping the true N_SHARDS in the
+# worker environment, so the pilot processes ~SHARD_SIZE regions (NOT every
+# region in the ancestry).
 # =============================================================================
 set -euo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
 REPO_ROOT="$(cd "${SCRIPTS_DIR}/.." && pwd)"
+
+# --- Python environment ------------------------------------------------------
+# Step 1 runs 43_prepare_colocboost.py, which requires pandas (absent from
+# the login-node system python3). Activate the pipeline conda env.
+PYENV="${PYENV:-tensorqtl}"
+if [ "$PYENV" != "none" ]; then
+    source /etc/profile.d/modules.sh
+    eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+    conda activate "$PYENV"
+fi
+if ! python3 -c "import pandas" 2>/dev/null; then
+    echo "ERROR: python3 cannot import pandas (needed by 43_prepare_colocboost.py)." >&2
+    echo "  conda activate tensorqtl   (module-05 script 21), or PYENV=<env>" >&2
+    exit 1
+fi
 OUTPUT_BASE="${OUTPUT_BASE:-$(dirname "$CONFIG")}"
 QTL_DIR="${QTL_DIR:-${OUTPUT_BASE}/qtl_inputs}"
 RESULTS_DIR="${RESULTS_DIR:-${OUTPUT_BASE}/qtl_results}"
@@ -96,7 +117,11 @@ for ANC in $ANCESTRIES; do
         continue
     fi
     N_SHARDS=$(( (N_REGIONS + SHARD_SIZE - 1) / SHARD_SIZE ))
-    if [ "$TEST" = "1" ]; then N_SHARDS=1; fi
+    # TEST=1: submit ONLY array index 1 but keep the true N_SHARDS in the
+    # worker environment (round-robin assignment; N_SHARDS=1 would give the
+    # pilot shard EVERY region).
+    ARRAY_SPEC="1-${N_SHARDS}"
+    if [ "$TEST" = "1" ]; then ARRAY_SPEC="1"; fi
 
     DONE_SHARDS=0
     for DIAG in "${CB_DIR}/diagnostics/${ANC}".shard-*.diagnostics.tsv; do
@@ -112,17 +137,18 @@ for ANC in $ANCESTRIES; do
     fi
 
     ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},CB_DIR=${CB_DIR},REGIONS=${REGIONS},OUTCOMES=${CB_DIR}/${ANC}.outcomes.tsv,N_SHARDS=${N_SHARDS},LD_XQTL_PGEN=${QTL_DIR}/${ANC}_qtl,LD_GWAS_PGEN=${KG_PGEN},LD_GWAS_KEEP=${COLOC_DIR}/loci/${ANC}.1kg.keep,FORCE_RUN=${FORCE_RUN},RSCRIPT=${RSCRIPT}"
-    bsub -J "colocboost_${ANC}[1-${N_SHARDS}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
+    bsub -J "colocboost_${ANC}[${ARRAY_SPEC}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
          -o "${LOG_DIR}/colocboost_${ANC}_%J_%I.out" \
          -e "${LOG_DIR}/colocboost_${ANC}_%J_%I.err" \
          -env "$ENV_STR" \
          < "${SCRIPTS_DIR}/45a_run_colocboost_shard.sh"
-    echo "  ${ANC}: ${N_REGIONS} regions -> array of ${N_SHARDS} shards"
+    echo "  ${ANC}: ${N_REGIONS} regions -> array of ${N_SHARDS} shards (submitted: ${ARRAY_SPEC})"
     N=$((N + 1))
     if [ "$TEST" = "1" ]; then
         echo ""
-        echo "TEST=1: submitted one pilot shard (colocboost_${ANC}[1])."
-        echo "Check per-region wall times before submitting the rest:"
+        echo "TEST=1: submitted one pilot shard (colocboost_${ANC}[1] of ${N_SHARDS})."
+        echo "The pilot processes ~SHARD_SIZE regions. Check per-region wall"
+        echo "times before submitting the rest:"
         echo "  tail ${LOG_DIR}/colocboost_${ANC}_<jobid>_1.out"
         exit 0
     fi

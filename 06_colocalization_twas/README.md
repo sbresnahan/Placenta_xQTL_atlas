@@ -1,5 +1,10 @@
 # 06_colocalization_twas — GWAS colocalization and isoTWAS (Objective 1.6)
 
+> **Operator runbook:** [RUNBOOK.md](RUNBOOK.md) — step-by-step commands,
+> required conda envs / seadragon modules per step, safe pilots, the
+> collapsed-replicate input contract shared with module 07, and the
+> module-07 output contract.
+
 Integrates the placental xQTL atlas (module 05) with external GWAS of birth
 weight, gestational duration, glycemic traits, and childhood adiposity:
 

@@ -31,6 +31,11 @@
 #   THREADS      — default 2
 #   R2_MIN       — retention gate on CV R^2, default 0.01
 #   FORCE_RUN=1  — retrain genes with existing .wgt.RDat (worker deletes them)
+#   SKIP_COLLAPSE_CHECK=1 — skip the collapsed-replicate input audit
+#
+# TEST=1 submits only array index 1 while keeping the true N_SHARDS in the
+# worker environment, so the pilot trains ~SHARD_SIZE genes (NOT the whole
+# gene universe).
 # =============================================================================
 set -euo pipefail
 
@@ -59,6 +64,18 @@ echo "=== 47_submit_isotwas.sh ==="
 echo "  WEIGHT_SETS: $WEIGHT_SETS"
 echo "  ISOTWAS_DIR: $ISOTWAS_DIR"
 echo "  SHARD_SIZE:  $SHARD_SIZE   QUEUE: $QUEUE   WALLTIME: $WALLTIME"
+
+# --- Collapsed-replicate input audit ------------------------------------------
+# Weight training consumes sample-level qtl_inputs (BEDs, covariates, pgen).
+# Verify those sample sets match the module-05 collapsed-replicate contract
+# (the same ancestry_map_collapsed.tsv authority module 07 enforces) before
+# training weights on them. Stdlib-only script: no conda env required.
+if [ "${SKIP_COLLAPSE_CHECK:-0}" != "1" ]; then
+    python3 "${SCRIPTS_DIR}/check_collapsed_inputs.py" \
+        --qtl-dir "$QTL_DIR" \
+        --output-base "$OUTPUT_BASE" \
+        --ancestries EAS EUR
+fi
 
 # --- Step 1: gene counts per weight set ---------------------------------------
 gene_count() {
@@ -90,7 +107,11 @@ for WS in $WEIGHT_SETS; do
         continue
     fi
     N_SHARDS=$(( (N_GENES + SHARD_SIZE - 1) / SHARD_SIZE ))
-    if [ "$TEST" = "1" ]; then N_SHARDS=1; fi
+    # TEST=1: submit ONLY array index 1 but keep the true N_SHARDS in the
+    # worker environment (round-robin assignment; N_SHARDS=1 would give the
+    # pilot shard EVERY gene).
+    ARRAY_SPEC="1-${N_SHARDS}"
+    if [ "$TEST" = "1" ]; then ARRAY_SPEC="1"; fi
 
     DONE_SHARDS=0
     for DIAG in "${ISOTWAS_DIR}/diagnostics/isotwas_${WS}".shard-*.diagnostics.tsv; do
@@ -106,16 +127,16 @@ for WS in $WEIGHT_SETS; do
     fi
 
     ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},QTL_DIR=${QTL_DIR},ISOTWAS_DIR=${ISOTWAS_DIR},WEIGHT_SET=${WS},N_SHARDS=${N_SHARDS},R2_MIN=${R2_MIN},FORCE_RUN=${FORCE_RUN},RSCRIPT=${RSCRIPT}"
-    bsub -J "isotwas_${WS}[1-${N_SHARDS}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
+    bsub -J "isotwas_${WS}[${ARRAY_SPEC}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
          -o "${LOG_DIR}/isotwas_${WS}_%J_%I.out" \
          -e "${LOG_DIR}/isotwas_${WS}_%J_%I.err" \
          -env "$ENV_STR" \
          < "${SCRIPTS_DIR}/47a_run_isotwas_shard.sh"
-    echo "  ${WS}: ${N_GENES} genes -> array of ${N_SHARDS} shards"
+    echo "  ${WS}: ${N_GENES} genes -> array of ${N_SHARDS} shards (submitted: ${ARRAY_SPEC})"
     N=$((N + 1))
     if [ "$TEST" = "1" ]; then
         echo ""
-        echo "TEST=1: submitted one pilot shard (isotwas_${WS}[1])."
+        echo "TEST=1: submitted one pilot shard (isotwas_${WS}[1] of ${N_SHARDS}, ~SHARD_SIZE genes)."
         echo "Check per-gene wall times before submitting the rest:"
         echo "  tail ${LOG_DIR}/isotwas_${WS}_<jobid>_1.out"
         exit 0

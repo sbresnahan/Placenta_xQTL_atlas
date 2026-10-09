@@ -17,7 +17,11 @@
 #
 # Optional overrides: ANCESTRIES, MODALITIES, CHROMS, QUEUE, WALLTIME,
 #   THREADS, MEM, GPU=1 (submit to GPU queue; tensorQTL auto-uses CUDA),
-#   FORCE=1, MAF_THRESHOLD.
+#   FORCE=1, MAF_THRESHOLD, SKIP_COLLAPSE_CHECK=1.
+#
+# Worker environment (set inside the bsub heredocs): conda env 'tensorqtl'
+# (module-05 script 21) for 39_run_nominal.py; merge jobs additionally
+# 'module load samtools' for bgzip/tabix.
 # =============================================================================
 set -euo pipefail
 
@@ -43,6 +47,18 @@ FORCE="${FORCE:-0}"
 if [ "$TEST" = "1" ]; then
     ANCESTRIES="EAS"; MODALITIES="expression"; CHROMS="21"
     echo "TEST=1: pilot = EAS expression chr21 only"
+fi
+
+# --- Collapsed-replicate input audit ------------------------------------------
+# The nominal scans consume sample-level qtl_inputs (BEDs, covariates, pgen).
+# Verify those sample sets match the module-05 collapsed-replicate contract
+# (the same ancestry_map_collapsed.tsv authority module 07 enforces) before
+# submitting. Stdlib-only script: no conda env required on the login node.
+if [ "${SKIP_COLLAPSE_CHECK:-0}" != "1" ]; then
+    python3 "${SCRIPTS_DIR}/check_collapsed_inputs.py" \
+        --qtl-dir "$QTL_DIR" \
+        --output-base "$OUTPUT_BASE" \
+        --ancestries $ANCESTRIES
 fi
 
 mkdir -p "$LOG_DIR"
