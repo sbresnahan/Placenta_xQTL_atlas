@@ -232,18 +232,18 @@ def detect_columns(df, overrides):
 
 def standardize(df, mapping):
     out = pd.DataFrame()
-    out["chr"] = (df[mapping["chr"]].astype(str)
+    out["chr"] = (df[mapping["chr"]].astype(str).str.strip()
                   .str.replace("^chr", "", regex=True)
                   .replace({"X": "23", "Y": "24", "M": "25", "MT": "25"}))
     out = out[out["chr"].str.fullmatch(r"\d+")]
     out["pos"] = pd.to_numeric(df.loc[out.index, mapping["pos"]],
                                errors="coerce")
-    out["rsid"] = (df.loc[out.index, mapping["rsid"]].astype(str)
+    out["rsid"] = (df.loc[out.index, mapping["rsid"]].astype(str).str.strip()
                    if "rsid" in mapping else "")
     out["effect_allele"] = (df.loc[out.index, mapping["effect_allele"]]
-                            .astype(str).str.upper())
+                            .astype(str).str.strip().str.upper())
     out["other_allele"] = (df.loc[out.index, mapping["other_allele"]]
-                           .astype(str).str.upper())
+                           .astype(str).str.strip().str.upper())
     for field in ("eaf", "se", "pval", "n"):
         out[field] = (pd.to_numeric(df.loc[out.index, mapping[field]],
                                     errors="coerce")
@@ -394,6 +394,9 @@ def harmonize_trait(row, raw_dir, out_dir, mapper, index, overrides):
         comment = None if first_line.upper().startswith("#CHROM") else "#"
         df = pd.read_csv(raw, sep=None, engine="python", nrows=None,
                          comment=comment)
+        # some releases (EGG) pad fields with spaces around the tab
+        # delimiter; normalize column names so alias matching works
+        df.columns = [str(c).strip() for c in df.columns]
         input_kind = "tabular"
     qc = {"trait_id": tid, "status": "ok", "n_raw": len(df),
           "input": input_kind}
