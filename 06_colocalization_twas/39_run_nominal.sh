@@ -72,7 +72,7 @@ N_CHROMS=$(echo $CHROMS | wc -w)
 # Submit the merge job for the current ANC/MOD; extra bsub args (e.g. the
 # -w dependency on the array) are passed through.
 submit_merge() {
-    bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W "$MERGE_WALLTIME" -M 16G -R "rusage[mem=16G]" \
+    bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W "$MERGE_WALLTIME" -M 64G -R "rusage[mem=64G]" \
          "$@" \
          -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
          -env "$ENV_STR" \
