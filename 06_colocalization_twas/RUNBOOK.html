@@ -525,14 +525,14 @@ you must activate it before running (the step has no shell driver).</p>
 </tr>
 <tr class="even">
 <td>37 fetch</td>
-<td>login</td>
+<td>login (&lt;1 GB: streams to disk)</td>
 <td>conda env <code>tensorqtl</code> (pandas); internet</td>
 <td><strong>in-script</strong> (<code>PYENV</code> override;
 <code>PYENV=none</code> skips)</td>
 </tr>
 <tr class="odd">
 <td>38 harmonize</td>
-<td>login</td>
+<td><strong>interactive node</strong></td>
 <td>conda env <code>tensorqtl</code> (pandas, numpy) +
 <code>bgzip</code>/<code>tabix</code></td>
 <td><strong>manual</strong>: <code>conda activate tensorqtl</code> +
@@ -605,7 +605,7 @@ you must activate it before running (the step has no shell driver).</p>
 </tr>
 <tr class="even">
 <td>49 aggregate</td>
-<td>login</td>
+<td><strong>interactive node</strong></td>
 <td>conda env <code>tensorqtl</code> (pandas, numpy, scipy)</td>
 <td><strong>manual</strong>: <code>conda activate tensorqtl</code></td>
 </tr>
@@ -615,6 +615,26 @@ you must activate it before running (the step has no shell driver).</p>
 <code>21_install_tensorqtl.sh</code> (python 3.10; provides
 pandas/numpy/scipy). Any env with those packages works; override with
 <code>PYENV=&lt;name&gt;</code> for the scripts that self-activate.</p>
+</div>
+<div id="where-to-run-the-1-gb-login-node-rule" class="section level2">
+<h2>0.2 Where to run: the 1 GB login-node rule</h2>
+<p>Seadragon policy: anything needing more than ~1 GB RAM belongs on a
+compute/interactive node, not a login node. For this module:</p>
+<ul>
+<li><p><strong>Login node</strong>: driver scripts that only submit LSF
+jobs (the 39/42/45/47/48 submitters), the collapsed-replicate audit,
+file placement, and step 37 (downloads stream to disk in 1 MB chunks —
+I/O-bound, well under 1 GB). Steps 36/37 must stay on login nodes
+regardless: only login nodes have internet access.</p></li>
+<li><p><strong>Interactive node</strong>: the two manual steps that load
+full GWAS or result tables into memory — step 38 (several GB per trait)
+and step 49. Request one with the same LSF incantation module 05
+uses:</p>
+<pre class="bash"><code>bsub -Is -q medium -n 4 -M 32 -R &quot;rusage[mem=32]&quot; -W 12:00 bash</code></pre>
+<p>Adjust <code>-M</code>/<code>rusage</code> (GB) and <code>-W</code>
+(walltime) per step; suggested values are given in each step’s
+section.</p></li>
+</ul>
 <p><strong>R package library rule for this module:</strong> any R script
 or <code>Rscript -e</code> snippet must begin with</p>
 <pre class="r"><code>.libPaths(c(&quot;/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1&quot;, .libPaths()))</code></pre>
@@ -779,7 +799,9 @@ test -f &quot;${FUSION_DIR}/FUSION.assoc_test.R&quot;</code></pre>
 <div id="step-37-fetch-gwas-summary-statistics" class="section level1">
 <h1>2. Step 37 — fetch GWAS summary statistics</h1>
 <p>Run on the <strong>login node</strong> because compute nodes do not
-have internet access.</p>
+have internet access. This is compatible with the 1 GB login-node rule:
+downloads stream to disk in 1 MB chunks, so the step is I/O-bound with a
+minimal memory footprint.</p>
 <p><strong>Required environment:</strong> <code>37_fetch_gwas.py</code>
 imports pandas, which the login-node system <code>python3</code> does
 not provide. The driver now activates the <code>tensorqtl</code> conda
@@ -858,17 +880,44 @@ FORCE=1 TRAITS=&quot;egg_bw_fetal_2019&quot; \
 <p>Manual-access traits must be placed at the filename expected by the
 catalog/step 37 contract under:</p>
 <pre class="text"><code>$GWAS_DIR/raw/</code></pre>
+<p>Either <code>{trait_id}.txt.gz</code> (gzipped tabular) or
+<code>{trait_id}.vcf.gz</code> (GWAS-VCF) is accepted.
+<code>childbodysize10_richardson_2020</code> is the GWAS-VCF case: the
+GWAS Catalog hosts no full summary statistics for Richardson et
+al. 2020, so the catalog points at OpenGWAS <code>ieu-b-5107</code>
+(same UKB phenotype, GRCh37). Register at <a href="https://api.opengwas.io" class="uri">https://api.opengwas.io</a>,
+download the dataset <code>.vcf.gz</code>, and place it as
+<code>$GWAS_DIR/raw/childbodysize10_richardson_2020.vcf.gz</code>. Step
+38 parses the GWAS-VCF <code>ES/SE/LP/AF</code> FORMAT fields directly
+(effect allele = ALT, <code>pval = 10^-LP</code>) and fills per-variant
+<code>n</code> from the catalog <code>sample_size</code>.</p>
+<p>JECS childhood BMI is distributed as 11 age-stratified files
+(<code>&lt;agebin&gt;_bmi.gz</code>: dr0m, dr1m, c6m, c1y_1, c1y_2,
+c1hy, c2y, c2hy, c3y, c3hy, c4y). Place each as
+<code>$GWAS_DIR/raw/jecs_childhood_bmi_2025_&lt;agebin&gt;.txt.gz</code>
+(already gzipped — a plain rename); the catalog carries one row per bin.
+These are hg38 tabular files with a <code>#CHROM</code> header and
+<code>BETA</code>/<code>SE</code> relative to <code>ALT</code>; step 38
+reads them directly. The <code>bmi_11_tp_dynamic*</code> files from the
+same release are p-value-only (placeholder
+<code>BETA</code>/<code>SE</code>) and cannot feed coloc — keep them
+outside <code>gwas/raw/</code> for optional post-hoc annotation.</p>
 <p>Before proceeding, confirm the raw files you intend to analyze
 exist:</p>
-<pre class="bash"><code>ls -lh &quot;${GWAS_DIR}/raw/&quot;*.txt.gz</code></pre>
+<pre class="bash"><code>ls -lh &quot;${GWAS_DIR}/raw/&quot;*.txt.gz &quot;${GWAS_DIR}/raw/&quot;*.vcf.gz</code></pre>
 <hr />
 </div>
 </div>
 <div id="step-38-harmonize-gwas-to-grch38-and-atlas-variants" class="section level1">
 <h1>3. Step 38 — harmonize GWAS to GRCh38 and atlas variants</h1>
-<p>There is no shell driver for Step 38. Run the Python script
-directly.</p>
-<p><strong>Required environment (manual):</strong></p>
+<p>There is no shell driver for Step 38. Run the Python script directly
+<strong>on an interactive node</strong> — each GWAS is loaded into
+memory in full (the 11 JECS files alone are ~640 MB gzipped each; peak
+usage is several GB per trait), which exceeds the 1 GB login-node
+limit:</p>
+<pre class="bash"><code>bsub -Is -q medium -n 4 -M 32 -R &quot;rusage[mem=32]&quot; -W 12:00 bash</code></pre>
+<p><strong>Required environment (manual, inside the interactive
+session):</strong></p>
 <pre class="bash"><code>source /etc/profile.d/modules.sh
 eval &quot;$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)&quot;
 conda activate tensorqtl     # pandas, numpy
@@ -2009,7 +2058,12 @@ gene-level ACAT
 cell-type annotation</code></pre>
 <p>There is no shell wrapper; analysis controls are direct command-line
 flags.</p>
-<p><strong>Required environment (manual):</strong></p>
+<p>Step 49 concatenates all per-shard coloc/TWAS results across traits
+and ancestries and can exceed the 1 GB login-node limit — run it
+<strong>on an interactive node</strong>:</p>
+<pre class="bash"><code>bsub -Is -q medium -n 2 -M 16 -R &quot;rusage[mem=16]&quot; -W 4:00 bash</code></pre>
+<p><strong>Required environment (manual, inside the interactive
+session):</strong></p>
 <pre class="bash"><code>conda activate tensorqtl     # pandas, numpy, scipy</code></pre>
 <p>Default run:</p>
 <pre class="bash"><code>python3 &quot;${SCRIPTS_DIR}/49_aggregate_coloc_twas.py&quot; \
@@ -2287,7 +2341,9 @@ python3 check_collapsed_inputs.py \
 # Login node: network access required; script self-activates the pandas env.
 bash 37_fetch_gwas.sh
 
-# Harmonize (manual env: conda activate tensorqtl; module load samtools).
+# Harmonize ON AN INTERACTIVE NODE (&gt;1 GB; section 3):
+#   bsub -Is -q medium -n 4 -M 32 -R &quot;rusage[mem=32]&quot; -W 12:00 bash
+#   then: conda activate tensorqtl; module load samtools
 python3 38_harmonize_gwas.py \
     --catalog gwas_catalog.tsv \
     --raw-dir &quot;${GWAS_DIR}/raw&quot; \
@@ -2316,7 +2372,9 @@ TEST=0 bash 47_submit_isotwas.sh
 TEST=1 bash 48_fusion_twas.sh
 TEST=0 bash 48_fusion_twas.sh
 
-# Final aggregation (manual env: conda activate tensorqtl).
+# Final aggregation ON AN INTERACTIVE NODE (&gt;1 GB; section 9):
+#   bsub -Is -q medium -n 2 -M 16 -R &quot;rusage[mem=16]&quot; -W 4:00 bash
+#   then: conda activate tensorqtl
 python3 49_aggregate_coloc_twas.py \
     --results-dir &quot;$RESULTS_DIR&quot; \
     --qtl-dir &quot;$QTL_DIR&quot;</code></pre>
