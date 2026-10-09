@@ -936,7 +936,34 @@ module load samtools         # bgzip, tabix — required: 41/44 slice the
 <p>Expected output:</p>
 <pre class="text"><code>$GWAS_DIR/{trait_id}.sumstats.tsv.gz
 $GWAS_DIR/{trait_id}.sumstats.tsv.gz.tbi
+$GWAS_DIR/qc/{trait_id}.qc.tsv
 $GWAS_DIR/harmonization_qc.tsv</code></pre>
+<div id="skip-behavior-and-parallel-submission" class="section level3">
+<h3>Skip behavior and parallel submission</h3>
+<p>Step 38 is <strong>idempotent</strong>: a trait whose
+<code>{trait_id}.sumstats.tsv.gz</code> and <code>.tbi</code> already
+exist is skipped (<code>--force</code> re-does it). If the
+<code>.tbi</code> is missing (e.g. an earlier run without
+<code>module load samtools</code>), the index is repaired in place
+instead of re-harmonizing. Each trait writes its own QC row to
+<code>$GWAS_DIR/qc/{trait_id}.qc.tsv</code>, and every run re-aggregates
+all per-trait rows into <code>harmonization_qc.tsv</code>, so the table
+stays complete no matter which order traits finish in.</p>
+<p>Because of this, traits can run as <strong>parallel LSF jobs</strong>
+instead of one serial interactive session (the full 17-trait serial run
+takes roughly 5–8 h; the 12 JECS files dominate):</p>
+<pre class="bash"><code># login node is fine — the submitter only runs bsub
+bash &quot;${SCRIPTS_DIR}/38b_submit_harmonize_jobs.sh&quot;                # all pending
+bash &quot;${SCRIPTS_DIR}/38b_submit_harmonize_jobs.sh&quot; egg_ga_maternal_2023  # one</code></pre>
+<p>The submitter skips completed traits, so re-running it after failures
+only resubmits what is missing. Defaults: queue <code>medium</code>, 24
+GB, 4 h per job (override with
+<code>QUEUE=... MEM_GB=... WALL=...</code>). Logs land in
+<code>$GWAS_DIR/logs/38_&lt;trait_id&gt;.{out,err}</code>; monitor with
+<code>bjobs -w | grep harm_</code>. When all jobs are done, confirm
+every trait has a <code>.sumstats.tsv.gz</code> + <code>.tbi</code> and
+check <code>harmonization_qc.tsv</code> as below.</p>
+</div>
 <div id="step-38-command-line-controls" class="section level2">
 <h2>Step 38 command-line controls</h2>
 <p>Step 38 does not consume analysis controls through environment
@@ -994,6 +1021,11 @@ variables. Its flags are:</p>
 <td><code>--column-map</code></td>
 <td>none</td>
 <td>Per-trait column overrides</td>
+</tr>
+<tr class="odd">
+<td><code>--force</code></td>
+<td>off</td>
+<td>Re-harmonize traits whose output already exists</td>
 </tr>
 </tbody>
 </table>

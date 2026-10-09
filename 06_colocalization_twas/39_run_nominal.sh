@@ -16,8 +16,8 @@
 #   bash 39_run_nominal.sh           # all ancestries x modalities
 #
 # Optional overrides: ANCESTRIES, MODALITIES, CHROMS, QUEUE, WALLTIME,
-#   THREADS, MEM, GPU=1 (submit to GPU queue; tensorQTL auto-uses CUDA),
-#   FORCE=1, MAF_THRESHOLD, SKIP_COLLAPSE_CHECK=1.
+#   MERGE_WALLTIME, THREADS, MEM, GPU=1 (submit to GPU queue; tensorQTL
+#   auto-uses CUDA), FORCE=1, MAF_THRESHOLD, SKIP_COLLAPSE_CHECK=1.
 #
 # Worker environment (set inside the bsub heredocs): conda env 'tensorqtl'
 # (module-05 script 21) for 39_run_nominal.py; merge jobs additionally
@@ -36,6 +36,9 @@ MODALITIES="${MODALITIES:-expression isoforms isoform_expression splicing intron
 CHROMS="${CHROMS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22}"
 QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-12:00}"
+# seadragon queue runlimits: short <3h, medium >3h and <24h, long 24-120h
+# (esub rejects out-of-range requests) — the merge default must exceed 3h
+MERGE_WALLTIME="${MERGE_WALLTIME:-04:00}"
 THREADS="${THREADS:-4}"
 MEM="${MEM:-32G}"
 GPU="${GPU:-0}"
@@ -105,7 +108,7 @@ python3 "${SCRIPTS_DIR}/39_run_nominal.py" \
     --maf-threshold "$MAF_THRESHOLD" $FORCE_FLAG
 EOF
     # dependent merge job
-    bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W 02:00 -M 16G -R "rusage[mem=16G]" \
+    bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W "$MERGE_WALLTIME" -M 16G -R "rusage[mem=16G]" \
          -w "done(${JOB})" \
          -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
          -env "$ENV_STR" \

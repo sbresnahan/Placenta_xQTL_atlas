@@ -585,6 +585,11 @@ Before any submission, the driver runs `check_collapsed_inputs.py` (Section
 0.2) and aborts if the qtl_inputs sample sets do not match the
 collapsed-replicate contract. Override with `SKIP_COLLAPSE_CHECK=1`.
 
+**Seadragon queue runlimits** (esub rejects out-of-range requests): `short`
+< 3 h, `medium` > 3 h and < 24 h, `long` 24–120 h. All module-06 submitter
+defaults conform to `medium`; if you override `QUEUE`, keep the matching
+`WALLTIME`/`MERGE_WALLTIME` inside the target queue's range.
+
 ## Environment controls
 
 | Variable | Default | Purpose |
@@ -600,6 +605,7 @@ collapsed-replicate contract. Override with `SKIP_COLLAPSE_CHECK=1`.
 | `CHROMS` | `1 ... 22` | Chromosomes |
 | `QUEUE` | `medium` | LSF queue |
 | `WALLTIME` | `12:00` | Per chromosome |
+| `MERGE_WALLTIME` | `04:00` | Per-modality merge job |
 | `THREADS` | `4` | LSF CPU request |
 | `MEM` | `32G` | LSF memory request |
 | `GPU` | `0` | Set `1` for GPU submission |
