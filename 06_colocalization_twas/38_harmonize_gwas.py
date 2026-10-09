@@ -21,7 +21,12 @@ oriented consistently. For each catalog trait this script:
      for negative-strand chain mappings, and drops unresolvable palindromic
      variants (A/T or C/G with 0.4 <= eaf <= 0.6).
   5. Writes {out_dir}/{trait_id}.sumstats.tsv.gz (bgzip+tabix if available)
-     and a per-trait QC row in {out_dir}/harmonization_qc.tsv.
+     and a per-trait QC row in {out_dir}/qc/{trait_id}.qc.tsv; all per-trait
+     rows are aggregated into {out_dir}/harmonization_qc.tsv at the end.
+
+Traits whose output already exists are skipped (use --force to redo), so
+the script is idempotent and traits can be run as parallel LSF jobs — see
+38b_submit_harmonize_jobs.sh.
 
 Only variants matching a pgen position are kept — coloc/TWAS only ever use
 variants present in the xQTL genotype data, so unmatched GWAS variants are
@@ -31,6 +36,7 @@ dead weight (counted in QC).
 import argparse
 import bisect
 import gzip
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -43,13 +49,13 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 ALIASES = {
     "chr": ["chr", "chromosome", "#chr", "chrom", "#chrom", "hg19chrc",
-            "chromosome_name", "hm_chrom"],
+            "chromosome_name", "hm_chrom", "chr_hg19", "chr_hg38"],
     "pos": ["pos", "position", "bp", "base_pair_location", "hm_pos",
-            "pos_grch38", "position_grch38"],
+            "pos_grch38", "position_grch38", "pos_hg19", "pos_hg38"],
     "rsid": ["rsid", "snp", "rs_id", "markername", "variant_id",
              "hm_rsid", "rsids", "snpid"],
     "effect_allele": ["effect_allele", "ea", "a1", "allele1", "tested_allele",
-                      "hm_effect_allele", "effectallele", "alt"],
+                      "hm_effect_allele", "effectallele", "alt", "eff"],
     "other_allele": ["other_allele", "nea", "a2", "allele2",
                      "non_effect_allele", "hm_other_allele", "otherallele",
                      "ref"],
@@ -61,7 +67,7 @@ ALIASES = {
     "pval": ["p", "pval", "p_value", "pvalue", "pval_nominal", "hm_p_value",
              "p-value", "p.value"],
     "n": ["n", "sample_size", "n_total", "samples", "hm_n", "n_samples",
-          "total_sample_size"],
+          "total_sample_size", "totalsamplesize"],
 }
 
 COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C"}
@@ -432,6 +438,7 @@ def harmonize_trait(row, raw_dir, out_dir, mapper, index, overrides):
 
     df, aqc = align_to_pgen(df, index)
     qc.update(aqc)
+    qc["n_final"] = len(df)
     df["trait_id"] = tid
     df = df.sort_values(["chr", "pos"],
                         key=lambda s: pd.to_numeric(s, errors="coerce"))
@@ -469,6 +476,14 @@ def parse_column_map(entries):
     return out
 
 
+def write_qc(path, qc):
+    """Write one per-trait QC row (temp+replace so concurrent LSF jobs
+    aggregating *.qc.tsv never read a half-written file)."""
+    tmp = path.with_suffix(f".tmp.{os.getpid()}")
+    pd.DataFrame([qc]).to_csv(tmp, sep="\t", index=False)
+    tmp.replace(path)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -486,16 +501,19 @@ def main():
     p.add_argument("--traits", nargs="*", default=None)
     p.add_argument("--column-map", nargs="*", default=None,
                    help="per-trait column overrides: trait:field=name")
+    p.add_argument("--force", action="store_true",
+                   help="re-harmonize even when the output already exists")
     args = p.parse_args()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    qc_dir = out_dir / "qc"
+    qc_dir.mkdir(parents=True, exist_ok=True)
     cat = pd.read_csv(args.catalog, sep="\t")
-    if args.traits:
-        cat = cat[cat["trait_id"].isin(args.traits)]
+    cat_run = cat[cat["trait_id"].isin(args.traits)] if args.traits else cat
 
     mapper = None
-    if any(str(b) == "37" for b in cat["build"]):
+    if any(str(b) == "37" for b in cat_run["build"]):
         if not args.chain or not Path(args.chain).exists():
             sys.exit("ERROR: build-37 traits present; --chain required")
         print(f"[harmonize] loading chain: {args.chain}")
@@ -505,18 +523,61 @@ def main():
     index = load_pgen_index(args.pgen_dir, args.ancestries)
     overrides = parse_column_map(args.column_map)
 
-    qcs = []
-    for _, row in cat.iterrows():
-        print(f"[harmonize] {row['trait_id']} (build {row['build']})")
+    def run_one(row):
         qc = harmonize_trait(row, args.raw_dir, out_dir, mapper, index,
                              overrides)
-        qcs.append(qc)
+        write_qc(qc_dir / f"{row['trait_id']}.qc.tsv", qc)
         print("  " + ", ".join(f"{k}={v}" for k, v in qc.items()
                                if k not in ("column_map", "file")))
-    qc_df = pd.DataFrame(qcs)
-    qc_path = out_dir / "harmonization_qc.tsv"
-    qc_df.to_csv(qc_path, sep="\t", index=False)
-    print(f"[harmonize] QC -> {qc_path}")
+
+    for _, row in cat_run.iterrows():
+        tid = row["trait_id"]
+        print(f"[harmonize] {tid} (build {row['build']})")
+        out_gz = out_dir / f"{tid}.sumstats.tsv.gz"
+        redo = args.force
+        if not redo and out_gz.exists() and out_gz.stat().st_size > 0:
+            tbi = Path(str(out_gz) + ".tbi")
+            if not tbi.exists():
+                try:
+                    # earlier runs may have lacked samtools; repair in place
+                    subprocess.run(["tabix", "-f", "-s", "1", "-b", "2",
+                                    "-e", "2", "-S", "1", str(out_gz)],
+                                   check=True)
+                    print("  repaired missing tabix index")
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    print("  WARNING: existing output is not tabix-indexable"
+                          " (plain gzip?); re-harmonizing")
+                    redo = True
+            if not redo:
+                qc_file = qc_dir / f"{tid}.qc.tsv"
+                if not qc_file.exists():
+                    # pre-skip-era output: recover n_final from the file so
+                    # the aggregated QC table stays complete
+                    with gzip.open(out_gz, "rt") as fh:
+                        n_final = sum(1 for _ in fh) - 1
+                    write_qc(qc_file, {"trait_id": tid,
+                                       "status": "skipped_exists",
+                                       "n_final": n_final,
+                                       "file": str(out_gz)})
+                print("  skipped (output exists; --force to redo)")
+                continue
+        run_one(row)
+
+    # aggregate per-trait QC files (survives restarts and is safe when
+    # per-trait LSF jobs finish in any order)
+    qc_files = sorted(qc_dir.glob("*.qc.tsv"))
+    if qc_files:
+        qc_df = pd.concat([pd.read_csv(f, sep="\t") for f in qc_files],
+                          ignore_index=True)
+        order = {t: i for i, t in enumerate(cat["trait_id"])}
+        qc_df["_ord"] = qc_df["trait_id"].map(order)
+        qc_df = (qc_df.sort_values(["_ord", "trait_id"])
+                 .drop(columns="_ord"))
+        qc_path = out_dir / "harmonization_qc.tsv"
+        tmp = qc_path.with_suffix(f".tmp.{os.getpid()}")
+        qc_df.to_csv(tmp, sep="\t", index=False)
+        tmp.replace(qc_path)
+        print(f"[harmonize] QC -> {qc_path} ({len(qc_df)} traits)")
 
 
 if __name__ == "__main__":

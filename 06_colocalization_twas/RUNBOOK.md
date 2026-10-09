@@ -482,8 +482,36 @@ Expected output:
 ```text
 $GWAS_DIR/{trait_id}.sumstats.tsv.gz
 $GWAS_DIR/{trait_id}.sumstats.tsv.gz.tbi
+$GWAS_DIR/qc/{trait_id}.qc.tsv
 $GWAS_DIR/harmonization_qc.tsv
 ```
+
+### Skip behavior and parallel submission
+
+Step 38 is **idempotent**: a trait whose `{trait_id}.sumstats.tsv.gz` and
+`.tbi` already exist is skipped (`--force` re-does it). If the `.tbi` is
+missing (e.g. an earlier run without `module load samtools`), the index is
+repaired in place instead of re-harmonizing. Each trait writes its own QC
+row to `$GWAS_DIR/qc/{trait_id}.qc.tsv`, and every run re-aggregates all
+per-trait rows into `harmonization_qc.tsv`, so the table stays complete no
+matter which order traits finish in.
+
+Because of this, traits can run as **parallel LSF jobs** instead of one
+serial interactive session (the full 17-trait serial run takes roughly
+5–8 h; the 12 JECS files dominate):
+
+```bash
+# login node is fine — the submitter only runs bsub
+bash "${SCRIPTS_DIR}/38b_submit_harmonize_jobs.sh"                # all pending
+bash "${SCRIPTS_DIR}/38b_submit_harmonize_jobs.sh" egg_ga_maternal_2023  # one
+```
+
+The submitter skips completed traits, so re-running it after failures only
+resubmits what is missing. Defaults: queue `medium`, 24 GB, 4 h per job
+(override with `QUEUE=... MEM_GB=... WALL=...`). Logs land in
+`$GWAS_DIR/logs/38_<trait_id>.{out,err}`; monitor with
+`bjobs -w | grep harm_`. When all jobs are done, confirm every trait has a
+`.sumstats.tsv.gz` + `.tbi` and check `harmonization_qc.tsv` as below.
 
 ## Step 38 command-line controls
 
@@ -500,6 +528,7 @@ flags are:
 | `--ancestries` | `EAS EUR` | Pooled variant panels to index |
 | `--traits` | all | Restrict harmonization to selected traits |
 | `--column-map` | none | Per-trait column overrides |
+| `--force` | off | Re-harmonize traits whose output already exists |
 
 Subset example:
 
