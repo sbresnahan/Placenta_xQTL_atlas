@@ -27,8 +27,11 @@ tensorqtl.pgen.read_list (hardcalls; --dosages switches to dosages), variant
 IDs are intersected across ancestries (IDs encode chr:pos:ref:alt, so the
 intersection is allele-consistent), and ancestry blocks are stacked in the
 manifest order — no pooled pgen is ever built. Missing hardcalls are imputed
-to the within-ancestry-block variant mean. The MAF filter is applied to the
-pooled (stacked) genotypes.
+to the within-ancestry-block variant mean. An overall MAF filter is applied to
+the pooled (stacked) genotypes, followed by tensorQTL-style interaction MAF
+filtering: for a single continuous exposure, samples are split into lower and
+upper halves after stable sorting on the exposure and each variant must satisfy
+--maf-threshold-interaction in both halves.
 
 The exposure main effect is a model term, so the exposure must NOT also sit
 in the covariate table: any covariate row named exactly like --exposure
@@ -92,8 +95,52 @@ def read_psam_iids(psam_path):
     return psam.iloc[:, 0].astype(str).tolist()
 
 
+def interaction_maf_mask(G, interaction, maf_threshold_interaction=0.05):
+    """TensorQTL-style MAF filter for one continuous interaction term.
+
+    Samples are stable-sorted by the interaction and split at n//2. A variant
+    is retained only if its MAF is at least ``maf_threshold_interaction`` in
+    both the lower and upper halves. This mirrors
+    ``tensorqtl.core.filter_maf_interaction`` as used by ``cis.map_nominal``
+    for a single interaction term.
+    """
+    if not (0.0 <= maf_threshold_interaction <= 0.5):
+        raise ValueError(
+            f"maf_threshold_interaction must be between 0 and 0.5; got "
+            f"{maf_threshold_interaction}")
+    if maf_threshold_interaction <= 0:
+        return np.ones(G.shape[0], dtype=bool)
+
+    interaction = np.asarray(interaction, dtype=float)
+    if interaction.ndim != 1 or interaction.shape[0] != G.shape[1]:
+        raise ValueError(
+            "interaction must be a 1D vector with one value per genotype sample")
+    if not np.isfinite(interaction).all():
+        raise ValueError("interaction contains non-finite values after sample alignment")
+    if G.shape[1] < 2:
+        return np.zeros(G.shape[0], dtype=bool)
+
+    order = np.argsort(interaction, kind='mergesort')
+    lower_ix = order[:G.shape[1] // 2]
+    upper_ix = order[G.shape[1] // 2:]
+    if len(lower_ix) == 0 or len(upper_ix) == 0:
+        return np.zeros(G.shape[0], dtype=bool)
+
+    def _maf(ix):
+        af = G[:, ix].sum(1) / (2.0 * len(ix))
+        return np.where(af > 0.5, 1.0 - af, af)
+
+    eps = 1e-7  # tensorQTL tolerance
+    lower_maf = _maf(lower_ix)
+    upper_maf = _maf(upper_ix)
+    return ((lower_maf >= maf_threshold_interaction - eps) &
+            (upper_maf >= maf_threshold_interaction - eps))
+
+
 def load_chromosome_genotypes(pgen_by_anc, samples_by_anc, chrom,
-                              maf_threshold=0.01, dosages=False):
+                              maf_threshold=0.01,
+                              maf_threshold_interaction=0.05,
+                              interaction=None, dosages=False):
     """Read one chromosome from per-ancestry pgens and stack ancestry blocks.
 
     Returns
@@ -194,6 +241,21 @@ def load_chromosome_genotypes(pgen_by_anc, samples_by_anc, chrom,
     var_pos = var_pos[mask]
     log(f"    analysis set: {G.shape[0]} variants x {G.shape[1]} samples after "
         f"MAF>={maf_threshold} + monomorphic filters ({n0 - G.shape[0]} dropped)")
+
+    if interaction is not None and maf_threshold_interaction > 0:
+        n0 = G.shape[0]
+        imask = interaction_maf_mask(
+            G, interaction, maf_threshold_interaction=maf_threshold_interaction)
+        G = G[imask]
+        keep_ids = list(np.asarray(keep_ids)[imask])
+        var_pos = var_pos[imask]
+        n_lower = G.shape[1] // 2
+        n_upper = G.shape[1] - n_lower
+        log(
+            f"    interaction-MAF set: {G.shape[0]} variants retained after "
+            f"MAF>={maf_threshold_interaction} in both exposure halves "
+            f"(lower n={n_lower}, upper n={n_upper}; {n0 - G.shape[0]} dropped)")
+
     return G, np.asarray(keep_ids), np.asarray(var_pos), samples
 
 
@@ -258,7 +320,9 @@ def load_scan_inputs(args):
 
     G, var_ids, var_pos, g_samples = load_chromosome_genotypes(
         pgen_by_anc, samples_by_anc, args.chrom,
-        maf_threshold=args.maf_threshold, dosages=args.dosages)
+        maf_threshold=args.maf_threshold,
+        maf_threshold_interaction=args.maf_threshold_interaction,
+        interaction=exposure.values, dosages=args.dosages)
     assert g_samples == samples, "genotype/phenotype sample order mismatch"
 
     return dict(pheno=pheno, pheno_pos=pheno_pos, cov=cov, exposure=exposure,
@@ -553,7 +617,13 @@ def main():
     p.add_argument('--phenotypes-file',
                    help='optional one-column phenotype list (nominal mode)')
     p.add_argument('--cis-window', type=int, default=1000000)
-    p.add_argument('--maf-threshold', type=float, default=0.01)
+    p.add_argument('--maf-threshold', type=float, default=0.01,
+                   help='overall in-sample MAF prefilter (default: 0.01)')
+    p.add_argument(
+        '--maf-threshold-interaction', type=float, default=0.05,
+        help='tensorQTL-style interaction MAF floor applied separately to '
+             'the lower and upper halves of the continuous exposure '
+             '(default: 0.05)')
     p.add_argument('--perm-blocks', type=int, nargs='+',
                    default=[100, 400, 500, 9000],
                    help='adaptive permutation blocks (default: 100 400 500 '
@@ -581,6 +651,11 @@ def main():
     )
     p.add_argument('--out', required=True)
     args = p.parse_args()
+
+    for name, value in [('maf_threshold', args.maf_threshold),
+                        ('maf_threshold_interaction', args.maf_threshold_interaction)]:
+        if not (0.0 <= value <= 0.5):
+            p.error(f'--{name.replace("_", "-")} must be between 0 and 0.5')
 
     if args.mode == 'merge':
         if not args.chr_outputs:

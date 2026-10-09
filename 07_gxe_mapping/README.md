@@ -41,6 +41,22 @@ Continuous exposures are range-filtered/transformed and then standardized once
 across all retained ancestries so ancestry-specific interaction coefficients remain
 on the same exposure-SD scale. Phenotypes are standardized within ancestry.
 
+
+## Variant-frequency filters for interaction scans
+
+Tier 1 and tier 2 retain the existing overall in-sample MAF prefilter
+(`MAF_THRESHOLD`, default `0.01`) and additionally apply tensorQTL-style
+interaction filtering with `MAF_THRESHOLD_INTERACTION` (default `0.05`).
+For a single continuous exposure, samples are stable-sorted by the exposure
+and split into lower and upper halves; a variant must have MAF >= 0.05 in
+**both** halves to enter the interaction model. This mirrors tensorQTL's
+`maf_threshold_interaction` behavior and prevents sparse minor alleles
+concentrated at one end of the exposure distribution from driving GxE tests.
+
+The production default can be overridden when submitting Module 07, e.g.
+`MAF_THRESHOLD_INTERACTION=0.05`, but the 0.05 default is intentional and
+should be relaxed only for a documented sensitivity analysis.
+
 ## Tier-1 cross-ancestry synthesis
 
 `54_tier1_meta.py` outer-joins ancestry-specific discovery results by canonical

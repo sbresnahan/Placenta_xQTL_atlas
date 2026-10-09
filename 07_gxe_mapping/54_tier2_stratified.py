@@ -225,7 +225,9 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
         m = (pos_chrom == chrom).values
         G, var_ids, var_pos, gsamples = scanner.load_chromosome_genotypes(
             {anc: pgen}, {anc: samples}, chrom,
-            maf_threshold=args.maf_threshold, dosages=args.dosages)
+            maf_threshold=args.maf_threshold,
+            maf_threshold_interaction=args.maf_threshold_interaction,
+            interaction=e.values, dosages=args.dosages)
         G_t = torch.tensor(G, dtype=torch.float32, device=device)
         g0_t, e0_t, ge0_t = gxe_core.prepare_interaction_terms(G_t, e_t, Q_t)
         sub_p = pheno[m]
@@ -268,9 +270,18 @@ def main():
     p.add_argument("--pp-h4", type=float, default=0.7)
     p.add_argument("--twas-q", type=float, default=0.05)
     p.add_argument("--cis-window", type=int, default=1000000)
-    p.add_argument("--maf-threshold", type=float, default=0.01)
+    p.add_argument("--maf-threshold", type=float, default=0.01,
+                   help="overall in-sample MAF prefilter (default: 0.01)")
+    p.add_argument("--maf-threshold-interaction", type=float, default=0.05,
+                   help="tensorQTL-style MAF floor required in both lower and "
+                        "upper exposure halves (default: 0.05)")
     p.add_argument("--dosages", action="store_true")
     args = p.parse_args()
+
+    for name, value in [("maf_threshold", args.maf_threshold),
+                        ("maf_threshold_interaction", args.maf_threshold_interaction)]:
+        if not (0.0 <= value <= 0.5):
+            p.error(f"--{name.replace(chr(95), chr(45))} must be between 0 and 0.5")
 
     out_dir = os.path.join(args.gxe_dir, "tier2")
     os.makedirs(out_dir, exist_ok=True)

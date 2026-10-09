@@ -21,6 +21,7 @@ Layers:
 Run:  cd 07_gxe_mapping && pytest test_gxe_scan.py -v
 """
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -36,6 +37,11 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "06_colocalization_twas"))
 
 import gxe_core
+
+_spec = importlib.util.spec_from_file_location("gxe_scan_52", HERE / "52_gxe_scan.py")
+scanner = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(scanner)
+
 from test_susie_coloc import (simulate_genotypes, write_vcf, make_pgen,
                               VAR_IDS, POSITIONS, CHROM)
 
@@ -84,6 +90,36 @@ def core_scan(G, e, cov, P):
     # -> [np x nv x 3]
     return np.stack(bs, 0), np.stack(bses, 0), np.stack(ts, 0), dof, Xt, Xinv
 
+
+
+def test_interaction_maf_filter_matches_tensorqtl(inputs):
+    """Our continuous-exposure filter must match tensorQTL exactly."""
+    from tensorqtl.core import filter_maf_interaction
+
+    G, e, _ = inputs
+    Gv = G.T.astype(np.float32)
+    threshold = 0.05
+    ours = scanner.interaction_maf_mask(Gv, e, threshold)
+
+    order = np.argsort(e, kind="mergesort")
+    upper = np.ones(len(e), dtype=bool)
+    upper[order[:len(e) // 2]] = False
+    _, mask_t = filter_maf_interaction(
+        torch.tensor(Gv, dtype=torch.float32),
+        interaction_mask_t=torch.tensor(upper, dtype=torch.bool),
+        maf_threshold_interaction=threshold)
+    expected = mask_t.cpu().numpy().astype(bool)
+    assert np.array_equal(ours, expected)
+
+
+def test_interaction_maf_filter_rejects_exposure_imbalance():
+    """A variant common overall but confined to one exposure half is removed."""
+    e = np.arange(20, dtype=float)
+    G = np.zeros((2, 20), dtype=np.float32)
+    G[0, :10] = 1.0            # MAF 0.25 overall; absent in upper half
+    G[1, [0, 10]] = 1.0       # MAF 0.05 in both halves
+    mask = scanner.interaction_maf_mask(G, e, 0.05)
+    assert mask.tolist() == [False, True]
 
 def test_nominal_matches_tensorqtl(inputs):
     G, e, cov = inputs
@@ -324,6 +360,7 @@ def test_scanner_cli_end_to_end(cli_fixture):
         "--exposure", "GA",
         "--chrom", CHROM,
         "--maf-threshold", "0.01",
+        "--maf-threshold-interaction", "0.05",
         "--perm-blocks", "50", "150",
         "--seed", "5",
         "--out", str(out),

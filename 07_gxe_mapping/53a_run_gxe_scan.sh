@@ -27,6 +27,7 @@ INPUTS="${GXE_DIR}/inputs"
 TIER1="${GXE_DIR}/tier1"
 CIS_WINDOW="${CIS_WINDOW:-1000000}"
 MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"
+MAF_THRESHOLD_INTERACTION="${MAF_THRESHOLD_INTERACTION:-0.05}"
 PERM_BLOCKS="${PERM_BLOCKS:-100 400 500 9000}"
 STOP_P="${STOP_P:-0.10}"
 SEED="${SEED:-12345}"
@@ -76,6 +77,7 @@ python3 "${SCRIPTS_DIR}/52_gxe_scan.py" --mode cis-perm \
     --chrom "$CHROM" \
     --cis-window "$CIS_WINDOW" \
     --maf-threshold "$MAF_THRESHOLD" \
+    --maf-threshold-interaction "$MAF_THRESHOLD_INTERACTION" \
     --perm-blocks $PERM_BLOCKS \
     --stop-p "$STOP_P" \
     --seed "$SEED" \

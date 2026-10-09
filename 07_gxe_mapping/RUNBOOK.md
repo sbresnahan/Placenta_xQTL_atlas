@@ -320,8 +320,18 @@ EAS × splicing × GA × chr1
 EUR × splicing × GA × chr22
 ```
 
-The scanner reads only that ancestry's pgen. MAF/monomorphic filtering is therefore
-performed within ancestry rather than after cross-ancestry variant intersection.
+The scanner reads only that ancestry's pgen. Variant-frequency filtering is therefore
+performed within ancestry rather than after cross-ancestry synthesis. Two filters are
+applied before interaction testing:
+
+- overall in-sample `MAF_THRESHOLD` (default `0.01`); and
+- tensorQTL-style `MAF_THRESHOLD_INTERACTION` (default `0.05`), requiring the
+  variant to have MAF >= 0.05 in both the lower and upper halves of the exposure
+  distribution.
+
+The second filter is the production floor for GxE scans and is specifically intended
+to prevent sparse minor alleles at one end of a continuous exposure from producing
+unstable interaction estimates. It is applied in both tier 1 and tier 2.
 
 Per-chromosome output:
 

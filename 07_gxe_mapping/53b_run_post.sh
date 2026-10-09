@@ -23,6 +23,8 @@ POST_MODE="${POST_MODE:?ERROR: POST_MODE required}"
 ANCESTRIES="${ANCESTRIES:-EAS EUR}"
 CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
 CONDA_ENV="${CONDA_ENV:-tensorqtl}"
+MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"
+MAF_THRESHOLD_INTERACTION="${MAF_THRESHOLD_INTERACTION:-0.05}"
 
 source /etc/profile.d/modules.sh
 [ -x "$CONDA_EXE" ] || { echo "ERROR: conda executable not found/executable: $CONDA_EXE"; exit 1; }
@@ -43,7 +45,9 @@ case "$POST_MODE" in
     EXPOSURE="${EXPOSURE:?tier2 needs EXPOSURE}"
     python3 "${SCRIPTS_DIR}/54_tier2_stratified.py" \
         --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR" \
-        --ancestries $ANCESTRIES --modality "$MODALITY" --exposure "$EXPOSURE"
+        --ancestries $ANCESTRIES --modality "$MODALITY" --exposure "$EXPOSURE" \
+        --maf-threshold "$MAF_THRESHOLD" \
+        --maf-threshold-interaction "$MAF_THRESHOLD_INTERACTION"
     ;;
   sensitivity)
     python3 "${SCRIPTS_DIR}/55_sensitivity_snpxcov.py" \

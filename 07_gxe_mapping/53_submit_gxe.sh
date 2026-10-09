@@ -33,6 +33,8 @@ CHROMS="${CHROMS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22}"
 R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
 CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
 CONDA_ENV="${CONDA_ENV:-tensorqtl}"
+MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"
+MAF_THRESHOLD_INTERACTION="${MAF_THRESHOLD_INTERACTION:-0.05}"
 
 if [ "$TEST" = "1" ]; then
     MODALITIES="expression"
@@ -51,6 +53,8 @@ echo "  ANCESTRIES: $ANCESTRIES"
 echo "  MODALITIES: $MODALITIES"
 echo "  EXPOSURES:  $EXPOSURES"
 echo "  STAGES:     $STAGES"
+echo "  MAF_THRESHOLD: $MAF_THRESHOLD"
+echo "  MAF_THRESHOLD_INTERACTION: $MAF_THRESHOLD_INTERACTION"
 echo "  COLLAPSED_ANCESTRY_MAP: $COLLAPSED_ANCESTRY_MAP"
 
 has_stage() { case " $STAGES " in *" $1 "*) return 0;; *) return 1;; esac; }
@@ -121,7 +125,7 @@ for ANC in $ANCESTRIES; do
                     -J "gxe_t1_${ANC}_${MOD}_${EXP}[1-${N_CHROMS}]" "${DEP_ARGS[@]}" \
                     -o "${LOG_DIR}/gxe_t1_${ANC}_${MOD}_${EXP}.%J.%I.out" \
                     -e "${LOG_DIR}/gxe_t1_${ANC}_${MOD}_${EXP}.%J.%I.err" \
-                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRY=$ANC,MODALITY=$MOD,EXPOSURE=$EXP,MODE=scan,CHROMS=$CHROMS,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+                    -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRY=$ANC,MODALITY=$MOD,EXPOSURE=$EXP,MODE=scan,CHROMS=$CHROMS,MAF_THRESHOLD=$MAF_THRESHOLD,MAF_THRESHOLD_INTERACTION=$MAF_THRESHOLD_INTERACTION,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
                     "bash ${SCRIPTS_DIR}/53a_run_gxe_scan.sh")
                 SCAN_DEP=$(echo "$J" | job_id)
                 echo "  stage 2: ${ANC} ${MOD} x ${EXP} array $SCAN_DEP"
@@ -178,7 +182,7 @@ if has_stage 5; then
                 -J "gxe_t2_${MOD}_${EXP}" "${DEP_ARGS[@]}" \
                 -o "${LOG_DIR}/gxe_t2_${MOD}_${EXP}.%J.out" \
                 -e "${LOG_DIR}/gxe_t2_${MOD}_${EXP}.%J.err" \
-                -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,POST_MODE=tier2,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+                -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,POST_MODE=tier2,MAF_THRESHOLD=$MAF_THRESHOLD,MAF_THRESHOLD_INTERACTION=$MAF_THRESHOLD_INTERACTION,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
                 "bash ${SCRIPTS_DIR}/53b_run_post.sh")
             jid=$(echo "$J" | job_id); TIER2_JOBS+=("$jid")
             echo "  stage 5: tier2 ${MOD} x ${EXP} job $jid"
