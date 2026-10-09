@@ -17,7 +17,9 @@
 #
 # Optional overrides: ANCESTRIES, MODALITIES, CHROMS, QUEUE, WALLTIME,
 #   MERGE_WALLTIME, THREADS, MEM, GPU=1 (submit to GPU queue; tensorQTL
-#   auto-uses CUDA), FORCE=1, MAF_THRESHOLD, SKIP_COLLAPSE_CHECK=1.
+#   auto-uses CUDA), FORCE=1, MAF_THRESHOLD, SKIP_COLLAPSE_CHECK=1,
+#   MERGE_ONLY=1 (shards already done: submit only the merge jobs, no
+#   dependency — the recovery path after a merge-step failure).
 #
 # Worker environment (set inside the bsub heredocs): conda env 'tensorqtl'
 # (module-05 script 21) for 39_run_nominal.py; merge jobs additionally
@@ -67,6 +69,26 @@ fi
 mkdir -p "$LOG_DIR"
 N_CHROMS=$(echo $CHROMS | wc -w)
 
+# Submit the merge job for the current ANC/MOD; extra bsub args (e.g. the
+# -w dependency on the array) are passed through.
+submit_merge() {
+    bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W "$MERGE_WALLTIME" -M 16G -R "rusage[mem=16G]" \
+         "$@" \
+         -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
+         -env "$ENV_STR" \
+         <<'EOF'
+#!/bin/bash
+set -eo pipefail
+source /etc/profile.d/modules.sh
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate tensorqtl
+module load samtools
+python3 "${SCRIPTS_DIR}/39_run_nominal.py" \
+    --qtl-dir "$QTL_DIR" --output-dir "$RESULTS_DIR" \
+    --ancestry "$ANC" --modality "$MOD" --merge
+EOF
+}
+
 for ANC in $ANCESTRIES; do
   for MOD in $MODALITIES; do
     JOB="nom_${ANC}_${MOD}"
@@ -79,6 +101,18 @@ for ANC in $ANCESTRIES; do
     fi
     if bjobs -J "$JOB" 2>/dev/null | grep -q "$JOB"; then
         echo "  SKIP ${ANC}/${MOD}: array already running/pending"
+        continue
+    fi
+    if [ "${MERGE_ONLY:-0}" = "1" ]; then
+        # recovery mode (e.g. after a merge-step failure): shards are done,
+        # submit only the merge job with no dependency
+        n_shards=$(ls ${SHARD_GLOB} 2>/dev/null | wc -l)
+        if [ "$n_shards" -eq 0 ]; then
+            echo "  SKIP ${ANC}/${MOD}: no shards found (run the array first)"
+            continue
+        fi
+        submit_merge
+        echo "  submitted merge-only ${MERGE_JOB} (${n_shards} shards)"
         continue
     fi
     EXTRA=""
@@ -111,21 +145,7 @@ EOF
     # chromosome would write a partial nominal store that later full runs
     # would mistake for complete (the merged-file check above)
     if [ "$TEST" != "1" ]; then
-        bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W "$MERGE_WALLTIME" -M 16G -R "rusage[mem=16G]" \
-             -w "done(${JOB})" \
-             -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
-             -env "$ENV_STR" \
-             <<'EOF'
-#!/bin/bash
-set -eo pipefail
-source /etc/profile.d/modules.sh
-eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
-conda activate tensorqtl
-module load samtools
-python3 "${SCRIPTS_DIR}/39_run_nominal.py" \
-    --qtl-dir "$QTL_DIR" --output-dir "$RESULTS_DIR" \
-    --ancestry "$ANC" --modality "$MOD" --merge
-EOF
+        submit_merge -w "done(${JOB})"
         echo "  submitted ${JOB}[1-${N_CHROMS}] + merge ${MERGE_JOB}"
     else
         echo "  submitted ${JOB}[1-${N_CHROMS}] (TEST mode: no merge job)"

@@ -1207,6 +1207,11 @@ TEST=1 bash 39_run_nominal.sh</code></pre>
 <pre class="text"><code>ANCESTRIES=EAS
 MODALITIES=expression
 CHROMS=21</code></pre>
+<p>TEST mode submits only the chromosome array — no merge job. Merging
+one pilot chromosome would write a partial nominal store that later full
+runs would mistake for complete (the driver skips ancestries ×
+modalities whose merged file exists). The merge path is exercised by the
+first full-run modality.</p>
 <p>Check:</p>
 <pre class="bash"><code>bjobs -J &#39;nom_EAS_expression*&#39;
 

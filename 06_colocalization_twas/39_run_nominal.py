@@ -175,8 +175,10 @@ def merge_shards(args):
     from tensorqtl import genotypeio
     _, variant_df = genotypeio.load_genotypes(
         os.path.join(args.qtl_dir, f"{args.ancestry}_qtl"))
-    vmap = variant_df.reset_index()[["index", "chrom", "pos"]].rename(
-        columns={"index": "variant_id"})
+    # variant_id is the index; its name is version-dependent ('id' in newer
+    # tensorQTL, unnamed in older) — rename_axis works for both
+    vmap = (variant_df.rename_axis("variant_id").reset_index()
+            [["variant_id", "chrom", "pos"]])
     df = df.merge(vmap, on="variant_id", how="left")
     df["chrom"] = df["chrom"].astype(str).str.replace("^chr", "", regex=True)
     df = df.sort_values(["chrom", "pos"],

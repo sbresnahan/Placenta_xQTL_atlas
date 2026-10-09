@@ -606,6 +606,7 @@ defaults conform to `medium`; if you override `QUEUE`, keep the matching
 | `QUEUE` | `medium` | LSF queue |
 | `WALLTIME` | `12:00` | Per chromosome |
 | `MERGE_WALLTIME` | `04:00` | Per-modality merge job |
+| `MERGE_ONLY` | `0` | `1` = submit only merge jobs (shards must exist) |
 | `THREADS` | `4` | LSF CPU request |
 | `MEM` | `32G` | LSF memory request |
 | `GPU` | `0` | Set `1` for GPU submission |
@@ -686,6 +687,18 @@ MODALITIES="expression" \
 CHROMS="21" \
 bash 39_run_nominal.sh
 ```
+
+### Recovery: merge failed but shards are done
+
+If every chromosome shard completed but the merge jobs failed (or were
+killed), do not rerun the arrays — resubmit only the merges:
+
+```bash
+MERGE_ONLY=1 bash 39_run_nominal.sh
+```
+
+This submits one dependency-free merge job per ancestry × modality that has
+shards on disk and no merged store yet.
 
 ### Worker options not exposed by `39_run_nominal.sh`
 
