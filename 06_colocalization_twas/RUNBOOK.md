@@ -393,10 +393,29 @@ catalog/step 37 contract under:
 $GWAS_DIR/raw/
 ```
 
+Either `{trait_id}.txt.gz` (gzipped tabular) or `{trait_id}.vcf.gz`
+(GWAS-VCF) is accepted. `childbodysize10_richardson_2020` is the GWAS-VCF
+case: the GWAS Catalog hosts no full summary statistics for Richardson et
+al. 2020, so the catalog points at OpenGWAS `ieu-b-5107` (same UKB
+phenotype, GRCh37). Register at <https://api.opengwas.io>, download the
+dataset `.vcf.gz`, and place it as
+`$GWAS_DIR/raw/childbodysize10_richardson_2020.vcf.gz`. Step 38 parses the
+GWAS-VCF `ES/SE/LP/AF` FORMAT fields directly (effect allele = ALT,
+`pval = 10^-LP`) and fills per-variant `n` from the catalog `sample_size`.
+
+JECS childhood BMI is distributed as 11 age-stratified files
+(`<agebin>_bmi.gz`: dr0m, dr1m, c6m, c1y_1, c1y_2, c1hy, c2y, c2hy, c3y,
+c3hy, c4y). Place each as `$GWAS_DIR/raw/jecs_childhood_bmi_2025_<agebin>.txt.gz`
+(already gzipped — a plain rename); the catalog carries one row per bin.
+These are hg38 tabular files with a `#CHROM` header and `BETA`/`SE` relative
+to `ALT`; step 38 reads them directly. The `bmi_11_tp_dynamic*` files from
+the same release are p-value-only (placeholder `BETA`/`SE`) and cannot feed
+coloc — keep them outside `gwas/raw/` for optional post-hoc annotation.
+
 Before proceeding, confirm the raw files you intend to analyze exist:
 
 ```bash
-ls -lh "${GWAS_DIR}/raw/"*.txt.gz
+ls -lh "${GWAS_DIR}/raw/"*.txt.gz "${GWAS_DIR}/raw/"*.vcf.gz
 ```
 
 ---

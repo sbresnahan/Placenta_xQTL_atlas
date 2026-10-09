@@ -26,7 +26,9 @@ Outputs
 {out_dir}/fetch_manifest.tsv with per-trait status, bytes, and resolved URL.
 
 Manual-placement contract: place the file at {out_dir}/{trait_id}.txt.gz
-(gzipped text). For JECS age-stratified releases, add one catalog row per
+(gzipped text) or {out_dir}/{trait_id}.vcf.gz (GWAS-VCF, e.g. OpenGWAS
+downloads; 38_harmonize_gwas.py parses ES/SE/LP/AF FORMAT fields directly).
+For JECS age-stratified releases, add one catalog row per
 age bin (trait_id jecs_childhood_bmi_2025_<agebin>) and place each file
 accordingly.
 """
@@ -145,10 +147,14 @@ def fetch_trait(row, out_dir, force=False):
     rec["file"] = str(dest)
 
     if row["access"] == "manual":
-        if dest.exists() and dest.stat().st_size > 0:
-            rec.update(status="present_manual", bytes=dest.stat().st_size)
-        else:
-            rec["status"] = "awaiting_manual"
+        # accept gzipped tabular ({tid}.txt.gz) or GWAS-VCF ({tid}.vcf.gz,
+        # e.g. OpenGWAS downloads); 38_harmonize_gwas.py parses both
+        for cand in (dest, out_dir / f"{tid}.vcf.gz"):
+            if cand.exists() and cand.stat().st_size > 0:
+                rec.update(status="present_manual",
+                           bytes=cand.stat().st_size, file=str(cand))
+                return rec
+        rec["status"] = "awaiting_manual"
         return rec
 
     if dest.exists() and dest.stat().st_size > 0 and not force:

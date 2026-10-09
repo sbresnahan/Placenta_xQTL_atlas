@@ -7,7 +7,9 @@ key space (`chr:pos:ref:alt`, bare numeric chromosomes, GRCh38) with alleles
 oriented consistently. For each catalog trait this script:
 
   1. Reads the raw file with a tolerant column-alias map (per-trait overrides
-     via --column-map trait:field=name).
+     via --column-map trait:field=name). If {trait_id}.txt.gz is absent but
+     {trait_id}.vcf.gz exists, the file is parsed as GWAS-VCF (OpenGWAS/IEU
+     spec: FORMAT keys ES/SE/LP/AF/ID; effect allele = ALT; LP = -log10 p).
   2. Lifts hg19 -> GRCh38 positions with a pure-Python chain-file mapper
      (chain from module 01; negative-strand chains complement alleles).
      Skipped for build-38 traits.
@@ -40,18 +42,19 @@ import pandas as pd
 # column aliases (lowercase)
 # ---------------------------------------------------------------------------
 ALIASES = {
-    "chr": ["chr", "chromosome", "#chr", "chrom", "hg19chrc",
+    "chr": ["chr", "chromosome", "#chr", "chrom", "#chrom", "hg19chrc",
             "chromosome_name", "hm_chrom"],
     "pos": ["pos", "position", "bp", "base_pair_location", "hm_pos",
             "pos_grch38", "position_grch38"],
     "rsid": ["rsid", "snp", "rs_id", "markername", "variant_id",
              "hm_rsid", "rsids", "snpid"],
     "effect_allele": ["effect_allele", "ea", "a1", "allele1", "tested_allele",
-                      "hm_effect_allele", "effectallele"],
+                      "hm_effect_allele", "effectallele", "alt"],
     "other_allele": ["other_allele", "nea", "a2", "allele2",
-                     "non_effect_allele", "hm_other_allele", "otherallele"],
+                     "non_effect_allele", "hm_other_allele", "otherallele",
+                     "ref"],
     "eaf": ["eaf", "effect_allele_frequency", "freq", "eaf1", "freq1",
-            "hm_effect_allele_frequency", "frq"],
+            "hm_effect_allele_frequency", "frq", "af"],
     "beta": ["beta", "b", "effect", "estimate", "hm_beta", "effect_size"],
     "or": ["or", "odds_ratio", "hm_odds_ratio"],
     "se": ["se", "standard_error", "stderr", "hm_se", "sebeta"],
@@ -62,6 +65,62 @@ ALIASES = {
 }
 
 COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C"}
+
+
+# ---------------------------------------------------------------------------
+# GWAS-VCF reader (OpenGWAS/IEU spec)
+# ---------------------------------------------------------------------------
+def read_gwas_vcf(path):
+    """Parse a GWAS-VCF into a DataFrame with canonical column names that
+    detect_columns()/standardize() already understand.
+
+    FORMAT keys: ES (effect size of ALT), SE, LP (-log10 p), AF (ALT allele
+    frequency), ID (rsid; falls back to the VCF ID column). Multiallelic
+    rows (',' in ALT) are skipped — pgen alignment is biallelic-only.
+    """
+    rows = []
+    n_multi = n_bad = 0
+    idx = None
+    with gzip.open(path, "rt") as fh:
+        for line in fh:
+            if line.startswith("#"):
+                continue
+            f = line.rstrip("\n").split("\t", 9)
+            if len(f) < 10:
+                n_bad += 1
+                continue
+            chrom, pos, vid, ref, alt = f[0], f[1], f[2], f[3], f[4]
+            if "," in alt:
+                n_multi += 1
+                continue
+            if idx is None:
+                idx = {k: i for i, k in enumerate(f[8].split(":"))}
+            vals = f[9].split("\t")[0].split(":")
+
+            def get(key):
+                i = idx.get(key)
+                return vals[i] if i is not None and i < len(vals) else ""
+
+            try:
+                beta = float(get("ES"))
+                se = float(get("SE"))
+            except ValueError:
+                n_bad += 1
+                continue
+            lp = get("LP")
+            try:
+                pval = 10.0 ** (-float(lp))
+            except ValueError:
+                pval = float("nan")
+            rows.append((chrom, pos, get("ID") or vid, alt, ref, get("AF"),
+                         beta, se, pval))
+    if n_multi:
+        print(f"    [vcf] skipped {n_multi} multiallelic row(s)")
+    if n_bad:
+        print(f"    [vcf] skipped {n_bad} malformed row(s)")
+    return pd.DataFrame(rows, columns=["chr", "pos", "rsid",
+                                       "effect_allele", "other_allele",
+                                       "eaf", "beta", "se", "pval"])
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +234,7 @@ def standardize(df, mapping):
     out = pd.DataFrame()
     out["chr"] = (df[mapping["chr"]].astype(str)
                   .str.replace("^chr", "", regex=True)
-                  .str.replace({"X": "23", "Y": "24", "M": "25", "MT": "25"}))
+                  .replace({"X": "23", "Y": "24", "M": "25", "MT": "25"}))
     out = out[out["chr"].str.fullmatch(r"\d+")]
     out["pos"] = pd.to_numeric(df.loc[out.index, mapping["pos"]],
                                errors="coerce")
@@ -302,16 +361,37 @@ def align_to_pgen(df, index):
 def harmonize_trait(row, raw_dir, out_dir, mapper, index, overrides):
     tid = row["trait_id"]
     raw = Path(raw_dir) / f"{tid}.txt.gz"
-    if not raw.exists():
+    raw_vcf = Path(raw_dir) / f"{tid}.vcf.gz"
+    if not raw.exists() and raw_vcf.exists():
+        print(f"    [vcf] parsing GWAS-VCF: {raw_vcf.name}")
+        df = read_gwas_vcf(raw_vcf)
+        input_kind = "gwas-vcf"
+    elif not raw.exists():
         return {"trait_id": tid, "status": "missing_raw"}
-    df = pd.read_csv(raw, sep=None, engine="python", nrows=None,
-                     comment="#", low_memory=False)
-    qc = {"trait_id": tid, "status": "ok", "n_raw": len(df)}
+    else:
+        # VCF-style tabular releases (e.g. JECS) carry a '#CHROM' header
+        # line; comment='#' would silently drop it and promote the first
+        # data row to column names.
+        with gzip.open(raw, "rt") as fh:
+            first_line = fh.readline()
+        comment = None if first_line.upper().startswith("#CHROM") else "#"
+        df = pd.read_csv(raw, sep=None, engine="python", nrows=None,
+                         comment=comment)
+        input_kind = "tabular"
+    qc = {"trait_id": tid, "status": "ok", "n_raw": len(df),
+          "input": input_kind}
     mapping = detect_columns(df, overrides.get(tid, {}))
     qc["column_map"] = ";".join(f"{k}={v}" for k, v in sorted(mapping.items()))
     df, used_or = standardize(df, mapping)
     qc["or_to_beta"] = used_or
     qc["n_schema"] = len(df)
+    # GWAS-VCF carries no per-variant N; fill from the catalog sample_size
+    # (41_susie_coloc.R takes median(n) for coloc's sample-size argument).
+    if df["n"].isna().all():
+        ss = str(row.get("sample_size", "")).strip()
+        if ss and ss.lower() not in ("", "nan"):
+            df["n"] = float(ss)
+            qc["n_from_catalog"] = ss
 
     if str(row["build"]) == "37":
         if mapper is None:
@@ -322,9 +402,8 @@ def harmonize_trait(row, raw_dir, out_dir, mapper, index, overrides):
         df = df[ok].copy()
         mapped_ok = [m for m in mapped if m is not None]
         df["pos"] = [m[1] for m in mapped_ok]
-        neg = [m[2] == "-" for m in mapped_ok]
-        if any(neg):
-            neg = np.array(neg)
+        neg = np.array([m[2] == "-" for m in mapped_ok])
+        if neg.any():
             df.loc[neg, "effect_allele"] = df.loc[neg, "effect_allele"].map(complement)
             df.loc[neg, "other_allele"] = df.loc[neg, "other_allele"].map(complement)
         qc["n_neg_strand"] = int(neg.sum()) if len(mapped_ok) else 0
