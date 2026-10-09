@@ -274,9 +274,26 @@ def load_pgen_index(pgen_dir, ancestries):
         if not pvar.exists():
             print(f"  WARNING: {pvar} not found; skipping {anc}")
             continue
-        pv = pd.read_csv(pvar, sep="\t", comment="#",
-                         names=["chr", "pos", "id", "ref", "alt"],
-                         dtype={"chr": str})
+        # pvar files may carry extra columns beyond CHROM/POS/ID/REF/ALT
+        # (QUAL/FILTER/INFO/CM); positional names= then silently misaligns
+        # (pandas shifts surplus leading columns into the index). Read the
+        # #CHROM header line and select columns by name instead.
+        hdr = None
+        with open(pvar) as fh:
+            for i, line in enumerate(fh):
+                if line.startswith("#CHROM"):
+                    hdr = i
+                    break
+                if not line.startswith("##"):
+                    break
+        if hdr is not None:
+            pv = pd.read_csv(pvar, sep="\t", skiprows=hdr, dtype=str)
+            pv.columns = ["chr" if c == "#CHROM" else c.lower()
+                          for c in pv.columns]
+        else:  # headerless pvar: fall back to the 5-column layout
+            pv = pd.read_csv(pvar, sep="\t", comment="#",
+                             names=["chr", "pos", "id", "ref", "alt"],
+                             dtype={"chr": str})
         pv["chr"] = pv["chr"].str.replace("^chr", "", regex=True)
         for chrom, sub in pv.groupby("chr"):
             d = index.setdefault(chrom, {})
