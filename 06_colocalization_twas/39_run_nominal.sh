@@ -107,12 +107,15 @@ python3 "${SCRIPTS_DIR}/39_run_nominal.py" \
     --ancestry "$ANC" --modality "$MOD" --chrom "$CHROM" \
     --maf-threshold "$MAF_THRESHOLD" $FORCE_FLAG
 EOF
-    # dependent merge job
-    bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W "$MERGE_WALLTIME" -M 16G -R "rusage[mem=16G]" \
-         -w "done(${JOB})" \
-         -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
-         -env "$ENV_STR" \
-         <<'EOF'
+    # dependent merge job — skipped in TEST mode: merging a single pilot
+    # chromosome would write a partial nominal store that later full runs
+    # would mistake for complete (the merged-file check above)
+    if [ "$TEST" != "1" ]; then
+        bsub -J "$MERGE_JOB" -q "$QUEUE" -n 2 -W "$MERGE_WALLTIME" -M 16G -R "rusage[mem=16G]" \
+             -w "done(${JOB})" \
+             -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
+             -env "$ENV_STR" \
+             <<'EOF'
 #!/bin/bash
 set -eo pipefail
 source /etc/profile.d/modules.sh
@@ -123,7 +126,10 @@ python3 "${SCRIPTS_DIR}/39_run_nominal.py" \
     --qtl-dir "$QTL_DIR" --output-dir "$RESULTS_DIR" \
     --ancestry "$ANC" --modality "$MOD" --merge
 EOF
-    echo "  submitted ${JOB}[1-${N_CHROMS}] + merge ${MERGE_JOB}"
+        echo "  submitted ${JOB}[1-${N_CHROMS}] + merge ${MERGE_JOB}"
+    else
+        echo "  submitted ${JOB}[1-${N_CHROMS}] (TEST mode: no merge job)"
+    fi
     if [ "$TEST" = "1" ]; then
         echo "TEST=1: one pilot array submitted; check ${LOG_DIR}/${JOB}.*.out"
         exit 0

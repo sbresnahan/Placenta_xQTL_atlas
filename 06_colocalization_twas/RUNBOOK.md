@@ -631,6 +631,12 @@ MODALITIES=expression
 CHROMS=21
 ```
 
+TEST mode submits only the chromosome array — no merge job. Merging one
+pilot chromosome would write a partial nominal store that later full runs
+would mistake for complete (the driver skips ancestries × modalities whose
+merged file exists). The merge path is exercised by the first full-run
+modality.
+
 Check:
 
 ```bash
