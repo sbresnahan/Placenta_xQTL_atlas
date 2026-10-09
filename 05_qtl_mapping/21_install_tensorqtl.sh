@@ -22,7 +22,7 @@
 # warning at 'import tensorqtl' is cosmetic and does not affect mapping.
 # =============================================================================
 
-set -euo pipefail
+set -eo pipefail
 
 SCRIPT_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

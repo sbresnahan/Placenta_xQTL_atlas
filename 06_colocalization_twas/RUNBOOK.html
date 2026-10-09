@@ -1074,6 +1074,12 @@ needed.</p>
 <code>check_collapsed_inputs.py</code> (Section 0.2) and aborts if the
 qtl_inputs sample sets do not match the collapsed-replicate contract.
 Override with <code>SKIP_COLLAPSE_CHECK=1</code>.</p>
+<p><strong>Seadragon queue runlimits</strong> (esub rejects out-of-range
+requests): <code>short</code> &lt; 3 h, <code>medium</code> &gt; 3 h and
+&lt; 24 h, <code>long</code> 24–120 h. All module-06 submitter defaults
+conform to <code>medium</code>; if you override <code>QUEUE</code>, keep
+the matching <code>WALLTIME</code>/<code>MERGE_WALLTIME</code> inside
+the target queue’s range.</p>
 <div id="environment-controls-2" class="section level2">
 <h2>Environment controls</h2>
 <table>
@@ -1146,41 +1152,46 @@ Override with <code>SKIP_COLLAPSE_CHECK=1</code>.</p>
 <td>Per chromosome</td>
 </tr>
 <tr class="even">
+<td><code>MERGE_WALLTIME</code></td>
+<td><code>04:00</code></td>
+<td>Per-modality merge job</td>
+</tr>
+<tr class="odd">
 <td><code>THREADS</code></td>
 <td><code>4</code></td>
 <td>LSF CPU request</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>MEM</code></td>
 <td><code>32G</code></td>
 <td>LSF memory request</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>GPU</code></td>
 <td><code>0</code></td>
 <td>Set <code>1</code> for GPU submission</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>GPU_QUEUE</code></td>
 <td><code>gpu</code></td>
 <td>GPU queue</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>MAF_THRESHOLD</code></td>
 <td><code>0.01</code></td>
 <td>tensorQTL MAF threshold</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>TEST</code></td>
 <td><code>0</code></td>
 <td><code>1</code> = EAS/expression/chr21</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>FORCE</code></td>
 <td><code>0</code></td>
 <td><code>1</code> = rerun existing chromosome shards</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>SKIP_COLLAPSE_CHECK</code></td>
 <td><code>0</code></td>
 <td><code>1</code> = skip the collapsed-replicate audit</td>

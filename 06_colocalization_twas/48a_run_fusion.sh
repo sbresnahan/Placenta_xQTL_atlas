@@ -7,7 +7,7 @@
 #   (per-chromosome plink1 BED prefix, chromosome number appended),
 #   ISOTWAS_DIR, MIN_R2PRED, FUSION_DIR, RSCRIPT, SCRIPTS_DIR
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 POS="${ISOTWAS_DIR}/weights/${WEIGHT_SET}.pos"
 WGT_DIR="${ISOTWAS_DIR}/weights/${WEIGHT_SET}/genes"

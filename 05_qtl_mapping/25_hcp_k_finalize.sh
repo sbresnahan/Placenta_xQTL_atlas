@@ -17,7 +17,7 @@
 #BSUB -R "rusage[mem=8]"
 #BSUB -W 4:00
 
-set -euo pipefail
+set -eo pipefail
 
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR required}"
 REAL_QTL_DIR="${REAL_QTL_DIR:?ERROR: REAL_QTL_DIR required}"

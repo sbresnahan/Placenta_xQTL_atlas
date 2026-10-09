@@ -24,7 +24,7 @@
 #   non-default lambda becomes the production choice).
 # =============================================================================
 
-set -euo pipefail
+set -eo pipefail
 
 : "${CONFIG:?ERROR: CONFIG required}"
 : "${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR required}"

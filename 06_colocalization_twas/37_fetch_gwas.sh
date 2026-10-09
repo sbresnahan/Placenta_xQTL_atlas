@@ -17,7 +17,7 @@
 #   FORCE=1 to re-download, PYENV (conda env providing pandas; default
 #   tensorqtl from module-05 script 21; PYENV=none skips activation).
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 OUTPUT_BASE="${OUTPUT_BASE:-/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY}"

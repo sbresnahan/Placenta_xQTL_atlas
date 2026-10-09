@@ -38,7 +38,7 @@
 # worker environment, so the pilot processes ~SHARD_SIZE regions (NOT every
 # region in the ancestry).
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"

@@ -37,7 +37,7 @@
 # worker environment, so the pilot trains ~SHARD_SIZE genes (NOT the whole
 # gene universe).
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"

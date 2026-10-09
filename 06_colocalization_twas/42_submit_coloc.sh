@@ -40,7 +40,7 @@
 # worker environment, so the pilot processes ~SHARD_SIZE tasks (NOT the whole
 # modality).
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"

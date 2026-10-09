@@ -66,7 +66,7 @@ Default ancestries are `EAS EUR`. Default chromosomes are autosomes 1–22.
 ### 3.1 Repository/script checks
 
 ```bash
-set -euo pipefail
+set -eo pipefail
 
 for f in \
   50_build_gxe_inputs.py \

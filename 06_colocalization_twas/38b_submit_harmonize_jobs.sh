@@ -17,7 +17,7 @@
 # Environment: jobs run in the tensorqtl conda env (python3 + pandas) with
 # the samtools module loaded (bgzip/tabix). The submitter itself only runs
 # bsub and a tiny catalog parse, so it is fine on a login node.
-set -euo pipefail
+set -eo pipefail
 
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 OUTPUT_BASE="${OUTPUT_BASE:-/rsrch9/home/epi/bhattacharya_lab/data/Placenta_QTL/PANTRY}"

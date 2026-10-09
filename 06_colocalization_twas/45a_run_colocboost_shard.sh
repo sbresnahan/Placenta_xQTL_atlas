@@ -12,7 +12,7 @@
 # for reference dosages). R runs via $RSCRIPT (singularity wrapper); the R
 # script sets its own .libPaths() — bash-level R_LIBS_* is not relied upon.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 source /etc/profile.d/modules.sh
 module load plink samtools

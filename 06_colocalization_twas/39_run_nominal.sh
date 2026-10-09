@@ -23,7 +23,7 @@
 # (module-05 script 21) for 39_run_nominal.py; merge jobs additionally
 # 'module load samtools' for bgzip/tabix.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
@@ -96,7 +96,7 @@ for ANC in $ANCESTRIES; do
          -env "$ENV_STR,CHROMS_LIST=${CHROMS}" \
          <<'EOF'
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 source /etc/profile.d/modules.sh
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 conda activate tensorqtl
@@ -114,7 +114,7 @@ EOF
          -env "$ENV_STR" \
          <<'EOF'
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 source /etc/profile.d/modules.sh
 eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
 conda activate tensorqtl

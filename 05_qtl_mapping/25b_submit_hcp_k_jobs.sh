@@ -19,7 +19,7 @@
 #   FINALIZE=1 is set explicitly.
 # =============================================================================
 
-set -euo pipefail
+set -eo pipefail
 
 : "${CONFIG:?ERROR: CONFIG required}"
 : "${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR required}"

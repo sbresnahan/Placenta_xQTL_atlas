@@ -38,7 +38,7 @@
 # Shards with existing diagnostics or a running/pending job of the same name
 # are skipped, so it is safe to rerun this script at any time.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"

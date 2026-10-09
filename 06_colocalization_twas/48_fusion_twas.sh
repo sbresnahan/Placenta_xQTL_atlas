@@ -28,7 +28,7 @@
 #   MIN_R2PRED   — FUSION GWAS Z imputation r2 filter, default 0.7
 #   FORCE_RUN=1  — rerun pairs with existing outputs
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 CONFIG="${CONFIG:?ERROR: CONFIG env var required}"
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"

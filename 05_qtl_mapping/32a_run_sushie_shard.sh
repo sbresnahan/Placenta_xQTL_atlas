@@ -6,7 +6,7 @@
 #   CONFIG, SCRIPTS_DIR, QTL_DIR, RESULTS_DIR, LOCUS_SHARD, ANCESTRIES
 #   (comma-separated), THREADS, FORCE_RUN
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 SCRIPTS_DIR="${SCRIPTS_DIR:?ERROR: SCRIPTS_DIR env var required}"
 QTL_DIR="${QTL_DIR:?ERROR: QTL_DIR env var required}"

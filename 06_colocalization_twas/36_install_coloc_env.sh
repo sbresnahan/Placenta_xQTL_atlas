@@ -25,7 +25,7 @@
 #     LD reference panels in plink format.
 #   - susieR >= 0.12.35 and coloc >= 5.2.1 are required for coloc.susie.
 # =============================================================================
-set -euo pipefail
+set -eo pipefail
 
 SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 REPO_ROOT="$(dirname "$SCRIPTS_DIR")"
