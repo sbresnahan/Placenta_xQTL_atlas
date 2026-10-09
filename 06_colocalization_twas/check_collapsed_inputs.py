@@ -21,8 +21,13 @@ Per ancestry this script verifies:
   3. every sample column in the qtl_inputs BEDs / covariate files and every
      IID in {ANC}_qtl.psam is a retained array_id (extras are ERRORS);
   4. no duplicated sample columns (a signature of uncollapsed replicates);
-  5. retained array_ids absent from qtl_inputs are reported as WARNINGS only
-     (the module-05 sample intersection legitimately drops individuals).
+  5. retained runs absent from module-05 metadata are WARNINGS only — module
+     05's final RNA/DNA intersection legitimately drops individuals upstream,
+     and module 07 inner-joins the map to the same metadata, so both modules
+     resolve to the same sample set. A run found under a DIFFERENT ancestry's
+     metadata is flagged separately (map/metadata ancestry disagreement);
+  6. retained array_ids absent from qtl_inputs are reported as WARNINGS only
+     (modality-specific coverage dropouts).
 
 Stdlib only: runs under any python3, no conda environment required.
 
@@ -125,18 +130,33 @@ def main():
             f"{sorted(dups)[:5]}")
     log(f"collapsed ancestry map: {len(amap)} retained runs ({map_path})")
 
-    # --- per-ancestry checks ---------------------------------------------------
+    # --- module-05 metadata for ALL ancestries (loaded up front so a retained
+    # run absent from its own ancestry's metadata can be distinguished as a
+    # cross-ancestry disagreement vs. a genuine intersection dropout) ---------
+    meta_by_anc = {}
+    rna2array_all = {}
     for anc in args.ancestries:
-        log(f"[{anc}]")
         meta_path = qtl_dir / f"{anc}_metadata.tsv"
         if not meta_path.exists():
-            err(f"module-05 metadata not found: {meta_path} "
-                "(needed to map retained rnaseq_id -> array_id)")
+            meta_by_anc[anc] = (meta_path, None)
             continue
         with open(meta_path, newline="") as fh:
             meta = list(csv.DictReader(fh, delimiter="\t"))
         if not {"rnaseq_id", "array_id"} <= set(meta[0].keys() if meta else []):
-            err(f"{meta_path} missing rnaseq_id/array_id columns")
+            meta_by_anc[anc] = (meta_path, None)
+            continue
+        meta_by_anc[anc] = (meta_path, meta)
+        for m in meta:
+            rna2array_all[m["rnaseq_id"]] = (anc, m["array_id"])
+
+    # --- per-ancestry checks ---------------------------------------------------
+    for anc in args.ancestries:
+        log(f"[{anc}]")
+        meta_path, meta = meta_by_anc[anc]
+        if meta is None:
+            err(f"module-05 metadata not found or missing "
+                f"rnaseq_id/array_id columns: {meta_path} "
+                "(needed to map retained rnaseq_id -> array_id)")
             continue
         rna2array = {m["rnaseq_id"]: m["array_id"] for m in meta}
 
@@ -144,16 +164,31 @@ def main():
         retained_rna = [r["sample_id"] for r in retained_runs]
         not_in_meta = [r for r in retained_rna if r not in rna2array]
         if not_in_meta:
-            err(f"{len(not_in_meta)} retained run(s) absent from "
-                f"{meta_path.name}: {not_in_meta[:5]}")
+            dropped = [r for r in not_in_meta if r not in rna2array_all]
+            elsewhere = sorted(
+                f"{r} (in {rna2array_all[r][0]} metadata)"
+                for r in not_in_meta if r in rna2array_all)
+            if dropped:
+                log(f"  WARNING: {len(dropped)} retained run(s) absent from "
+                    f"all module-05 metadata — dropped by the module-05 "
+                    f"RNA/DNA intersection or upstream QC; module 07 "
+                    f"inner-joins these away: {dropped[:5]}"
+                    f"{' ...' if len(dropped) > 5 else ''}")
+            if elsewhere:
+                log(f"  WARNING: {len(elsewhere)} retained run(s) appear in "
+                    f"a DIFFERENT ancestry's module-05 metadata (collapsed "
+                    f"map vs. module-05 ancestry disagreement; excluded by "
+                    f"module 07's inner join): {elsewhere[:5]}"
+                    f"{' ...' if len(elsewhere) > 5 else ''}")
         retained_arrays = [rna2array[r] for r in retained_rna if r in rna2array]
         if len(set(retained_arrays)) != len(retained_arrays):
             dup_ids = [a for a, c in Counter(retained_arrays).items() if c > 1]
             err(f">1 retained run per array_id (violates the module-05 "
                 f"replicate-collapse contract): {dup_ids[:5]}")
         retained = set(retained_arrays)
-        log(f"  retained: {len(retained_runs)} runs -> "
-            f"{len(retained)} array_ids")
+        log(f"  retained: {len(retained_runs)} runs in map -> "
+            f"{len(retained)} array_ids with module-05 metadata "
+            f"({len(not_in_meta)} dropped upstream)")
 
         # sample-bearing qtl_inputs for this ancestry
         targets = []

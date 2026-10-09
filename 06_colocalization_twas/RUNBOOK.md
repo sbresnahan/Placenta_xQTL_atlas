@@ -1292,8 +1292,19 @@ verifies:
    **errors** (module 07 excludes those samples);
 4. no duplicated sample columns (a signature of uncollapsed technical
    replicates);
-5. retained `array_id`s absent from qtl_inputs are **warnings** only (the
-   module-05 sample intersection legitimately drops individuals).
+5. retained runs absent from module-05 `{ANC}_metadata.tsv` are **warnings**
+   only — module 05's final RNA/DNA intersection legitimately drops
+   individuals upstream (e.g. RNA-seq runs without a matched genotype), and
+   module 07 inner-joins the map to the same metadata, so both modules
+   resolve to the identical sample set. A run found under a *different*
+   ancestry's metadata is flagged separately (map/metadata ancestry
+   disagreement; still excluded by module 07's inner join);
+6. retained `array_id`s absent from qtl_inputs are **warnings** only
+   (modality-specific coverage dropouts).
+
+A clean audit therefore means module 06 and module 07 analyze exactly the
+samples module 05 used for QTL mapping; warnings document individuals the
+module-05 intersection dropped, not a module-06/07 divergence.
 
 The audit runs automatically before submission in `39_run_nominal.sh` and
 `47_submit_isotwas.sh`, and can be run any time:
