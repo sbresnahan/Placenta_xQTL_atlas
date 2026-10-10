@@ -4,9 +4,10 @@
 Objective 1.6 colocalizes every FDR-significant xQTL locus (the module-05
 fine-mapping locus lists: union of q <= 0.05 phenotypes per modality) with
 each ancestry-matched GWAS from gwas_catalog.tsv. This script joins those
-two inputs into a per-modality task table consumed by 41_susie_coloc.R
-(one row per phenotype x ancestry x GWAS trait) and writes the 1000-Genomes
-superpopulation keep-files used for GWAS-side LD.
+two inputs into a per-modality task table consumed by the stage-41 preparer
+(one row per phenotype x ancestry x GWAS trait). Legacy 1000-Genomes
+superpopulation keep-files are still written for backward compatibility, but
+active stages 40b/42/45/48 no longer consume them.
 
 Ancestry matching (catalog `primary_ancestry` column):
   EUR  -> colocalized in the EUR stratum
@@ -21,8 +22,8 @@ Outputs
   {coloc_dir}/loci/{MOD}.tasks.tsv   one row per task:
       modality, phenotype_id, chrom, start, end, L, ancestry, trait_id,
       gwas_file, xqtl_file (merged nominal TSV), ld_xqtl (pgen prefix),
-      ld_gwas (1KG pgen prefix + keep file)
-  {coloc_dir}/loci/{ANC}.1kg.keep    sample IDs for the 1KG superpopulation
+      legacy ld_gwas fields retained for task-table compatibility
+  {coloc_dir}/loci/{ANC}.1kg.keep    legacy compatibility output (unused)
 """
 
 import argparse
@@ -210,8 +211,11 @@ def main():
     p.add_argument("--kg-pgen", required=True,
                    help="1KG pgen prefix (module 01: 1kGP_hg38)")
     p.add_argument("--kg-sample-map", default=None,
-                   help="1KG sample->superpopulation table; required once to "
-                        "write keep files (skipped if they already exist)")
+                   help="1KG sample->superpopulation table; required only when "
+                        "legacy keep-file generation is enabled")
+    p.add_argument("--skip-kg-keep", action="store_true",
+                   help="do not create/use legacy loci/{ANC}.1kg.keep files; "
+                        "recommended with the prebuilt 40b/40c reference design")
     p.add_argument("--ancestries", nargs="+", default=["EAS", "EUR"])
     p.add_argument("--modalities", nargs="*", default=None,
                    help="default: all modalities with a locus list")
@@ -223,20 +227,24 @@ def main():
     out_dir = Path(args.out_dir)
     (out_dir / "loci").mkdir(parents=True, exist_ok=True)
 
-    # --- 1KG keep files ---
+    # --- Legacy 1KG keep files ---------------------------------------------
+    # Active stages 42/45/48 use 40b/40c compact ancestry/chromosome refs and
+    # do not consume these files. Keep the old path available for backward
+    # compatibility when this script is invoked without --skip-kg-keep.
     keep = {}
-    missing_keep = [a for a in args.ancestries
-                    if not (out_dir / "loci" / f"{a}.1kg.keep").exists()]
-    if missing_keep:
-        if args.kg_sample_map is None:
-            sys.exit("ERROR: 1KG keep files missing for "
-                     f"{missing_keep} and --kg-sample-map not given")
-        keep = write_kg_keep_files(args.kg_sample_map, args.ancestries,
-                                   out_dir / "loci", kg_pgen=args.kg_pgen)
-    for a in args.ancestries:
-        path = out_dir / "loci" / f"{a}.1kg.keep"
-        if path.exists():
-            keep[a] = str(path)
+    if not args.skip_kg_keep:
+        missing_keep = [a for a in args.ancestries
+                        if not (out_dir / "loci" / f"{a}.1kg.keep").exists()]
+        if missing_keep:
+            if args.kg_sample_map is None:
+                sys.exit("ERROR: 1KG keep files missing for "
+                         f"{missing_keep} and --kg-sample-map not given")
+            keep = write_kg_keep_files(args.kg_sample_map, args.ancestries,
+                                       out_dir / "loci", kg_pgen=args.kg_pgen)
+        for a in args.ancestries:
+            path = out_dir / "loci" / f"{a}.1kg.keep"
+            if path.exists():
+                keep[a] = str(path)
 
     # --- catalog ---
     cat = pd.read_csv(args.catalog, sep="\t")

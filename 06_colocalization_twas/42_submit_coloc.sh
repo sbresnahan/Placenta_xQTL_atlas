@@ -17,6 +17,7 @@
 #   - 37/38 completed (or manual GWAS placed) for every cataloged trait
 #   - 39 completed: {RESULTS_DIR}/nominal/{ANC}/{ANC}_{MOD}.nominal.tsv.gz+.tbi
 #   - 40 completed (or run here): {RESULTS_DIR}/coloc/loci/{MOD}.tasks.tsv
+#   - 40b/40c completed once: ancestry/chromosome 1KG reference PGENs
 #   - compute-node modules 'samtools' (tabix) and 'plink' (plink2); these are
 #     used by host-side preprocessing, never invoked from R/Singularity
 #
@@ -31,7 +32,9 @@
 #   WALLTIME     — default 04:00
 #   THREADS      — default 2
 #   MEM_GB       — LSF memory request per shard, default 8 GB
-#   PLINK_MEMORY_MB — memory cap passed to plink2, default 2048 MiB
+#   PLINK_MEMORY_MB — runtime plink2 cap for compact references, default 4096 MiB
+#   KG_LD_REF_DIR — prebuilt ancestry/chromosome 1KG PGEN directory
+#   LD_CACHE_DIR  — persistent exact-variant-set GWAS LD cache
 #   MIN_VARIANTS — default 50
 #   PP_H4        — colocalization call threshold, default 0.7
 #   FORCE_TASKS=1 — rebuild task lists even if present
@@ -75,7 +78,7 @@ QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-04:00}"
 THREADS="${THREADS:-2}"
 MEM_GB="${MEM_GB:-8}"
-PLINK_MEMORY_MB="${PLINK_MEMORY_MB:-2048}"
+PLINK_MEMORY_MB="${PLINK_MEMORY_MB:-4096}"
 MIN_VARIANTS="${MIN_VARIANTS:-50}"
 PP_H4="${PP_H4:-0.7}"
 TEST="${TEST:-0}"
@@ -87,6 +90,8 @@ RSCRIPT="${RSCRIPT:-${REPO_ROOT}/bin/Rscript_sif}"
 GWAS_DIR="${GWAS_DIR:-${OUTPUT_BASE}/gwas}"
 KG_PGEN="${KG_PGEN:-/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/1kGP/1kGP_hg38}"
 KG_SAMPLE_MAP="${KG_SAMPLE_MAP:-${GWAS_DIR}/1kg_sample_superpop.tsv}"
+KG_LD_REF_DIR="${KG_LD_REF_DIR:-${COLOC_DIR}/ld_reference/1kg}"
+LD_CACHE_DIR="${LD_CACHE_DIR:-${COLOC_DIR}/ld_cache/1kg}"
 
 mkdir -p "$COLOC_DIR/loci" "$LOG_DIR"
 
@@ -95,6 +100,8 @@ echo "  MODALITIES:  $MODALITIES"
 echo "  COLOC_DIR:   $COLOC_DIR"
 echo "  GWAS_DIR:    $GWAS_DIR"
 echo "  KG_PGEN:     $KG_PGEN"
+echo "  KG_LD_REF:   $KG_LD_REF_DIR"
+echo "  LD_CACHE:    $LD_CACHE_DIR"
 echo "  SHARD_SIZE:  $SHARD_SIZE   QUEUE: $QUEUE   WALLTIME: $WALLTIME"
 echo "  MEMORY:      ${MEM_GB}G LSF; ${PLINK_MEMORY_MB} MiB plink2 cap"
 
@@ -112,10 +119,33 @@ for MOD in $MODALITIES; do
         --gwas-dir "$GWAS_DIR" \
         --catalog "${SCRIPTS_DIR}/gwas_catalog.tsv" \
         --kg-pgen "$KG_PGEN" \
-        --kg-sample-map "$KG_SAMPLE_MAP" \
+        --skip-kg-keep \
         --modalities "$MOD" \
         --out-dir "$COLOC_DIR"
 done
+
+# --- Step 1b: require the one-time compact 1KG reference --------------------
+MISSING_REF=0
+for ANC in EAS EUR; do
+    for CHR in $(seq 1 22); do
+        PREFIX="${KG_LD_REF_DIR}/${ANC}/chr${CHR}"
+        if [ ! -f "${PREFIX}.done" ] || [ ! -s "${PREFIX}.pgen" ] || \
+           { [ ! -s "${PREFIX}.pvar" ] && [ ! -s "${PREFIX}.pvar.zst" ]; } || \
+           [ ! -s "${PREFIX}.psam" ]; then
+            if [ "$MISSING_REF" -lt 10 ]; then
+                echo "  MISSING 1KG LD reference: ${ANC} chr${CHR}" >&2
+            fi
+            MISSING_REF=$((MISSING_REF + 1))
+        fi
+    done
+done
+if [ "$MISSING_REF" -gt 0 ]; then
+    echo "ERROR: ${MISSING_REF} ancestry/chromosome 1KG LD references are missing." >&2
+    echo "Build them once before stage 42:" >&2
+    echo "  bash ${SCRIPTS_DIR}/40b_submit_1kg_ld_reference.sh" >&2
+    exit 1
+fi
+mkdir -p "$LD_CACHE_DIR"
 
 # --- Step 2: submit one array per modality -----------------------------------
 N=0
@@ -151,7 +181,7 @@ for MOD in $MODALITIES; do
         continue
     fi
 
-    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},RESULTS_DIR=${RESULTS_DIR},COLOC_DIR=${COLOC_DIR},TASKS=${TASKS},N_SHARDS=${N_SHARDS},MIN_VARIANTS=${MIN_VARIANTS},PP_H4=${PP_H4},FORCE_RUN=${FORCE_RUN},KEEP_PREP=${KEEP_PREP:-0},PLINK_MEMORY_MB=${PLINK_MEMORY_MB},RSCRIPT=${RSCRIPT}"
+    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},RESULTS_DIR=${RESULTS_DIR},COLOC_DIR=${COLOC_DIR},TASKS=${TASKS},N_SHARDS=${N_SHARDS},MIN_VARIANTS=${MIN_VARIANTS},PP_H4=${PP_H4},FORCE_RUN=${FORCE_RUN},KEEP_PREP=${KEEP_PREP:-0},PLINK_MEMORY_MB=${PLINK_MEMORY_MB},KG_LD_REF_DIR=${KG_LD_REF_DIR},LD_CACHE_DIR=${LD_CACHE_DIR},RSCRIPT=${RSCRIPT}"
     bsub -J "coloc_${MOD}[${ARRAY_SPEC}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
          -M "${MEM_GB}G" -R "rusage[mem=${MEM_GB}G]" \
          -o "${LOG_DIR}/coloc_${MOD}_%J_%I.out" \

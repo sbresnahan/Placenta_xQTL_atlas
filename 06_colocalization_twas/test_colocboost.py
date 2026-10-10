@@ -39,9 +39,10 @@ def cb_fixture(tmp_path_factory):
     write_vcf(g_xqtl, VAR_IDS, xqtl_samples, tmp / "xqtl.vcf")
     write_vcf(g_1kg, VAR_IDS, kg_samples, tmp / "kg.vcf")
     make_pgen(tmp / "xqtl.vcf", tmp / "EAS_qtl")
-    make_pgen(tmp / "kg.vcf", tmp / "1kg")
-    pd.DataFrame({"FID": kg_samples, "IID": kg_samples}).to_csv(
-        tmp / "EAS.1kg.keep", sep="\t", index=False, header=False)
+    kg_ref = tmp / "kg_ref" / "EAS"
+    kg_ref.mkdir(parents=True)
+    make_pgen(tmp / "kg.vcf", kg_ref / "chr1")
+    (kg_ref / "chr1.done").touch()
 
     causal = 150
     causal_other = 320
@@ -127,8 +128,7 @@ def run_worker(tmp):
          "--outdir", str(tmp / "cb"),
          "--work-dir", str(prep_dir), "--manifest", str(manifest),
          "--ld-xqtl-pgen", str(tmp / "EAS_qtl"),
-         "--ld-gwas-pgen", str(tmp / "1kg"),
-         "--ld-gwas-keep", str(tmp / "EAS.1kg.keep")],
+         "--kg-ref-dir", str(tmp / "kg_ref")],
         capture_output=True, text=True, timeout=3600, env=env)
     assert prep.returncode == 0, f"preparer failed:\n{prep.stdout}\n{prep.stderr}"
     proc = subprocess.run(

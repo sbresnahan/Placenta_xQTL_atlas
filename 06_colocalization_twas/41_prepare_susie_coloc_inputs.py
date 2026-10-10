@@ -1,37 +1,44 @@
 #!/usr/bin/env python3
 """Prepare one SuSiE-coloc shard for the pure-R model worker.
 
-All external command-line I/O belongs here, outside R.  For each task assigned
+All external command-line I/O belongs here, outside R. For each task assigned
 to this shard the script:
   * extracts the xQTL and GWAS locus with tabix;
   * merges/filters shared variants;
-  * exports ALT-coded dosages from each PGEN with plink2;
-  * computes signed LD from those dosages with NumPy;
+  * computes xQTL LD from the in-sample PGEN;
+  * resolves an ancestry/chromosome-specific prebuilt 1KG reference PGEN;
+  * computes GWAS LD from that compact reference and caches it by exact
+    ordered variant set;
   * writes a prepared-task manifest consumed by 41_susie_coloc.R.
 
-The R worker never invokes tabix, plink2, zcat, head, or any other command-line
-tool.  This is important because R runs inside Singularity whereas this script
-runs in the host LSF environment where the plink/samtools modules are loaded.
+The full 70M-variant 1KG PGEN and ancestry --keep files are never touched by
+runtime coloc shards. They are used once upstream by
+40b_submit_1kg_ld_reference.sh / 40c_run_1kg_ld_reference.sh.
 
-PLINK 2.00a3.6LM (the cluster module) predates bulk --r/--r-unphased, but it
-does support dosage-aware ``--export Av``.  We therefore export variant-major
-ALT dosages with plink2 and calculate the signed Pearson correlation matrix in
-Python/NumPy.  This keeps the workflow compatible with the installed PLINK2
-without requiring PLINK 1.9.
+PLINK 2.00a3.6LM predates bulk --r/--r-unphased, but supports dosage-aware
+``--export Av``. We therefore export variant-major ALT dosages with plink2 and
+calculate the signed Pearson correlation matrix in NumPy. The GWAS-side matrix
+is published atomically into a persistent cache keyed by ancestry, chromosome,
+reference-file identity, and the exact variant set.
 """
 
 import argparse
 import csv
 import gzip
+import hashlib
 import io
 import math
+import os
 import re
+import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 import numpy as np
 
 
+CACHE_VERSION = "1kg-alt-dosage-ld-v1"
 PREP_FIELDS = [
     "prep_status", "prep_message", "merged_file",
     "ld_x_matrix", "ld_x_vars", "ld_g_matrix", "ld_g_vars", "n_xqtl",
@@ -73,14 +80,9 @@ def tabix_rows(tabix, path, chrom, start, end):
 
 def fnum(value):
     try:
-        x = float(value)
+        return float(value)
     except (TypeError, ValueError):
         return math.nan
-    return x
-
-
-def finite(value):
-    return math.isfinite(fnum(value))
 
 
 def psam_n(pgen):
@@ -96,9 +98,6 @@ def psam_n(pgen):
 
 
 def merge_stats(x_rows, g_rows, phenotype_id):
-    # Match 41_susie_coloc.R semantics: phenotype-specific xQTL rows, merge on
-    # canonical var_id, keep the smallest xQTL nominal p for duplicate IDs,
-    # and require finite effects/SE/allele frequencies.
     x_best = {}
     for r in x_rows:
         if r.get("phenotype_id") != phenotype_id:
@@ -161,22 +160,42 @@ def write_merged(rows, path):
 
 
 def _alt_from_var_id(var_id):
-    # Canonical harmonized IDs are CHROM:POS:REF:ALT.  LD signs must refer to
-    # the same ALT allele used by tensorQTL/GWAS effect estimates.
     parts = str(var_id).split(":", 3)
     if len(parts) != 4 or not parts[3]:
         raise ValueError(f"cannot recover ALT allele from canonical var_id: {var_id}")
     return parts[3]
 
 
-def run_ld(plink2, pgen, keep, var_ids, prefix, plink_memory_mb):
-    """Export ALT-coded dosages with PLINK2 and compute signed LD in NumPy.
+def _chrom_token(chrom):
+    token = re.sub(r"^chr", "", str(chrom), flags=re.IGNORECASE)
+    if not token.isdigit() or not (1 <= int(token) <= 22):
+        raise ValueError(f"unsupported autosome for 1KG reference: {chrom!r}")
+    return str(int(token))
 
-    The installed PLINK v2.00a3.6LM predates bulk --r/--r-unphased, while
-    --export Av (variant-major additive dosage) is supported.  --export-allele
-    explicitly makes the canonical ALT allele the counted allele, matching the
-    effect direction in the harmonized xQTL/GWAS summary statistics.
-    """
+
+def _pvar_path(prefix):
+    plain = Path(str(prefix) + ".pvar")
+    if plain.is_file():
+        return plain
+    compressed = Path(str(prefix) + ".pvar.zst")
+    return compressed if compressed.is_file() else plain
+
+
+def resolve_kg_ref(kg_ref_dir, ancestry, chrom):
+    chrom = _chrom_token(chrom)
+    prefix = Path(kg_ref_dir) / str(ancestry).upper() / f"chr{chrom}"
+    required = [Path(str(prefix) + ".pgen"), _pvar_path(prefix),
+                Path(str(prefix) + ".psam")]
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing or not Path(str(prefix) + ".done").is_file():
+        raise FileNotFoundError(
+            f"prebuilt 1KG reference incomplete for {ancestry} chr{chrom}: "
+            f"{prefix}; run 40b_submit_1kg_ld_reference.sh")
+    return prefix
+
+
+def run_ld(plink2, pgen, var_ids, prefix, plink_memory_mb):
+    """Export ALT-coded dosages with PLINK2 and compute signed LD in NumPy."""
     extract = Path(str(prefix) + ".extract.txt")
     extract.write_text("".join(f"{v}\n" for v in var_ids))
 
@@ -188,13 +207,11 @@ def run_ld(plink2, pgen, keep, var_ids, prefix, plink_memory_mb):
             alt_by_id[vid] = alt
             fh.write(f"{vid} {alt}\n")
 
-    cmd = [plink2, "--pfile", pgen, "--extract", str(extract),
+    cmd = [plink2, "--pfile", str(pgen), "--extract", str(extract),
            "--max-alleles", "2", "--export", "Av",
            "--export-allele", str(alt_path), "--threads", "1",
            "--memory", str(plink_memory_mb),
            "--silent", "--out", str(prefix)]
-    if keep and Path(keep).exists():
-        cmd[3:3] = ["--keep", keep]
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           universal_newlines=True, check=False)
     traw = Path(str(prefix) + ".traw")
@@ -244,11 +261,10 @@ def run_ld(plink2, pgen, keep, var_ids, prefix, plink_memory_mb):
     if nsamples < 2:
         return None, f"fewer than 2 samples in {traw.name}"
 
-    G = np.asarray(dosage_rows, dtype=float)  # variants x samples
+    G = np.asarray(dosage_rows, dtype=float)
     with np.errstate(invalid="ignore"):
         means = np.nanmean(G, axis=1)
     centered = G - means[:, None]
-    # Mean-impute missing dosages after centering (missing -> centered value 0).
     centered[~np.isfinite(centered)] = 0.0
     ss = np.sqrt(np.sum(centered * centered, axis=1))
     denom = np.outer(ss, ss)
@@ -268,8 +284,60 @@ def run_ld(plink2, pgen, keep, var_ids, prefix, plink_memory_mb):
     return (matrix, vars_path), ""
 
 
+def _reference_identity(prefix):
+    parts = []
+    paths = [Path(str(prefix) + ".pgen"), _pvar_path(prefix),
+             Path(str(prefix) + ".psam")]
+    for path in paths:
+        st = path.stat()
+        parts.append(f"{path.name}:{st.st_size}:{st.st_mtime_ns}")
+    return "|".join(parts)
+
+
+def ld_cache_paths(cache_dir, ancestry, chrom, ref_prefix, var_ids):
+    chrom = _chrom_token(chrom)
+    h = hashlib.sha256()
+    h.update((CACHE_VERSION + "\n").encode())
+    h.update((str(ancestry).upper() + "\n" + chrom + "\n").encode())
+    h.update((_reference_identity(ref_prefix) + "\n").encode())
+    for vid in sorted(str(v) for v in var_ids):
+        h.update(vid.encode())
+        h.update(b"\n")
+    key = h.hexdigest()
+    base = Path(cache_dir) / str(ancestry).upper() / f"chr{chrom}" / key[:2]
+    return base / f"{key}.ld", base / f"{key}.ld.vars"
+
+
+def cached_gwas_ld(plink2, kg_ref_dir, cache_dir, ancestry, chrom, var_ids,
+                   work_prefix, plink_memory_mb):
+    ref_prefix = resolve_kg_ref(kg_ref_dir, ancestry, chrom)
+    matrix, vars_path = ld_cache_paths(cache_dir, ancestry, chrom,
+                                       ref_prefix, var_ids)
+    if matrix.is_file() and vars_path.is_file():
+        cached_ids = [x.strip() for x in vars_path.read_text().splitlines() if x.strip()]
+        if (len(cached_ids) == len(var_ids)
+                and set(cached_ids) == set(var_ids)
+                and matrix.stat().st_size > 0):
+            return (matrix, vars_path), "cache_hit"
+
+    result, msg = run_ld(plink2, ref_prefix, var_ids, work_prefix,
+                         plink_memory_mb)
+    if result is None:
+        return None, msg
+
+    matrix.parent.mkdir(parents=True, exist_ok=True)
+    token = f"{os.getpid()}.{uuid.uuid4().hex}"
+    tmp_vars = vars_path.with_name(vars_path.name + f".tmp.{token}")
+    tmp_matrix = matrix.with_name(matrix.name + f".tmp.{token}")
+    shutil.copyfile(str(result[1]), str(tmp_vars))
+    shutil.copyfile(str(result[0]), str(tmp_matrix))
+    os.replace(str(tmp_vars), str(vars_path))
+    os.replace(str(tmp_matrix), str(matrix))
+    return (matrix, vars_path), "cache_miss"
+
+
 def prepare_task(task, index, workdir, tabix, plink2, min_variants,
-                 plink_memory_mb):
+                 plink_memory_mb, kg_ref_dir, ld_cache_dir):
     out = dict(task)
     out.update({k: "" for k in PREP_FIELDS})
     task_dir = workdir / f"task-{index:04d}"
@@ -307,18 +375,19 @@ def prepare_task(task, index, workdir, tabix, plink2, min_variants,
         if n_xqtl is None or n_xqtl < 10:
             return fail("error", "could not read xQTL N from psam")
 
-        ldx, msg = run_ld(plink2, task["ld_xqtl_pgen"], "", var_ids,
+        ldx, msg = run_ld(plink2, task["ld_xqtl_pgen"], var_ids,
                           task_dir / "ld_xqtl", plink_memory_mb)
         if ldx is None:
             return fail("ld_failed_xqtl", msg)
-        ldg, msg = run_ld(plink2, task["ld_gwas_pgen"],
-                          task.get("ld_gwas_keep", ""), var_ids,
-                          task_dir / "ld_gwas", plink_memory_mb)
+
+        ldg, cache_state = cached_gwas_ld(
+            plink2, kg_ref_dir, ld_cache_dir, task["ancestry"], task["chrom"],
+            var_ids, task_dir / "ld_gwas", plink_memory_mb)
         if ldg is None:
-            return fail("ld_failed_gwas", msg)
+            return fail("ld_failed_gwas", cache_state)
 
         out.update({
-            "prep_status": "ok", "prep_message": "",
+            "prep_status": "ok", "prep_message": cache_state,
             "merged_file": str(merged_path),
             "ld_x_matrix": str(ldx[0]), "ld_x_vars": str(ldx[1]),
             "ld_g_matrix": str(ldg[0]), "ld_g_vars": str(ldg[1]),
@@ -336,10 +405,14 @@ def main():
     p.add_argument("--n-shards", required=True, type=int)
     p.add_argument("--work-dir", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument("--kg-ref-dir", required=True,
+                   help="prebuilt ancestry/chromosome 1KG PGEN directory")
+    p.add_argument("--ld-cache-dir", required=True,
+                   help="persistent cache for GWAS-side LD matrices")
     p.add_argument("--tabix", default="tabix")
     p.add_argument("--plink2", default="plink2")
-    p.add_argument("--plink-memory-mb", type=int, default=2048,
-                   help="Memory cap passed to plink2 --memory (MiB; default 2048)")
+    p.add_argument("--plink-memory-mb", type=int, default=4096,
+                   help="memory cap passed to plink2 --memory (MiB; default 4096)")
     p.add_argument("--min-variants", type=int, default=50)
     args = p.parse_args()
     if args.plink_memory_mb < 256:
@@ -354,9 +427,10 @@ def main():
 
     workdir = Path(args.work_dir)
     workdir.mkdir(parents=True, exist_ok=True)
-    prepared = [prepare_task(t, i + 1, workdir, args.tabix, args.plink2,
-                             args.min_variants, args.plink_memory_mb)
-                for i, t in enumerate(selected)]
+    prepared = [prepare_task(
+        t, i + 1, workdir, args.tabix, args.plink2, args.min_variants,
+        args.plink_memory_mb, args.kg_ref_dir, args.ld_cache_dir)
+        for i, t in enumerate(selected)]
     fields = list(tasks[0].keys()) + PREP_FIELDS
     with open(args.out, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=fields, delimiter="\t",

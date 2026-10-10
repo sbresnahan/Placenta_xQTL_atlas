@@ -134,6 +134,8 @@ export CHAIN=/home/stbresnahan/bhattacharya_lab/data/GenomicReferences/liftover/
 # 1000 Genomes GRCh38 reference.
 export KG_PGEN=/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/1kGP/1kGP_hg38
 export KG_SAMPLE_MAP="${GWAS_DIR}/1kg_sample_superpop.tsv"
+export KG_LD_REF_DIR="${COLOC_DIR}/ld_reference/1kg"
+export LD_CACHE_DIR="${COLOC_DIR}/ld_cache/1kg"
 
 # Module-06 R/FUSION software.
 export RSCRIPT="${REPO_ROOT}/bin/Rscript_sif"
@@ -162,12 +164,14 @@ it before running (the step has no shell driver).
 | 39 nominal | login driver | driver: `python3` stdlib only (collapse audit) + LSF | — |
 | 39 workers | compute | conda env `tensorqtl` (tensorQTL, torch); merge job adds `module load samtools` | in-script (bsub heredocs) |
 | 40/42 coloc | login driver | conda env `tensorqtl` (pandas for step 40) | **in-script** (`PYENV` override) |
-| 41/42a workers | compute | `module load plink samtools` (plink2, tabix); R via `$RSCRIPT` | in-script (42a) |
+| 40b reference submitter | login driver | Python stdlib only | — |
+| 40c reference workers | compute | `module load plink`; one-time ancestry x chromosome PGEN build | in-script (40c) |
+| 41/42a workers | compute | `module load plink samtools` (plink2, tabix); R via `$RSCRIPT`; GWAS LD from compact 1KG refs | in-script (42a) |
 | 43/45 colocBoost | login driver | conda env `tensorqtl` (pandas for step 43) | **in-script** (`PYENV` override) |
 | 44/45a workers | compute | `module load plink samtools`; R via `$RSCRIPT` | in-script (45a) |
 | 46/47 isoTWAS | login driver | `python3` stdlib only (gene counts, collapse audit) | — |
 | 46/47a workers | compute | `module load plink samtools`; R via `$RSCRIPT` | in-script (47a) |
-| 48 FUSION | login driver | `plink2` (LD reference build) | in-script: `module load plink` attempted if missing |
+| 48 FUSION | login driver | `plink2` (compact PGEN -> FUSION BED conversion only) | in-script: `module load plink` attempted if missing |
 | 48a workers | compute | R via `$RSCRIPT` through `48b_fusion_assoc.R` (sets `.libPaths()` in R) | in-script |
 | 49 aggregate | **interactive node** | conda env `tensorqtl` (pandas, numpy, scipy) | **manual**: `conda activate tensorqtl` |
 
@@ -746,22 +750,41 @@ done
 
 # 5. Steps 40–42 — pairwise SuSiE-coloc
 
-Step 40 constructs:
+Step 40 constructs the coloc task lists. It still writes
+`$COLOC_DIR/loci/{ANC}.1kg.keep` for backward compatibility, but active module-06
+stages no longer consume those legacy files. Step 40b independently derives
+private keep files from `KG_SAMPLE_MAP` + the actual 1KG `.psam`, and uses them
+once to build compact ancestry/chromosome references:
 
 ```text
-$COLOC_DIR/loci/{MOD}.tasks.tsv
-$COLOC_DIR/loci/EAS.1kg.keep
-$COLOC_DIR/loci/EUR.1kg.keep
+$COLOC_DIR/ld_reference/1kg/EAS/chr{1..22}.{pgen,pvar,psam}
+$COLOC_DIR/ld_reference/1kg/EUR/chr{1..22}.{pgen,pvar,psam}
 ```
 
-Step 42 normally runs Step 40 automatically and then submits Step 41 workers.
+Build these once before stage 42:
 
-**Required environment:** the driver activates the `tensorqtl` conda env
-itself (pandas for step 40; `PYENV` override). On each compute node, `42a`
-loads `plink` + `samtools` (stacking conda `samtools-1.16.1` if `tabix` is
-still absent), runs `41_prepare_susie_coloc_inputs.py` for tabix slicing and
-plink2 LD, and only then launches `41_susie_coloc.R` through `$RSCRIPT`.
-The R worker reads prepared TSV/LD files and never invokes command-line tools.
+```bash
+TEST=1 bash 40b_submit_1kg_ld_reference.sh   # one EAS chr1 pilot
+bash 40b_submit_1kg_ld_reference.sh          # full 44-element build
+```
+
+The full build is throttled to four simultaneous readers by default
+(`MAXCONC=4`) to avoid 44 workers scanning the 70M-variant source PGEN at once.
+The one-time reference-build defaults are `MEM_GB=16`,
+`PLINK_MEMORY_MB=12000`, `QUEUE=medium`, and `WALLTIME=04:00`; all are
+overridable. Private keep files live under `$KG_LD_REF_DIR/keep/` and are not
+used by stages 42, 45, or 48.
+
+Step 42 still runs Step 40 automatically when task lists are absent, but it
+now fails fast if any compact 1KG chromosome reference is missing. On each
+compute node, `42a` loads `plink` + `samtools`, runs
+`41_prepare_susie_coloc_inputs.py`, computes xQTL LD from the in-sample PGEN,
+and computes GWAS LD from the compact ancestry/chromosome 1KG PGEN. The
+GWAS-side signed LD matrix is cached persistently under
+`$COLOC_DIR/ld_cache/1kg/` by ancestry/chromosome/reference identity/exact
+variant set, so repeated tasks reuse it. Only then is `41_susie_coloc.R`
+launched through `$RSCRIPT`. R reads prepared TSV/LD files and never invokes
+command-line tools.
 
 ## Environment controls for `42_submit_coloc.sh`
 
@@ -776,14 +799,15 @@ The R worker reads prepared TSV/LD files and never invokes command-line tools.
 | `COLOC_DIR` | `$RESULTS_DIR/coloc` | Coloc output |
 | `GWAS_DIR` | `$OUTPUT_BASE/gwas` | **Must contain harmonized GWAS directly** |
 | `KG_PGEN` | hard-coded 1KG default | 1KG pgen prefix |
-| `KG_SAMPLE_MAP` | `$GWAS_DIR/1kg_sample_superpop.tsv` | Sample → superpopulation map |
 | `MODALITIES` | all 9 | Modalities to process |
 | `SHARD_SIZE` | `25` | Target tasks per worker |
 | `QUEUE` | `medium` | LSF queue |
 | `WALLTIME` | `04:00` | Per shard |
 | `THREADS` | `2` | LSF CPU request |
 | `MEM_GB` | `8` | LSF memory request per shard |
-| `PLINK_MEMORY_MB` | `2048` | Host PLINK2 memory cap (MiB) during dosage export |
+| `PLINK_MEMORY_MB` | `4096` | Runtime PLINK2 memory cap (MiB) for compact xQTL/1KG dosage export |
+| `KG_LD_REF_DIR` | `$COLOC_DIR/ld_reference/1kg` | Prebuilt ancestry/chromosome 1KG PGENs from 40b/40c |
+| `LD_CACHE_DIR` | `$COLOC_DIR/ld_cache/1kg` | Persistent GWAS-side signed LD cache |
 | `MIN_VARIANTS` | `50` | Minimum common variants |
 | `PP_H4` | `0.7` | Colocalization threshold |
 | `TEST` | `0` | `1` = submit only shard `[1]` of the first modality (safe pilot) |
@@ -804,7 +828,7 @@ python3 "${SCRIPTS_DIR}/40_prepare_coloc_loci.py" \
     --gwas-dir "$GWAS_DIR" \
     --catalog "${SCRIPTS_DIR}/gwas_catalog.tsv" \
     --kg-pgen "$KG_PGEN" \
-    --kg-sample-map "$KG_SAMPLE_MAP" \
+    --skip-kg-keep \
     --ancestries EAS EUR \
     --out-dir "$COLOC_DIR"
 ```
@@ -816,8 +840,6 @@ Check:
 
 ```bash
 ls -lh "${COLOC_DIR}/loci/"*.tasks.tsv
-ls -lh "${COLOC_DIR}/loci/"*.1kg.keep
-
 for F in "${COLOC_DIR}/loci/"*.tasks.tsv; do
     echo "$(basename "$F"): $(( $(wc -l < "$F") - 1 )) tasks"
 done
@@ -890,13 +912,12 @@ the `tensorqtl` conda env itself (pandas for step 43; `PYENV` override).
 Workers (`45a`) load `plink` + `samtools` (with the tabix conda fallback), run
 `44_prepare_colocboost_inputs.py` on the host for tabix slicing and plink2
 dosage export, then run the pure-R `44_colocboost.R` through `$RSCRIPT`.
+GWAS dosages are exported from the same compact ancestry/chromosome 1KG
+references built by 40b/40c; stage 45 never applies `--keep` to the full 1KG
+PGEN.
 
-Prerequisite: the 1KG ancestry keep files from Step 40 must already exist:
-
-```bash
-test -f "${COLOC_DIR}/loci/EAS.1kg.keep"
-test -f "${COLOC_DIR}/loci/EUR.1kg.keep"
-```
+Prerequisite: the full 40b/40c reference build must be complete. Stage 45
+checks this automatically before submitting any array.
 
 ## Environment controls for `45_submit_colocboost.sh`
 
@@ -911,20 +932,21 @@ test -f "${COLOC_DIR}/loci/EUR.1kg.keep"
 | `COLOC_DIR` | `$RESULTS_DIR/coloc` | Coloc directory |
 | `CB_DIR` | `$COLOC_DIR/colocboost` | colocBoost directory |
 | `GWAS_DIR` | `$OUTPUT_BASE/gwas` | Harmonized GWAS |
-| `KG_PGEN` | hard-coded 1KG default | GWAS-side LD |
+| `KG_LD_REF_DIR` | `$COLOC_DIR/ld_reference/1kg` | Prebuilt GWAS-side ancestry/chromosome PGENs |
 | `ANCESTRIES` | `EAS EUR` | Ancestries |
 | `MODALITIES` | all 9 | xQTL modalities |
 | `SHARD_SIZE` | `10` | Target regions per worker |
 | `QUEUE` | `medium` | LSF queue |
 | `WALLTIME` | `06:00` | Per worker |
 | `THREADS` | `2` | CPUs |
+| `MEM_GB` | `8` | LSF memory request |
+| `PLINK_MEMORY_MB` | `4096` | PLINK2 memory cap for compact dosage exports |
 | `MERGE_GAP` | `100000` | Locus merge distance in bp |
 | `TEST` | `0` | `1` = submit only shard `[1]` of the first ancestry (safe pilot) |
 | `FORCE_PREP` | `0` | `1` = rebuild manifests |
 | `FORCE_RUN` | `0` | `1` = rerun completed regions |
 | `RSCRIPT` | repository R wrapper | R launcher |
 | `PYENV` | `tensorqtl` | Conda env providing pandas for step 43 |
-| `KG_SAMPLE_MAP` | defined by script | Currently unused by Step 45 |
 
 ### Prepare manifests explicitly
 
@@ -1060,6 +1082,8 @@ module 07. Override with `SKIP_COLLAPSE_CHECK=1`.
 | `QUEUE` | `medium` | LSF queue |
 | `WALLTIME` | `04:00` | Worker walltime |
 | `THREADS` | `2` | CPUs |
+| `MEM_GB` | `8` | LSF memory request |
+| `PLINK_MEMORY_MB` | `4096` | PLINK2 memory cap for compact dosage exports |
 | `R2_MIN` | `0.01` | CV R² retention threshold |
 | `TEST` | `0` | `1` = submit only shard `[1]` of the first weight set (safe pilot) |
 | `FORCE_RUN` | `0` | Retrain existing gene models |
@@ -1134,15 +1158,16 @@ done
 Step 48 performs four operations:
 
 ```text
-1. Build ancestry-specific chromosome-level 1KG PLINK1 LD references.
+1. Convert prebuilt 40b/40c chromosome PGENs to FUSION PLINK BED views.
 2. Convert harmonized GWAS to FUSION summary-statistic format.
 3. Merge isoTWAS shard .pos files.
 4. Submit one FUSION job per weight-set × GWAS trait.
 ```
 
-**Required environment:** the driver needs `plink2` on the login node for the
-LD-reference build — it attempts `module load plink` automatically when
-`plink2` is not already on `PATH` (override with `PLINK2=/path/to/plink2`).
+**Required environment:** the driver needs `plink2` on the login node only for
+the compact chromosome-PGEN -> BED conversion; it no longer scans/subsets the
+full 1KG panel. It attempts `module load plink` automatically when `plink2` is
+not already on `PATH` (override with `PLINK2=/path/to/plink2`).
 The workers (`48a`) run R through `$RSCRIPT`, invoking FUSION via the repo
 wrapper `48b_fusion_assoc.R`, which sets `.libPaths()` **inside R** before
 sourcing `FUSION.assoc_test.R` (the external FUSION script has no in-R
@@ -1159,10 +1184,10 @@ FUSION's `optparse` flags are unaffected by the wrapper.
 | `QTL_DIR` | `$OUTPUT_BASE/qtl_inputs` | Defined, but not materially used by Step 48 |
 | `RESULTS_DIR` | `$OUTPUT_BASE/qtl_results` | Results |
 | `LOG_DIR` | `$OUTPUT_BASE/logs` | Logs |
-| `COLOC_DIR` | `$RESULTS_DIR/coloc` | Contains 1KG keep files |
+| `COLOC_DIR` | `$RESULTS_DIR/coloc` | Contains prebuilt 1KG reference directory |
 | `ISOTWAS_DIR` | `$RESULTS_DIR/isotwas` | Weights and TWAS outputs |
 | `GWAS_DIR` | `$OUTPUT_BASE/gwas` | Harmonized GWAS |
-| `KG_PGEN` | hard-coded 1KG default | Source 1KG pgen |
+| `KG_LD_REF_DIR` | `$COLOC_DIR/ld_reference/1kg` | Source compact ancestry/chromosome PGENs from 40b/40c |
 | `FUSION_DIR` | hard-coded FUSION default | FUSION scripts |
 | `LDREF_DIR` | `$GWAS_DIR/fusion_ldref` | PLINK1 LD references |
 | `WEIGHT_SETS` | `EAS EUR pooled` | Weight sets |
@@ -1172,7 +1197,7 @@ FUSION's `optparse` flags are unaffected by the wrapper.
 | `TEST` | `0` | `1` = submit one weight-set × trait pair |
 | `FORCE_RUN` | `0` | Rerun existing TWAS output |
 | `RSCRIPT` | repository R wrapper | R launcher |
-| `PLINK2` | `plink2` | Used to construct LD reference files |
+| `PLINK2` | `plink2` | Converts compact chromosome PGENs to FUSION BED views |
 
 ### Safe pilot
 

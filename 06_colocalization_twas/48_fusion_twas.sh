@@ -5,9 +5,9 @@
 # Objective 1.6: apply the trained isoTWAS/TWAS weights (46/47) to every
 # harmonized GWAS (37/38) with ancestry-matched 1KG LD references.
 #
-# Step 1 builds per-chromosome plink1 BED LD references from the 1KG pgen,
-# one per superpopulation with a keep file ({COLOC_DIR}/loci/{ANC}.1kg.keep,
-# written by 40_prepare_coloc_loci.py).
+# Step 1 converts the already-prebuilt ancestry/chromosome 1KG PGEN references
+# from 40b/40c to the PLINK BED format required by FUSION. The full 1KG PGEN
+# and ancestry keep files are not touched here.
 # Step 2 converts each harmonized GWAS to FUSION format (SNP A1 A2 Z BETA SE).
 # Step 3 merges shard .pos fragments into one .pos per weight set.
 # Step 4 submits one LSF job per weight set x trait (48a_run_fusion.sh loops
@@ -16,7 +16,7 @@
 # LD reference ancestry: the trait's primary_ancestry when EAS/EUR; traits
 # labeled "both" use the weight set's ancestry (EUR for the pooled set).
 #
-# Prerequisites: 40 (keep files), 46/47 (weights), FUSION clone (36).
+# Prerequisites: 40b/40c compact 1KG refs, 46/47 weights, FUSION clone (36).
 #
 # Usage:
 #   TEST=1 bash 48_fusion_twas.sh   # prep + ONE pair (first WS x first trait)
@@ -40,7 +40,7 @@ LOG_DIR="${LOG_DIR:-${OUTPUT_BASE}/logs}"
 COLOC_DIR="${COLOC_DIR:-${RESULTS_DIR}/coloc}"
 ISOTWAS_DIR="${ISOTWAS_DIR:-${RESULTS_DIR}/isotwas}"
 GWAS_DIR="${GWAS_DIR:-${OUTPUT_BASE}/gwas}"
-KG_PGEN="${KG_PGEN:-/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/1kGP/1kGP_hg38}"
+KG_LD_REF_DIR="${KG_LD_REF_DIR:-${COLOC_DIR}/ld_reference/1kg}"
 FUSION_DIR="${FUSION_DIR:-/rsrch5/home/epi/bhattacharya_lab/software/fusion_twas}"
 LDREF_DIR="${LDREF_DIR:-${GWAS_DIR}/fusion_ldref}"
 WEIGHT_SETS="${WEIGHT_SETS:-EAS EUR pooled}"
@@ -73,19 +73,18 @@ echo "  ISOTWAS_DIR: $ISOTWAS_DIR"
 echo "  FUSION_DIR:  $FUSION_DIR"
 echo "  LDREF_DIR:   $LDREF_DIR"
 
-# --- Step 1: per-chromosome 1KG LD references --------------------------------
+# --- Step 1: FUSION BED views of the prebuilt 1KG references ----------------
 for ANC in EAS EUR; do
-    KEEP="${COLOC_DIR}/loci/${ANC}.1kg.keep"
-    if [ ! -f "$KEEP" ]; then
-        echo "  WARNING: no keep file for ${ANC} ($KEEP); skipping LD ref"
-        continue
-    fi
     for CHR in $(seq 1 22); do
+        SRC="${KG_LD_REF_DIR}/${ANC}/chr${CHR}"
+        if [ ! -f "${SRC}.done" ] || [ ! -s "${SRC}.pgen" ]; then
+            echo "ERROR: compact 1KG reference missing: ${SRC}; run 40b first" >&2
+            exit 1
+        fi
         OUT="${LDREF_DIR}/${ANC}.1kg.chr${CHR}"
         if [ -f "${OUT}.bed" ]; then continue; fi
-        echo "  building LD ref: ${ANC} chr${CHR}"
-        "$PLINK2" --pfile "$KG_PGEN" --keep "$KEEP" --chr "$CHR" \
-                  --make-bed --out "$OUT" --silent
+        echo "  building FUSION BED view: ${ANC} chr${CHR}"
+        "$PLINK2" --pfile "$SRC" --make-bed --out "$OUT" --silent
     done
 done
 

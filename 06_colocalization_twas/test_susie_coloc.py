@@ -105,11 +105,10 @@ def coloc_fixture(tmp_path_factory):
     write_vcf(g_xqtl, VAR_IDS, xqtl_samples, tmp / "xqtl.vcf")
     write_vcf(g_1kg, VAR_IDS, kg_samples, tmp / "kg.vcf")
     make_pgen(tmp / "xqtl.vcf", tmp / "EAS_qtl")
-    make_pgen(tmp / "kg.vcf", tmp / "1kg")
-    # keep file: first 400 1KG samples (tests the --keep path); plink2
-    # matches FID+IID, and --double-id sets FID==IID, so write two columns
-    pd.DataFrame({"FID": kg_samples[:400], "IID": kg_samples[:400]}).to_csv(
-        tmp / "EAS.1kg.keep", sep="\t", index=False, header=False)
+    kg_ref = tmp / "kg_ref" / "EAS"
+    kg_ref.mkdir(parents=True)
+    make_pgen(tmp / "kg.vcf", kg_ref / "chr1")
+    (kg_ref / "chr1.done").touch()
 
     # --- phenotypes / summary stats ------------------------------------------
     causal_shared = 150
@@ -153,15 +152,15 @@ def coloc_fixture(tmp_path_factory):
              trait_type="quantitative", prop_cases="",
              gwas_file=str(tmp / "trait_shared.sumstats.tsv.gz"),
              xqtl_file=str(tmp / "EAS_expression.nominal.tsv.gz"),
-             ld_xqtl_pgen=str(tmp / "EAS_qtl"), ld_gwas_pgen=str(tmp / "1kg"),
-             ld_gwas_keep=str(tmp / "EAS.1kg.keep")),
+             ld_xqtl_pgen=str(tmp / "EAS_qtl"), ld_gwas_pgen="legacy-unused",
+             ld_gwas_keep="legacy-unused"),
         dict(modality="expression", phenotype_id="GENEB", chrom=CHROM,
              start=start, end=end, L=5, ancestry="EAS",
              trait_id="trait_distinct", trait_type="quantitative", prop_cases="",
              gwas_file=str(tmp / "trait_distinct.sumstats.tsv.gz"),
              xqtl_file=str(tmp / "EAS_expression.nominal.tsv.gz"),
-             ld_xqtl_pgen=str(tmp / "EAS_qtl"), ld_gwas_pgen=str(tmp / "1kg"),
-             ld_gwas_keep=str(tmp / "EAS.1kg.keep")),
+             ld_xqtl_pgen=str(tmp / "EAS_qtl"), ld_gwas_pgen="legacy-unused",
+             ld_gwas_keep="legacy-unused"),
     ])
     tasks.to_csv(tmp / "expression.tasks.tsv", sep="\t", index=False)
     return tmp
@@ -177,7 +176,10 @@ def run_worker(tmp):
          "--tasks", str(tmp / "expression.tasks.tsv"),
          "--shard-index", "1", "--n-shards", "1",
          "--work-dir", str(prep_dir / "work"),
-         "--out", str(manifest), "--min-variants", "50"],
+         "--out", str(manifest),
+         "--kg-ref-dir", str(tmp / "kg_ref"),
+         "--ld-cache-dir", str(tmp / "ld_cache"),
+         "--min-variants", "50"],
         capture_output=True, text=True, env=env, timeout=1800)
     assert prep.returncode == 0, f"preparer failed:\n{prep.stdout}\n{prep.stderr}"
     proc = subprocess.run(
@@ -206,6 +208,10 @@ def test_shared_causal_colocalizes(coloc_fixture):
     # the causal variant should carry high posterior for the shared task
     causal_id = VAR_IDS[150]
     assert v.loc[v["var_id"] == causal_id, "SNP.PP.H4_best"].iloc[0] > 0.01
+    # Both fixture tasks use the same ordered variant set, so the second task
+    # must reuse the persistent GWAS LD cache rather than recomputing it.
+    cache_mats = list((coloc_fixture / "ld_cache" / "EAS" / "chr1").rglob("*.ld"))
+    assert len(cache_mats) == 1
 
 
 def test_distinct_causal_does_not(coloc_fixture):

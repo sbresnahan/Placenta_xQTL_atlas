@@ -3,8 +3,10 @@
 
 All external command execution lives here on the host compute node. For each
 region assigned to the shard, this script uses tabix to slice summary
-statistics and plink2 to export the two reference dosage panels. It writes a
-small manifest plus ordinary TSV/.raw files for the pure-R colocBoost worker.
+statistics and plink2 to export the two reference dosage panels. GWAS
+dosages come from the prebuilt ancestry/chromosome 1KG reference created by
+40b/40c, so runtime jobs never filter the full 1KG PGEN with --keep. It writes
+a small manifest plus ordinary TSV/.raw files for the pure-R colocBoost worker.
 
 The R worker never invokes tabix, plink2, zcat, head, or any shell command.
 """
@@ -120,14 +122,35 @@ def slice_outcome(tabix, oc, chrom, start, end, n_xqtl):
     return out
 
 
-def run_export(plink2, pgen, keep, variants, prefix):
+def chrom_token(chrom):
+    token = re.sub(r"^chr", "", str(chrom), flags=re.IGNORECASE)
+    if not token.isdigit() or not (1 <= int(token) <= 22):
+        raise ValueError(f"unsupported autosome for 1KG reference: {chrom!r}")
+    return str(int(token))
+
+
+def resolve_kg_ref(kg_ref_dir, ancestry, chrom):
+    chrom = chrom_token(chrom)
+    prefix = Path(kg_ref_dir) / str(ancestry).upper() / f"chr{chrom}"
+    pvar = Path(str(prefix) + ".pvar")
+    if not pvar.is_file() and Path(str(prefix) + ".pvar.zst").is_file():
+        pvar = Path(str(prefix) + ".pvar.zst")
+    required = [Path(str(prefix) + ".pgen"), pvar, Path(str(prefix) + ".psam")]
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing or not Path(str(prefix) + ".done").is_file():
+        raise FileNotFoundError(
+            f"prebuilt 1KG reference incomplete for {ancestry} chr{chrom}: "
+            f"{prefix}; run 40b_submit_1kg_ld_reference.sh")
+    return prefix
+
+
+def run_export(plink2, pgen, variants, prefix, plink_memory_mb):
     extract = Path(str(prefix) + ".extract.txt")
     extract.write_text("".join(f"{v}\n" for v in variants))
-    cmd = [plink2, "--pfile", pgen, "--extract", str(extract),
-           "--export", "A", "--threads", "1", "--silent",
+    cmd = [plink2, "--pfile", str(pgen), "--extract", str(extract),
+           "--export", "A", "--threads", "1",
+           "--memory", str(plink_memory_mb), "--silent",
            "--out", str(prefix)]
-    if keep and Path(keep).exists():
-        cmd[3:3] = ["--keep", keep]
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         universal_newlines=True, check=False)
     raw = Path(str(prefix) + ".raw")
@@ -157,7 +180,7 @@ def write_sumstats(rows, path):
 
 
 def prepare_region(reg, reg_outcomes, work_dir, out_dir, tabix, plink2,
-                   ld_xqtl_pgen, ld_gwas_pgen, ld_gwas_keep, min_outcomes):
+                   ld_xqtl_pgen, kg_ref_dir, min_outcomes, plink_memory_mb):
     rec = {k: "" for k in MANIFEST_FIELDS}
     rec.update({k: reg.get(k, "") for k in
                 ["region_id", "ancestry", "chrom", "start", "end"]})
@@ -204,12 +227,16 @@ def prepare_region(reg, reg_outcomes, work_dir, out_dir, tabix, plink2,
     if not vars_g:
         return finish("too_few_outcomes", "no GWAS variants")
 
-    xraw, msg = run_export(plink2, ld_xqtl_pgen, "", vars_x,
-                           region_dir / "xref_xqtl")
+    xraw, msg = run_export(plink2, ld_xqtl_pgen, vars_x,
+                           region_dir / "xref_xqtl", plink_memory_mb)
     if xraw is None:
         return finish("dosage_failed_xqtl", msg)
-    graw, msg = run_export(plink2, ld_gwas_pgen, ld_gwas_keep, vars_g,
-                           region_dir / "xref_gwas")
+    try:
+        gwas_ref = resolve_kg_ref(kg_ref_dir, reg["ancestry"], reg["chrom"])
+    except Exception as exc:
+        return finish("dosage_failed_gwas", exc)
+    graw, msg = run_export(plink2, gwas_ref, vars_g,
+                           region_dir / "xref_gwas", plink_memory_mb)
     if graw is None:
         return finish("dosage_failed_gwas", msg)
 
@@ -230,10 +257,11 @@ def main():
     p.add_argument("--work-dir", required=True)
     p.add_argument("--manifest", required=True)
     p.add_argument("--ld-xqtl-pgen", required=True)
-    p.add_argument("--ld-gwas-pgen", required=True)
-    p.add_argument("--ld-gwas-keep", default="")
+    p.add_argument("--kg-ref-dir", required=True,
+                   help="prebuilt ancestry/chromosome 1KG PGEN directory")
     p.add_argument("--tabix", default="tabix")
     p.add_argument("--plink2", default="plink2")
+    p.add_argument("--plink-memory-mb", type=int, default=4096)
     p.add_argument("--min-outcomes", type=int, default=2)
     args = p.parse_args()
 
@@ -256,8 +284,8 @@ def main():
         print(f"[prep {i}/{len(selected)}] {reg['region_id']}", flush=True)
         prepared.append(prepare_region(
             reg, outcomes_by_region.get(reg["region_id"], []), work_dir, out_dir,
-            args.tabix, args.plink2, args.ld_xqtl_pgen, args.ld_gwas_pgen,
-            args.ld_gwas_keep, args.min_outcomes))
+            args.tabix, args.plink2, args.ld_xqtl_pgen, args.kg_ref_dir,
+            args.min_outcomes, args.plink_memory_mb))
 
     manifest = Path(args.manifest)
     manifest.parent.mkdir(parents=True, exist_ok=True)

@@ -15,7 +15,7 @@
 #   - module 05 fine-mapping loci: {RESULTS_DIR}/finemap/loci/{MOD}.loci.tsv
 #   - 39 completed: merged nominal TSVs per ancestry x modality
 #   - 37/38 completed (or manual GWAS placed)
-#   - 1KG pgen + sample->superpopulation map
+#   - 40b/40c completed once: ancestry/chromosome 1KG reference PGENs
 #
 # Usage:
 #   TEST=1 bash 45_submit_colocboost.sh   # build manifests + ONE pilot shard
@@ -29,6 +29,9 @@
 #   QUEUE        — default medium
 #   WALLTIME     — default 06:00
 #   THREADS      — default 2
+#   MEM_GB       — default 8
+#   PLINK_MEMORY_MB — default 4096 MiB
+#   KG_LD_REF_DIR — prebuilt ancestry/chromosome 1KG PGEN directory
 #   MERGE_GAP    — locus-merge gap in bp, default 100000
 #   FORCE_PREP=1 — rebuild manifests even if present
 #   FORCE_RUN=1  — re-run regions with existing .done markers
@@ -71,6 +74,8 @@ SHARD_SIZE="${SHARD_SIZE:-10}"
 QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-06:00}"
 THREADS="${THREADS:-2}"
+MEM_GB="${MEM_GB:-8}"
+PLINK_MEMORY_MB="${PLINK_MEMORY_MB:-4096}"
 MERGE_GAP="${MERGE_GAP:-100000}"
 TEST="${TEST:-0}"
 FORCE_PREP="${FORCE_PREP:-0}"
@@ -78,14 +83,14 @@ FORCE_RUN="${FORCE_RUN:-0}"
 RSCRIPT="${RSCRIPT:-${REPO_ROOT}/bin/Rscript_sif}"
 
 GWAS_DIR="${GWAS_DIR:-${OUTPUT_BASE}/gwas}"
-KG_PGEN="${KG_PGEN:-/rsrch5/home/epi/stbresnahan/bhattacharya_lab/data/1kGP/1kGP_hg38}"
-KG_SAMPLE_MAP="${KG_SAMPLE_MAP:-${GWAS_DIR}/1kg_sample_superpop.tsv}"
+KG_LD_REF_DIR="${KG_LD_REF_DIR:-${COLOC_DIR}/ld_reference/1kg}"
 
 mkdir -p "$CB_DIR" "$LOG_DIR"
 
 echo "=== 45_submit_colocboost.sh ==="
 echo "  ANCESTRIES:  $ANCESTRIES"
 echo "  CB_DIR:      $CB_DIR"
+echo "  KG_LD_REF:   $KG_LD_REF_DIR"
 echo "  SHARD_SIZE:  $SHARD_SIZE   QUEUE: $QUEUE   WALLTIME: $WALLTIME"
 
 # --- Step 1: region/outcome manifests ---------------------------------------
@@ -102,6 +107,27 @@ else
         --merge-gap "$MERGE_GAP" \
         --out-dir "$CB_DIR"
     touch "${CB_DIR}/manifest.done"
+fi
+
+# Require the same one-time compact 1KG reference used by stage 42.
+MISSING_REF=0
+for ANC in $ANCESTRIES; do
+    for CHR in $(seq 1 22); do
+        PREFIX="${KG_LD_REF_DIR}/${ANC}/chr${CHR}"
+        if [ ! -f "${PREFIX}.done" ] || [ ! -s "${PREFIX}.pgen" ] || \
+           { [ ! -s "${PREFIX}.pvar" ] && [ ! -s "${PREFIX}.pvar.zst" ]; } || \
+           [ ! -s "${PREFIX}.psam" ]; then
+            if [ "$MISSING_REF" -lt 10 ]; then
+                echo "  MISSING 1KG LD reference: ${ANC} chr${CHR}" >&2
+            fi
+            MISSING_REF=$((MISSING_REF + 1))
+        fi
+    done
+done
+if [ "$MISSING_REF" -gt 0 ]; then
+    echo "ERROR: ${MISSING_REF} ancestry/chromosome 1KG LD references are missing." >&2
+    echo "Run: bash ${SCRIPTS_DIR}/40b_submit_1kg_ld_reference.sh" >&2
+    exit 1
 fi
 
 # --- Step 2: submit one array per ancestry -----------------------------------
@@ -137,8 +163,9 @@ for ANC in $ANCESTRIES; do
         continue
     fi
 
-    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},CB_DIR=${CB_DIR},REGIONS=${REGIONS},OUTCOMES=${CB_DIR}/${ANC}.outcomes.tsv,N_SHARDS=${N_SHARDS},LD_XQTL_PGEN=${QTL_DIR}/${ANC}_qtl,LD_GWAS_PGEN=${KG_PGEN},LD_GWAS_KEEP=${COLOC_DIR}/loci/${ANC}.1kg.keep,FORCE_RUN=${FORCE_RUN},RSCRIPT=${RSCRIPT}"
+    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},CB_DIR=${CB_DIR},REGIONS=${REGIONS},OUTCOMES=${CB_DIR}/${ANC}.outcomes.tsv,N_SHARDS=${N_SHARDS},LD_XQTL_PGEN=${QTL_DIR}/${ANC}_qtl,KG_LD_REF_DIR=${KG_LD_REF_DIR},PLINK_MEMORY_MB=${PLINK_MEMORY_MB},KEEP_PREP=${KEEP_PREP:-0},FORCE_RUN=${FORCE_RUN},RSCRIPT=${RSCRIPT}"
     bsub -J "colocboost_${ANC}[${ARRAY_SPEC}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
+         -M "${MEM_GB}G" -R "rusage[mem=${MEM_GB}G]" \
          -o "${LOG_DIR}/colocboost_${ANC}_%J_%I.out" \
          -e "${LOG_DIR}/colocboost_${ANC}_%J_%I.err" \
          -env "$ENV_STR" \

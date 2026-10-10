@@ -3,8 +3,8 @@
 # 45a_run_colocboost_shard.sh — LSF array element: prepare + run colocBoost
 # =============================================================================
 # Invoked by bsub via 45_submit_colocboost.sh with env:
-#   REGIONS, OUTCOMES, N_SHARDS, CB_DIR, LD_XQTL_PGEN, LD_GWAS_PGEN,
-#   LD_GWAS_KEEP, FORCE_RUN, RSCRIPT, SCRIPTS_DIR
+#   REGIONS, OUTCOMES, N_SHARDS, CB_DIR, LD_XQTL_PGEN, KG_LD_REF_DIR,
+#   PLINK_MEMORY_MB, FORCE_RUN, RSCRIPT, SCRIPTS_DIR
 # $LSB_JOBINDEX selects the shard.
 #
 # External command-line tools run ONLY in the host-side Python preparation
@@ -65,10 +65,10 @@ python3 "${SCRIPTS_DIR}/44_prepare_colocboost_inputs.py" \
     --work-dir "$PREP_DIR" \
     --manifest "$MANIFEST" \
     --ld-xqtl-pgen "$LD_XQTL_PGEN" \
-    --ld-gwas-pgen "$LD_GWAS_PGEN" \
-    --ld-gwas-keep "${LD_GWAS_KEEP:-}" \
+    --kg-ref-dir "$KG_LD_REF_DIR" \
     --tabix "$TABIX_BIN" \
-    --plink2 "$PLINK2_BIN"
+    --plink2 "$PLINK2_BIN" \
+    --plink-memory-mb "${PLINK_MEMORY_MB:-4096}"
 
 "$RSCRIPT" "${SCRIPTS_DIR}/44_colocboost.R" \
     --prepared-manifest "$MANIFEST" \
