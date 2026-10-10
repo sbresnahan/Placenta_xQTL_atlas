@@ -82,3 +82,103 @@ def test_write_keep_files_rejects_missing_requested_superpopulation(tmp_path):
         assert "EAS" in str(exc)
     else:
         raise AssertionError("expected missing EAS to terminate step 40")
+
+
+def test_task_generation_respects_sig_in(tmp_path, monkeypatch):
+    results = tmp_path / "qtl_results"
+    loci_dir = results / "finemap" / "loci"
+    loci_dir.mkdir(parents=True)
+    nominal = results / "nominal"
+    for anc in ("EAS", "EUR"):
+        anc_dir = nominal / anc
+        anc_dir.mkdir(parents=True)
+        (anc_dir / f"{anc}_expression.nominal.tsv.gz").touch()
+
+    pd.DataFrame([
+        {"modality": "expression", "phenotype_id": "gene_eas", "chrom": "1",
+         "start": 100, "end": 200, "n_signals": 1, "L": 5, "sig_in": "EAS"},
+        {"modality": "expression", "phenotype_id": "gene_eur", "chrom": "2",
+         "start": 300, "end": 400, "n_signals": 1, "L": 5, "sig_in": "EUR"},
+        {"modality": "expression", "phenotype_id": "gene_both", "chrom": "3",
+         "start": 500, "end": 600, "n_signals": 1, "L": 5,
+         "sig_in": "EAS,EUR"},
+    ]).to_csv(loci_dir / "expression.loci.tsv", sep="\t", index=False)
+
+    gwas_dir = tmp_path / "gwas"
+    gwas_dir.mkdir()
+    (gwas_dir / "trait_both.sumstats.tsv.gz").touch()
+    catalog = tmp_path / "gwas_catalog.tsv"
+    pd.DataFrame([{
+        "trait_id": "trait_both",
+        "primary_ancestry": "both",
+        "trait_type": "quantitative",
+    }]).to_csv(catalog, sep="\t", index=False)
+
+    out_dir = tmp_path / "coloc"
+    qtl_dir = tmp_path / "qtl_inputs"
+    qtl_dir.mkdir()
+    argv = [
+        "40_prepare_coloc_loci.py",
+        "--results-dir", str(results),
+        "--catalog", str(catalog),
+        "--gwas-dir", str(gwas_dir),
+        "--qtl-dir", str(qtl_dir),
+        "--kg-pgen", str(tmp_path / "unused_1kg"),
+        "--skip-kg-keep",
+        "--ancestries", "EAS", "EUR",
+        "--modalities", "expression",
+        "--out-dir", str(out_dir),
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    MOD.main()
+
+    tasks = pd.read_csv(out_dir / "loci" / "expression.tasks.tsv", sep="\t")
+    got = set(zip(tasks["phenotype_id"], tasks["ancestry"]))
+    assert got == {
+        ("gene_eas", "EAS"),
+        ("gene_eur", "EUR"),
+        ("gene_both", "EAS"),
+        ("gene_both", "EUR"),
+    }
+    assert all(
+        row.ancestry in row.sig_in.split(",")
+        for row in tasks[["ancestry", "sig_in"]].itertuples(index=False)
+    )
+
+
+def test_task_generation_requires_sig_in(tmp_path, monkeypatch):
+    results = tmp_path / "qtl_results"
+    loci_dir = results / "finemap" / "loci"
+    loci_dir.mkdir(parents=True)
+    pd.DataFrame([{
+        "phenotype_id": "gene1", "chrom": "1", "start": 100,
+        "end": 200, "L": 5,
+    }]).to_csv(loci_dir / "expression.loci.tsv", sep="\t", index=False)
+
+    catalog = tmp_path / "gwas_catalog.tsv"
+    pd.DataFrame(columns=["trait_id", "primary_ancestry"]).to_csv(
+        catalog, sep="\t", index=False)
+    gwas_dir = tmp_path / "gwas"
+    gwas_dir.mkdir()
+    qtl_dir = tmp_path / "qtl_inputs"
+    qtl_dir.mkdir()
+    out_dir = tmp_path / "coloc"
+
+    argv = [
+        "40_prepare_coloc_loci.py",
+        "--results-dir", str(results),
+        "--catalog", str(catalog),
+        "--gwas-dir", str(gwas_dir),
+        "--qtl-dir", str(qtl_dir),
+        "--kg-pgen", str(tmp_path / "unused_1kg"),
+        "--skip-kg-keep",
+        "--modalities", "expression",
+        "--out-dir", str(out_dir),
+    ]
+    monkeypatch.setattr("sys.argv", argv)
+    try:
+        MOD.main()
+    except SystemExit as exc:
+        assert "has no sig_in column" in str(exc)
+    else:
+        raise AssertionError("expected missing sig_in to terminate step 40")

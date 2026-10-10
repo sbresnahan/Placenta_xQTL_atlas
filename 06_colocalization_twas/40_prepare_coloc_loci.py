@@ -20,7 +20,7 @@ can be built before all manual GWAS files arrive).
 Outputs
 -------
   {coloc_dir}/loci/{MOD}.tasks.tsv   one row per task:
-      modality, phenotype_id, chrom, start, end, L, ancestry, trait_id,
+      modality, phenotype_id, chrom, start, end, L, sig_in, ancestry, trait_id,
       gwas_file, xqtl_file (merged nominal TSV), ld_xqtl (pgen prefix),
       legacy ld_gwas fields retained for task-table compatibility
   {coloc_dir}/loci/{ANC}.1kg.keep    legacy compatibility output (unused)
@@ -198,6 +198,19 @@ def write_kg_keep_files(sample_map_path, ancestries, out_dir, kg_pgen=None):
     return written
 
 
+def parse_sig_in(value):
+    """Return the ancestry set encoded by a fine-mapping ``sig_in`` cell.
+
+    Module 05 locus lists are built from the union of ancestry-specific
+    FDR-significant phenotypes. ``sig_in`` records which ancestry/ancestries
+    actually contributed that locus (e.g. ``EAS``, ``EUR``, ``EAS,EUR``).
+    Colocalization tasks must only be created in those strata.
+    """
+    if pd.isna(value):
+        return set()
+    return {x.strip().upper() for x in str(value).split(",") if x.strip()}
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -267,9 +280,30 @@ def main():
             print(f"  WARNING: no locus list for {mod}; skipped")
             continue
         loci = pd.read_csv(loci_path, sep="\t")
+        if "sig_in" not in loci.columns:
+            sys.exit(
+                f"ERROR: {loci_path} has no sig_in column. Rebuild the "
+                "module-05 fine-mapping locus list before creating coloc tasks; "
+                "ancestry eligibility cannot be inferred safely without sig_in."
+            )
+
+        requested_ancestries = [str(a).upper() for a in args.ancestries]
         rows = []
+        filtered_pairs = 0
+        empty_sig = 0
         for _, locus in loci.iterrows():
-            for anc in args.ancestries:
+            sig_ancestries = parse_sig_in(locus["sig_in"])
+            if not sig_ancestries:
+                empty_sig += 1
+                print(f"  WARNING: {mod} {locus['phenotype_id']} has empty "
+                      "sig_in; locus skipped")
+                continue
+            sig_label = ",".join(sorted(sig_ancestries))
+
+            for anc in requested_ancestries:
+                if anc not in sig_ancestries:
+                    filtered_pairs += 1
+                    continue
                 xqtl_file = (results_dir / "nominal" / anc /
                              f"{anc}_{mod}.nominal.tsv.gz")
                 if not xqtl_file.exists():
@@ -283,6 +317,7 @@ def main():
                         "chrom": str(locus["chrom"]).replace("chr", ""),
                         "start": int(locus["start"]), "end": int(locus["end"]),
                         "L": int(locus["L"]),
+                        "sig_in": sig_label,
                         "ancestry": anc,
                         "trait_id": g["trait_id"],
                         "trait_type": g.get("trait_type", "quantitative"),
@@ -299,7 +334,9 @@ def main():
         summary.append({"modality": mod, "loci": len(loci),
                         "tasks": len(tasks)})
         print(f"  {mod}: {len(loci)} loci -> {len(tasks)} tasks "
-              f"-> {out_path.name}")
+              f"-> {out_path.name}; filtered {filtered_pairs} "
+              "non-significant locus x ancestry pairs" +
+              (f"; skipped {empty_sig} loci with empty sig_in" if empty_sig else ""))
     print(pd.DataFrame(summary).to_string(index=False))
 
 
