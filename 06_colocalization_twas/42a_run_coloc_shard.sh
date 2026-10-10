@@ -4,7 +4,7 @@
 # =============================================================================
 # Invoked by bsub via 42_submit_coloc.sh with env:
 #   TASKS, N_SHARDS, COLOC_DIR, MIN_VARIANTS, PP_H4, FORCE_RUN, RSCRIPT,
-#   SCRIPTS_DIR
+#   SCRIPTS_DIR, PLINK_MEMORY_MB
 # $LSB_JOBINDEX selects the shard.
 #
 # External command-line tools run ONLY in the host-side Python preparation
@@ -88,6 +88,7 @@ mkdir -p "$PREP_DIR"
     --out "$PREPARED" \
     --tabix "$TABIX_BIN" \
     --plink2 "$PLINK2_BIN" \
+    --plink-memory-mb "${PLINK_MEMORY_MB:-2048}" \
     --min-variants "${MIN_VARIANTS:-50}"
 
 "$RSCRIPT" "${SCRIPTS_DIR}/41_susie_coloc.R" \

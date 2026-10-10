@@ -169,7 +169,7 @@ def _alt_from_var_id(var_id):
     return parts[3]
 
 
-def run_ld(plink2, pgen, keep, var_ids, prefix):
+def run_ld(plink2, pgen, keep, var_ids, prefix, plink_memory_mb):
     """Export ALT-coded dosages with PLINK2 and compute signed LD in NumPy.
 
     The installed PLINK v2.00a3.6LM predates bulk --r/--r-unphased, while
@@ -191,6 +191,7 @@ def run_ld(plink2, pgen, keep, var_ids, prefix):
     cmd = [plink2, "--pfile", pgen, "--extract", str(extract),
            "--max-alleles", "2", "--export", "Av",
            "--export-allele", str(alt_path), "--threads", "1",
+           "--memory", str(plink_memory_mb),
            "--silent", "--out", str(prefix)]
     if keep and Path(keep).exists():
         cmd[3:3] = ["--keep", keep]
@@ -267,7 +268,8 @@ def run_ld(plink2, pgen, keep, var_ids, prefix):
     return (matrix, vars_path), ""
 
 
-def prepare_task(task, index, workdir, tabix, plink2, min_variants):
+def prepare_task(task, index, workdir, tabix, plink2, min_variants,
+                 plink_memory_mb):
     out = dict(task)
     out.update({k: "" for k in PREP_FIELDS})
     task_dir = workdir / f"task-{index:04d}"
@@ -306,12 +308,12 @@ def prepare_task(task, index, workdir, tabix, plink2, min_variants):
             return fail("error", "could not read xQTL N from psam")
 
         ldx, msg = run_ld(plink2, task["ld_xqtl_pgen"], "", var_ids,
-                          task_dir / "ld_xqtl")
+                          task_dir / "ld_xqtl", plink_memory_mb)
         if ldx is None:
             return fail("ld_failed_xqtl", msg)
         ldg, msg = run_ld(plink2, task["ld_gwas_pgen"],
                           task.get("ld_gwas_keep", ""), var_ids,
-                          task_dir / "ld_gwas")
+                          task_dir / "ld_gwas", plink_memory_mb)
         if ldg is None:
             return fail("ld_failed_gwas", msg)
 
@@ -336,8 +338,12 @@ def main():
     p.add_argument("--out", required=True)
     p.add_argument("--tabix", default="tabix")
     p.add_argument("--plink2", default="plink2")
+    p.add_argument("--plink-memory-mb", type=int, default=2048,
+                   help="Memory cap passed to plink2 --memory (MiB; default 2048)")
     p.add_argument("--min-variants", type=int, default=50)
     args = p.parse_args()
+    if args.plink_memory_mb < 256:
+        p.error("--plink-memory-mb must be at least 256 MiB")
 
     with open(args.tasks, newline="") as fh:
         tasks = list(csv.DictReader(fh, delimiter="\t"))
@@ -349,7 +355,7 @@ def main():
     workdir = Path(args.work_dir)
     workdir.mkdir(parents=True, exist_ok=True)
     prepared = [prepare_task(t, i + 1, workdir, args.tabix, args.plink2,
-                             args.min_variants)
+                             args.min_variants, args.plink_memory_mb)
                 for i, t in enumerate(selected)]
     fields = list(tasks[0].keys()) + PREP_FIELDS
     with open(args.out, "w", newline="") as fh:

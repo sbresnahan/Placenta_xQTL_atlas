@@ -782,6 +782,8 @@ The R worker reads prepared TSV/LD files and never invokes command-line tools.
 | `QUEUE` | `medium` | LSF queue |
 | `WALLTIME` | `04:00` | Per shard |
 | `THREADS` | `2` | LSF CPU request |
+| `MEM_GB` | `8` | LSF memory request per shard |
+| `PLINK_MEMORY_MB` | `2048` | Host PLINK2 memory cap (MiB) during dosage export |
 | `MIN_VARIANTS` | `50` | Minimum common variants |
 | `PP_H4` | `0.7` | Colocalization threshold |
 | `TEST` | `0` | `1` = submit only shard `[1]` of the first modality (safe pilot) |

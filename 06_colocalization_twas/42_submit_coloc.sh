@@ -30,6 +30,8 @@
 #   QUEUE        — default medium
 #   WALLTIME     — default 04:00
 #   THREADS      — default 2
+#   MEM_GB       — LSF memory request per shard, default 8 GB
+#   PLINK_MEMORY_MB — memory cap passed to plink2, default 2048 MiB
 #   MIN_VARIANTS — default 50
 #   PP_H4        — colocalization call threshold, default 0.7
 #   FORCE_TASKS=1 — rebuild task lists even if present
@@ -72,6 +74,8 @@ SHARD_SIZE="${SHARD_SIZE:-25}"
 QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-04:00}"
 THREADS="${THREADS:-2}"
+MEM_GB="${MEM_GB:-8}"
+PLINK_MEMORY_MB="${PLINK_MEMORY_MB:-2048}"
 MIN_VARIANTS="${MIN_VARIANTS:-50}"
 PP_H4="${PP_H4:-0.7}"
 TEST="${TEST:-0}"
@@ -92,6 +96,7 @@ echo "  COLOC_DIR:   $COLOC_DIR"
 echo "  GWAS_DIR:    $GWAS_DIR"
 echo "  KG_PGEN:     $KG_PGEN"
 echo "  SHARD_SIZE:  $SHARD_SIZE   QUEUE: $QUEUE   WALLTIME: $WALLTIME"
+echo "  MEMORY:      ${MEM_GB}G LSF; ${PLINK_MEMORY_MB} MiB plink2 cap"
 
 # --- Step 1: per-modality task lists ----------------------------------------
 for MOD in $MODALITIES; do
@@ -146,8 +151,9 @@ for MOD in $MODALITIES; do
         continue
     fi
 
-    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},RESULTS_DIR=${RESULTS_DIR},COLOC_DIR=${COLOC_DIR},TASKS=${TASKS},N_SHARDS=${N_SHARDS},MIN_VARIANTS=${MIN_VARIANTS},PP_H4=${PP_H4},FORCE_RUN=${FORCE_RUN},RSCRIPT=${RSCRIPT}"
+    ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},RESULTS_DIR=${RESULTS_DIR},COLOC_DIR=${COLOC_DIR},TASKS=${TASKS},N_SHARDS=${N_SHARDS},MIN_VARIANTS=${MIN_VARIANTS},PP_H4=${PP_H4},FORCE_RUN=${FORCE_RUN},KEEP_PREP=${KEEP_PREP:-0},PLINK_MEMORY_MB=${PLINK_MEMORY_MB},RSCRIPT=${RSCRIPT}"
     bsub -J "coloc_${MOD}[${ARRAY_SPEC}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
+         -M "${MEM_GB}G" -R "rusage[mem=${MEM_GB}G]" \
          -o "${LOG_DIR}/coloc_${MOD}_%J_%I.out" \
          -e "${LOG_DIR}/coloc_${MOD}_%J_%I.err" \
          -env "$ENV_STR" \
