@@ -9,7 +9,7 @@
 #
 # External command-line tools run ONLY in the host-side Python preparation
 # phase. 41_susie_coloc.R runs via $RSCRIPT (Singularity) and consumes only
-# prepared TSV/LD files; R never invokes tabix, plink2, zcat, or shell commands.
+# prepared TSV/LD files; R never invokes tabix, plink/plink2, zcat, or shell commands.
 # =============================================================================
 set -eo pipefail
 
@@ -25,8 +25,10 @@ if ! command -v tabix >/dev/null 2>&1; then
 fi
 TABIX_BIN="$(command -v tabix || true)"
 PLINK2_BIN="$(command -v plink2 || true)"
+PLINK1_BIN="$(command -v plink || true)"
 [ -n "$TABIX_BIN" ] || { echo "ERROR: tabix unavailable after module + conda fallback" >&2; exit 1; }
 [ -n "$PLINK2_BIN" ] || { echo "ERROR: plink2 not found after 'module load plink'" >&2; exit 1; }
+[ -n "$PLINK1_BIN" ] || { echo "ERROR: PLINK 1.9 (plink) not found after 'module load plink'" >&2; exit 1; }
 
 SHARD_INDEX="${LSB_JOBINDEX:?ERROR: LSB_JOBINDEX not set (submit as a job array)}"
 
@@ -74,6 +76,7 @@ python3 "${SCRIPTS_DIR}/41_prepare_susie_coloc_inputs.py" \
     --out "$PREPARED" \
     --tabix "$TABIX_BIN" \
     --plink2 "$PLINK2_BIN" \
+    --plink1 "$PLINK1_BIN" \
     --min-variants "${MIN_VARIANTS:-50}"
 
 "$RSCRIPT" "${SCRIPTS_DIR}/41_susie_coloc.R" \

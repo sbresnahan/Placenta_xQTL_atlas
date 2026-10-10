@@ -142,7 +142,7 @@ run_task <- function(task) {
   setorder(m, pos_x)
   var_ids <- m$var_id
 
-  # 1. LD files prepared by plink2 outside R ---------------------------------
+  # 1. LD files prepared by host-side PLINK outside R -------------------------
   ld_x <- read_ld(task$ld_x_matrix, task$ld_x_vars)
   if (is.null(ld_x)) return(finish("ld_failed_xqtl"))
   ld_g <- read_ld(task$ld_g_matrix, task$ld_g_vars)
