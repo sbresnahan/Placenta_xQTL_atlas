@@ -77,7 +77,8 @@ def run_export_region(plink2, pgen, chrom, start, end, prefix):
            "--chr", str(chrom), "--from-bp", str(max(1, int(start))),
            "--to-bp", str(int(end)), "--export", "A",
            "--threads", "1", "--silent", "--out", str(prefix)]
-    proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False)
     raw = Path(str(prefix) + ".raw")
     if proc.returncode != 0 or not raw.exists():
         msg = proc.stderr.strip() or proc.stdout.strip()

@@ -50,7 +50,8 @@ def tabix_rows(tabix, path, chrom, start, end):
     header = read_header(path)
     region = f"{chrom}:{start}-{end}"
     proc = subprocess.run(
-        [tabix, str(path), region], text=True, capture_output=True, check=False
+        [tabix, str(path), region], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False
     )
     if proc.returncode != 0:
         msg = proc.stderr.strip() or f"tabix exited {proc.returncode}"
@@ -158,7 +159,8 @@ def run_ld(plink2, pgen, keep, var_ids, prefix):
            "--out", str(prefix)]
     if keep and Path(keep).exists():
         cmd[3:3] = ["--keep", keep]
-    proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False)
     matrix = Path(str(prefix) + ".unphased.vcor1")
     vars_path = Path(str(prefix) + ".unphased.vcor1.vars")
     if proc.returncode != 0 or not matrix.exists() or not vars_path.exists():

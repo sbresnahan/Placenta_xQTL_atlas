@@ -48,7 +48,8 @@ def tabix_rows(tabix, path, chrom, start, end):
     header = read_header(path)
     region = f"{chrom}:{start}-{end}"
     proc = subprocess.run(
-        [tabix, str(path), region], text=True, capture_output=True, check=False
+        [tabix, str(path), region], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False
     )
     if proc.returncode != 0:
         msg = proc.stderr.strip() or proc.stdout.strip()
@@ -127,7 +128,8 @@ def run_export(plink2, pgen, keep, variants, prefix):
            "--out", str(prefix)]
     if keep and Path(keep).exists():
         cmd[3:3] = ["--keep", keep]
-    proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        universal_newlines=True, check=False)
     raw = Path(str(prefix) + ".raw")
     if proc.returncode != 0 or not raw.exists():
         msg = proc.stderr.strip() or proc.stdout.strip()
