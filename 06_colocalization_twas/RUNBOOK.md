@@ -53,9 +53,9 @@ This revision fixes four operational issues:
    module.** Scripts that invoke `python3` with non-stdlib imports activate
    the pipeline conda env themselves (`PYENV`, default `tensorqtl` from
    module-05 script 21) and fail fast with a clear message if pandas is still
-   missing. Compute-node workers load `module load plink samtools` (plink2 +
-   tabix) themselves instead of relying on the submission shell's PATH. See
-   the per-step table in Section 0.
+   missing. Compute-node workers load the required host modules themselves;
+   if the samtools module does not expose `tabix`, stages 42a/45a stack the
+   known `samtools-1.16.1` conda env. See the per-step table in Section 0.
 
 3. **`TEST=1` is now a safe pilot for steps 42, 45, and 47.** Previously
    these submitters replaced `N_SHARDS=1` when `TEST=1`, and because the R
@@ -95,6 +95,13 @@ $GWAS_DIR/
 
 Harmonized GWAS files are written **directly into `$GWAS_DIR`**; steps
 40/42/43/45/48 expect `${GWAS_DIR}/{trait_id}.sumstats.tsv.gz`.
+
+5. **R never invokes command-line tools.** Stages 41, 44, and 46 are now
+   pure-R statistical workers. Their LSF workers first run host-side Python
+   preparers (`41_prepare_susie_coloc_inputs.py`,
+   `44_prepare_colocboost_inputs.py`, `46_prepare_isotwas_inputs.py`) for
+   tabix/plink2 work, then launch R on ordinary prepared files. This avoids
+   relying on host executables being visible inside the Singularity R image.
 
 ---
 
@@ -750,10 +757,11 @@ $COLOC_DIR/loci/EUR.1kg.keep
 Step 42 normally runs Step 40 automatically and then submits Step 41 workers.
 
 **Required environment:** the driver activates the `tensorqtl` conda env
-itself (pandas for step 40; `PYENV` override). The compute-node workers
-(`42a`) load `module load plink samtools` (plink2 for LD, tabix for summary
--statistic slicing) and run R through `$RSCRIPT`; `41_susie_coloc.R` sets
-`.libPaths()` internally.
+itself (pandas for step 40; `PYENV` override). On each compute node, `42a`
+loads `plink` + `samtools` (stacking conda `samtools-1.16.1` if `tabix` is
+still absent), runs `41_prepare_susie_coloc_inputs.py` for tabix slicing and
+plink2 LD, and only then launches `41_susie_coloc.R` through `$RSCRIPT`.
+The R worker reads prepared TSV/LD files and never invokes command-line tools.
 
 ## Environment controls for `42_submit_coloc.sh`
 
@@ -862,26 +870,10 @@ for its assigned tasks before rerunning them.
 
 ### Step-41 flags not exposed through the Step-42 environment
 
-`41_susie_coloc.R` additionally supports:
-
-```text
---plink2
---gwas-L
---max-L
---tmp-dir
-```
-
-Current `42_submit_coloc.sh` does not map environment variables to those
-flags.
-
-Defaults are:
-
-```text
---plink2       plink2
---gwas-L       10
---max-L        20
---tmp-dir      R tempdir()
-```
+`41_susie_coloc.R` additionally supports `--gwas-L` (default 10) and
+`--max-L` (default 20). `42_submit_coloc.sh` currently does not map
+environment variables to those flags. `tabix` and `plink2` are deliberately
+not R options: they are used only by the host-side preparer.
 
 ---
 
@@ -892,9 +884,10 @@ Step 43 constructs per-ancestry region and outcome manifests.
 Step 45 submits Step 44 workers.
 
 **Required environment:** same pattern as steps 40–42 — the driver activates
-the `tensorqtl` conda env itself (pandas for step 43; `PYENV` override), and
-the workers (`45a`) load `module load plink samtools` and run R through
-`$RSCRIPT` (`44_colocboost.R` sets `.libPaths()` internally).
+the `tensorqtl` conda env itself (pandas for step 43; `PYENV` override).
+Workers (`45a`) load `plink` + `samtools` (with the tabix conda fallback), run
+`44_prepare_colocboost_inputs.py` on the host for tabix slicing and plink2
+dosage export, then run the pure-R `44_colocboost.R` through `$RSCRIPT`.
 
 Prerequisite: the 1KG ancestry keep files from Step 40 must already exist:
 
@@ -1013,12 +1006,12 @@ FORCE_RUN=1 bash 45_submit_colocboost.sh
 `44_colocboost.R` additionally has:
 
 ```text
---plink2           default plink2
 --min-variants     default 50
 --min-outcomes     default 2
 --M                default 500
---tmp-dir          default R tempdir()
 ```
+
+`tabix`/`plink2` belong to `44_prepare_colocboost_inputs.py`, not to R.
 
 These currently have no environment-variable mapping in
 `45_submit_colocboost.sh`.
@@ -1038,9 +1031,11 @@ pooled
 The pooled set stacks EAS and EUR ancestry blocks.
 
 **Required environment:** the driver needs only stdlib `python3` (gene counts
-and the collapsed-replicate audit). The workers (`47a`) load `module load
-plink samtools` (plink2 for genotype dosages, tabix for BED access) and run R
-through `$RSCRIPT`; `46_isotwas_train.R` sets `.libPaths()` internally.
+and the collapsed-replicate audit). Workers (`47a`) load `module load plink`,
+run `46_prepare_isotwas_inputs.py` on the host to read bgzipped BEDs with
+Python and export cis dosages with plink2, then launch pure-R
+`46_isotwas_train.R` through `$RSCRIPT`. No tabix executable is needed for
+stage 46/47, and R never invokes command-line tools.
 
 Before submitting, the driver runs `check_collapsed_inputs.py` (Section 0.2):
 weight training fits sample-level expression/isoform data, so training on a
@@ -1068,7 +1063,6 @@ module 07. Override with `SKIP_COLLAPSE_CHECK=1`.
 | `FORCE_RUN` | `0` | Retrain existing gene models |
 | `SKIP_COLLAPSE_CHECK` | `0` | `1` = skip the collapsed-replicate audit |
 | `RSCRIPT` | repository R wrapper | R launcher |
-| `PLINK2` | `plink2` | Defined by submitter but currently **not passed to Step 46** |
 
 ### Safe pilot
 
@@ -1108,21 +1102,11 @@ bash 47_submit_isotwas.sh
 
 ### Step-46 options not exposed through the Step-47 environment
 
-`46_isotwas_train.R` additionally supports:
-
-| Flag | Default |
-|---|---:|
-| `--cis-window` | `1e6` |
-| `--alpha` | `0.5` |
-| `--nfolds` | `5` |
-| `--min-variants` | `10` |
-| `--max-isoforms` | `50` |
-| `--gene-list` | none |
-| `--plink2` | `plink2` |
-| `--tmp-dir` | R `tempdir()` |
-
-The current submitter does not expose environment variables for these
-controls.
+The pure-R `46_isotwas_train.R` additionally supports `--alpha` (0.5),
+`--nfolds` (5), `--min-variants` (10), and `--max-isoforms` (50).
+Cis-window selection, optional gene-list restriction, and plink2 execution are
+host-preparation concerns in `46_prepare_isotwas_inputs.py` rather than R.
+The current submitter does not expose environment variables for these controls.
 
 If these parameters need to be configurable during production, the preferred
 solution is to add explicit environment-to-CLI mappings to
@@ -1587,6 +1571,7 @@ pytest \
     test_susie_coloc.py \
     test_colocboost.py \
     test_isotwas_train.py \
+    test_no_r_cli_downstream.py \
     test_aggregate.py
 ```
 
@@ -1660,32 +1645,28 @@ These include:
   covariate-file override
   allow-missing-chromosomes
 
-41/42:
-  plink2 path
+41/42 (pure-R model worker):
   GWAS SuSiE L
   xQTL SuSiE maximum L
-  temporary directory
 
 43/45:
   maximum outcomes per colocBoost region
 
-44/45:
-  plink2 path
+44/45 (pure-R model worker):
   minimum variants
   minimum outcomes
   colocBoost M
-  temporary directory
 
 46/47:
-  cis window
-  elastic-net alpha
-  number of CV folds
-  minimum variants
-  maximum isoforms
-  gene list
-  plink2 path
-  temporary directory
+  host preparer: cis window, gene list
+  pure-R model worker: elastic-net alpha, number of CV folds,
+                       minimum variants, maximum isoforms
 ```
+
+The external-tool executables and preparation directories are intentionally
+owned by the host-side batch workers/preparers rather than exposed as R-worker
+options. `plink2`/`tabix` are resolved after module/environment setup before R
+is launched.
 
 For reproducible production use, these should be exposed by the corresponding
 submitter scripts as explicit environment variables rather than changed

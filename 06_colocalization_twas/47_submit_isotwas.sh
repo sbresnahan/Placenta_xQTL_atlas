@@ -10,8 +10,9 @@
 # pgen required).
 # Step 1 counts genes per weight set. Step 2 submits one LSF job array per
 # weight set; each element runs
-# 47a_run_isotwas_shard.sh -> 46_isotwas_train.R on a round-robin shard of
-# the gene universe (expression BED phenotype_ids; intersection across
+# 47a_run_isotwas_shard.sh, which prepares cis dosages/BED subsets on the host
+# and then runs 46_isotwas_train.R on a round-robin shard of the gene universe
+# (expression BED phenotype_ids; intersection across
 # ancestries for the pooled set).
 #
 # Prerequisites:
@@ -56,7 +57,6 @@ R2_MIN="${R2_MIN:-0.01}"
 TEST="${TEST:-0}"
 FORCE_RUN="${FORCE_RUN:-0}"
 RSCRIPT="${RSCRIPT:-${REPO_ROOT}/bin/Rscript_sif}"
-PLINK2="${PLINK2:-plink2}"
 
 mkdir -p "$ISOTWAS_DIR" "$LOG_DIR"
 

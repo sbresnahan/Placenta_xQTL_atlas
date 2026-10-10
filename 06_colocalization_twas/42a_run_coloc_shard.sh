@@ -1,27 +1,38 @@
 #!/bin/bash
 # =============================================================================
-# 42a_run_coloc_shard.sh — LSF array element: run one coloc shard
+# 42a_run_coloc_shard.sh — LSF array element: prepare + run one coloc shard
 # =============================================================================
 # Invoked by bsub via 42_submit_coloc.sh with env:
 #   TASKS, N_SHARDS, COLOC_DIR, MIN_VARIANTS, PP_H4, FORCE_RUN, RSCRIPT,
 #   SCRIPTS_DIR
 # $LSB_JOBINDEX selects the shard.
 #
-# Compute-node environment: seadragon modules 'plink' (plink2) and 'samtools'
-# (tabix; 41_susie_coloc.R slices tabix-indexed summary stats and calls plink2
-# for LD). R runs via $RSCRIPT (singularity wrapper); the R script sets its
-# own .libPaths() — bash-level R_LIBS_* is not relied upon.
+# External command-line tools run ONLY in the host-side Python preparation
+# phase. 41_susie_coloc.R runs via $RSCRIPT (Singularity) and consumes only
+# prepared TSV/LD files; R never invokes tabix, plink2, zcat, or shell commands.
 # =============================================================================
 set -eo pipefail
 
 source /etc/profile.d/modules.sh
 module load plink samtools
 
+# Some samtools module builds do not expose tabix. Match the existing pipeline
+# convention and stack the known conda environment only when needed.
+if ! command -v tabix >/dev/null 2>&1; then
+    echo "  tabix not found from samtools module; stacking conda samtools-1.16.1"
+    eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+    conda activate --stack samtools-1.16.1
+fi
+TABIX_BIN="$(command -v tabix || true)"
+PLINK2_BIN="$(command -v plink2 || true)"
+[ -n "$TABIX_BIN" ] || { echo "ERROR: tabix unavailable after module + conda fallback" >&2; exit 1; }
+[ -n "$PLINK2_BIN" ] || { echo "ERROR: plink2 not found after 'module load plink'" >&2; exit 1; }
+
 SHARD_INDEX="${LSB_JOBINDEX:?ERROR: LSB_JOBINDEX not set (submit as a job array)}"
 
 # FORCE_RUN: clear .done sentinels for this shard's tasks so the worker
 # re-runs them (worker skips tasks with existing .done otherwise).
-# Stdlib python only (csv/re/pathlib) — no conda env needed on compute nodes.
+# Stdlib python only (csv/re/pathlib) — no conda Python dependency.
 if [ "${FORCE_RUN:-0}" = "1" ]; then
     python3 - "$TASKS" "$SHARD_INDEX" "$N_SHARDS" "${COLOC_DIR}/results" <<'PYEOF'
 import csv
@@ -48,10 +59,31 @@ print(f"FORCE_RUN: cleared {removed} .done sentinels for shard {shard_index}")
 PYEOF
 fi
 
-"$RSCRIPT" "${SCRIPTS_DIR}/41_susie_coloc.R" \
+# Keep prepared artifacts on the shared /rsrch filesystem so they are visible
+# inside the Singularity R container. Remove them after success unless requested.
+PREP_DIR="${COLOC_DIR}/prepared/susie/${LSB_JOBID:-manual}_${SHARD_INDEX}"
+PREPARED="${PREP_DIR}/shard-$(printf '%04d' "$SHARD_INDEX").tsv"
+rm -rf "$PREP_DIR"
+mkdir -p "$PREP_DIR"
+
+python3 "${SCRIPTS_DIR}/41_prepare_susie_coloc_inputs.py" \
     --tasks "$TASKS" \
+    --shard-index "$SHARD_INDEX" \
+    --n-shards "$N_SHARDS" \
+    --work-dir "${PREP_DIR}/work" \
+    --out "$PREPARED" \
+    --tabix "$TABIX_BIN" \
+    --plink2 "$PLINK2_BIN" \
+    --min-variants "${MIN_VARIANTS:-50}"
+
+"$RSCRIPT" "${SCRIPTS_DIR}/41_susie_coloc.R" \
+    --prepared-tasks "$PREPARED" \
     --shard-index "$SHARD_INDEX" \
     --n-shards "$N_SHARDS" \
     --outdir "$COLOC_DIR" \
     --min-variants "${MIN_VARIANTS:-50}" \
     --pp-h4 "${PP_H4:-0.7}"
+
+if [ "${KEEP_PREP:-0}" != "1" ]; then
+    rm -rf "$PREP_DIR"
+fi

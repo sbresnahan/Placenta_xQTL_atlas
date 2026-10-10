@@ -41,16 +41,19 @@ weight, gestational duration, glycemic traits, and childhood adiposity:
 | `38_harmonize_gwas.py` | Column standardization, hg19->GRCh38 liftover (pure-Python chain mapper), allele alignment to the pooled pgen, bgzip+tabix output `{trait_id}.sumstats.tsv.gz` |
 | `39_run_nominal.py` / `.sh` | Genome-wide `cis.map_nominal` shards + merge to `{ANC}_{MOD}.nominal.tsv.gz` (+ tabix) |
 | `40_prepare_coloc_loci.py` | Per-modality coloc task lists (`loci/{MOD}.tasks.tsv`) + 1KG superpopulation keep files (`loci/{ANC}.1kg.keep`) |
-| `41_susie_coloc.R` | Pairwise SuSiE-coloc worker (one shard of a task list) |
-| `42_submit_coloc.sh` / `42a_run_coloc_shard.sh` | LSF array driver (one array per modality) |
+| `41_prepare_susie_coloc_inputs.py` | Host-side tabix slicing + plink2 ancestry-matched LD preparation for one SuSiE-coloc shard |
+| `41_susie_coloc.R` | Pure-R pairwise SuSiE-coloc statistical worker; reads prepared summary-statistic/LD files only |
+| `42_submit_coloc.sh` / `42a_run_coloc_shard.sh` | LSF array driver (one array per modality); host preparation runs before Singularity R |
 | `43_prepare_colocboost.py` | Region builder: per-ancestry merged union of fine-mapped loci + outcome manifests (`colocboost/{ANC}.regions.tsv`, `{ANC}.outcomes.tsv`) |
-| `44_colocboost.R` | colocBoost worker (one shard of regions; X_ref dosage mode) |
-| `45_submit_colocboost.sh` / `45a_run_colocboost_shard.sh` | LSF array driver (one array per ancestry) |
-| `46_isotwas_train.R` | isoTWAS/TWAS weight trainer (one shard of genes; FUSION-format per-model `.wgt.RDat` + shard `.pos`) |
-| `47_submit_isotwas.sh` / `47a_run_isotwas_shard.sh` | LSF array driver (one array per weight set) |
+| `44_prepare_colocboost_inputs.py` | Host-side tabix slicing + plink2 dosage export for one colocBoost shard |
+| `44_colocboost.R` | Pure-R colocBoost statistical worker (X_ref dosage mode) |
+| `45_submit_colocboost.sh` / `45a_run_colocboost_shard.sh` | LSF array driver (one array per ancestry); host preparation runs before Singularity R |
+| `46_prepare_isotwas_inputs.py` | Host-side BED extraction + plink2 cis-dosage export for one isoTWAS shard |
+| `46_isotwas_train.R` | Pure-R isoTWAS/TWAS weight trainer; FUSION-format per-model `.wgt.RDat` + shard `.pos` |
+| `47_submit_isotwas.sh` / `47a_run_isotwas_shard.sh` | LSF array driver (one array per weight set); host preparation runs before Singularity R |
 | `48_fusion_twas.sh` / `48a_run_fusion.sh` | FUSION association testing per weight set x trait (per-chromosome 1KG LD refs built here) |
 | `49_aggregate_coloc_twas.py` | Aggregation + gene-level ACAT + cell-type annotation |
-| `coloc_common.R` | Shared helpers (tabix slicing, plink2 LD/dosage export, psam N) |
+| `coloc_common.R` | Pure-R shared helpers only; no command execution |
 | `gwas_catalog.tsv` | GWAS source catalog (see below) |
 
 ## GWAS catalog
@@ -119,7 +122,7 @@ $RESULTS_DIR/
 ## Tests
 
 `pytest test_susie_coloc.py test_colocboost.py test_isotwas_train.py
-test_aggregate.py` — fixture-based: shared vs distinct causal variants for
+test_no_r_cli_downstream.py test_aggregate.py` — fixture-based: shared vs distinct causal variants for
 coloc/colocBoost; weight recovery + R^2 gate + FUSION round-trip for isoTWAS;
 aggregation smoke test. Fixtures need `plink2`, `bgzip`, `tabix`, and R with
 `coloc`, `colocboost`, `glmnet` (sandbox: run 36 or use the conda R).

@@ -1,4 +1,4 @@
-"""Fixture test for 41_susie_coloc.R.
+"""Fixture test for 41_prepare_susie_coloc_inputs.py -> 41_susie_coloc.R.
 
 Simulates two small genotype panels (an in-sample "xQTL" pgen and a
 reference "1KG" pgen) over one locus with blocky LD, then generates:
@@ -20,6 +20,7 @@ import pandas as pd
 import pytest
 
 HERE = Path(__file__).resolve().parent
+PREP_SCRIPT = HERE / "41_prepare_susie_coloc_inputs.py"
 R_SCRIPT = HERE / "41_susie_coloc.R"
 RSCRIPT = os.environ.get("RSCRIPT", "Rscript")
 
@@ -168,10 +169,21 @@ def coloc_fixture(tmp_path_factory):
 
 def run_worker(tmp):
     env = dict(os.environ)
+    prep_dir = tmp / "prepared_susie"
+    prep_dir.mkdir(exist_ok=True)
+    manifest = prep_dir / "prepared.tasks.tsv"
+    prep = subprocess.run(
+        ["python3", str(PREP_SCRIPT),
+         "--tasks", str(tmp / "expression.tasks.tsv"),
+         "--shard-index", "1", "--n-shards", "1",
+         "--work-dir", str(prep_dir / "work"),
+         "--out", str(manifest), "--min-variants", "50"],
+        capture_output=True, text=True, env=env, timeout=1800)
+    assert prep.returncode == 0, f"preparer failed:\n{prep.stdout}\n{prep.stderr}"
     proc = subprocess.run(
-        [RSCRIPT, str(R_SCRIPT), "--tasks", str(tmp / "expression.tasks.tsv"),
-         "--shard-index", "1", "--n-shards", "1", "--outdir", str(tmp / "coloc"),
-         "--min-variants", "50"],
+        [RSCRIPT, str(R_SCRIPT), "--prepared-tasks", str(manifest),
+         "--shard-index", "1", "--n-shards", "1",
+         "--outdir", str(tmp / "coloc"), "--min-variants", "50"],
         capture_output=True, text=True, env=env, timeout=1800)
     assert proc.returncode == 0, f"worker failed:\n{proc.stdout}\n{proc.stderr}"
     return proc

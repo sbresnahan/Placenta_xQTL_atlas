@@ -7,8 +7,9 @@
 #
 # Step 1 builds the per-modality task lists (40_prepare_coloc_loci.py) unless
 # they already exist. Step 2 submits one LSF job array per modality; each
-# array element runs 42a_run_coloc_shard.sh -> 41_susie_coloc.R on a
-# round-robin shard of the task list. Per-task .done sentinels make reruns
+# array element runs 42a_run_coloc_shard.sh, which prepares its round-robin
+# task shard on the host and then runs the pure-R 41_susie_coloc.R worker.
+# Per-task .done sentinels make reruns
 # incremental, so it is safe to resubmit at any time.
 #
 # Prerequisites:
@@ -16,7 +17,8 @@
 #   - 37/38 completed (or manual GWAS placed) for every cataloged trait
 #   - 39 completed: {RESULTS_DIR}/nominal/{ANC}/{ANC}_{MOD}.nominal.tsv.gz+.tbi
 #   - 40 completed (or run here): {RESULTS_DIR}/coloc/loci/{MOD}.tasks.tsv
-#   - tabix and plink2 on PATH inside the job environment
+#   - compute-node modules 'samtools' (tabix) and 'plink' (plink2); these are
+#     used by host-side preprocessing, never invoked from R/Singularity
 #
 # Usage:
 #   TEST=1 bash 42_submit_coloc.sh   # build task lists + submit ONE pilot shard
@@ -125,7 +127,7 @@ for MOD in $MODALITIES; do
     fi
     N_SHARDS=$(( (N_TASKS + SHARD_SIZE - 1) / SHARD_SIZE ))
     # TEST=1: submit ONLY array index 1 but keep the true N_SHARDS in the
-    # worker environment. The R worker assigns tasks round-robin by
+    # worker environment. The host preparer assigns tasks round-robin by
     # N_SHARDS, so N_SHARDS=1 would assign EVERY task to the pilot shard.
     ARRAY_SPEC="1-${N_SHARDS}"
     if [ "$TEST" = "1" ]; then ARRAY_SPEC="1"; fi

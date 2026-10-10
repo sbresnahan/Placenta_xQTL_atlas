@@ -10,18 +10,16 @@
 # {COLOC_DIR}/loci/{MOD}.tasks.tsv) is one
 #   modality x phenotype_id (fine-mapped locus) x ancestry x GWAS trait
 # combination. For every task this worker:
-#   1. slices the merged genome-wide nominal xQTL stats (39_run_nominal.py)
-#      and the harmonized GWAS stats (38_harmonize_gwas.py) to the locus
-#      window with tabix and merges them on var_id (chr:pos:ref:alt);
-#   2. computes in-sample LD for the xQTL side (plink2 --r-unphased square on
-#      the intersected {ANC}_qtl pgen) and reference LD for the GWAS side
-#      (1KG pgen restricted to the matching superpopulation via --keep);
-#   3. drops variants missing from either LD source and requires
+#   1. reads summary-statistics and LD artifacts prepared by
+#      41_prepare_susie_coloc_inputs.py in the host LSF environment;
+#   2. drops variants missing from either LD source and requires
 #      >= --min-variants shared variants;
-#   4. fits coloc::runsusie() on each dataset (xQTL L from the fine-mapping
+#   3. fits coloc::runsusie() on each dataset (xQTL L from the fine-mapping
 #      independent-signal count, GWAS L = --gwas-L) and runs
 #      coloc::coloc.susie();
-#   5. writes per-task outputs and a .done sentinel.
+#   4. writes per-task outputs and a .done sentinel.
+#
+# This R worker intentionally never invokes command-line tools.
 #
 # Convergence failures are FLAGGED (status column), not rescued — the aims
 # eCAVIAR fallback is intentionally not implemented.
@@ -36,8 +34,8 @@
 #   {outdir}/diagnostics/{modality}.shard-{idx}.diagnostics.tsv
 #
 # Usage:
-#   Rscript 41_susie_coloc.R --tasks {MOD}.tasks.tsv --shard-index 1 \
-#       --n-shards 40 --outdir $RESULTS_DIR/coloc
+#   Rscript 41_susie_coloc.R --prepared-tasks prepared.tasks.tsv \
+#       --shard-index 1 --n-shards 40 --outdir $RESULTS_DIR/coloc
 # =============================================================================
 
 R_LIB <- "/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1"
@@ -51,14 +49,13 @@ suppressPackageStartupMessages({
 })
 
 option_list <- list(
-  make_option("--tasks", type = "character", help = "task list TSV from 40_prepare_coloc_loci.py"),
+  make_option("--prepared-tasks", type = "character",
+              help = "prepared shard TSV from 41_prepare_susie_coloc_inputs.py"),
   make_option("--shard-index", type = "integer", default = 1L,
               help = "1-based shard index (e.g. $LSB_JOBINDEX)"),
   make_option("--n-shards", type = "integer", default = 1L,
               help = "total number of shards for this task list"),
   make_option("--outdir", type = "character", help = "coloc output dir (COLOC_DIR)"),
-  make_option("--plink2", type = "character", default = "plink2",
-              help = "plink2 binary [default %default]"),
   make_option("--min-variants", type = "integer", default = 50L,
               help = "minimum shared variants with LD on both sides [default %default]"),
   make_option("--gwas-L", type = "integer", default = 10L,
@@ -66,39 +63,41 @@ option_list <- list(
   make_option("--max-L", type = "integer", default = 20L,
               help = "cap on the xQTL-side L taken from the locus list [default %default]"),
   make_option("--pp-h4", type = "double", default = 0.7,
-              help = "PP.H4 threshold for the colocalization call [default %default]"),
-  make_option("--tmp-dir", type = "character", default = tempdir(),
-              help = "scratch dir for plink2 LD output [default tempdir()]")
+              help = "PP.H4 threshold for the colocalization call [default %default]")
 )
 opt <- parse_args(OptionParser(option_list = option_list))
 
-# shared helpers (tabix_slice, run_ld, psam_n, sanitize_id)
-.args_all <- commandArgs(trailingOnly = FALSE)
-.file_arg <- sub("^--file=", "", grep("^--file=", .args_all, value = TRUE))
-.scripts_dir <- Sys.getenv("SCRIPTS_DIR",
-                           unset = if (length(.file_arg)) dirname(.file_arg[1]) else getwd())
-source(file.path(.scripts_dir, "coloc_common.R"))
+sanitize_id <- function(x) gsub("[^A-Za-z0-9._+-]", "_", x)
+read_ld <- function(matrix_path, vars_path) {
+  if (is.na(matrix_path) || is.na(vars_path) ||
+      !file.exists(matrix_path) || !file.exists(vars_path)) return(NULL)
+  ids <- readLines(vars_path, warn = FALSE)
+  ids <- ids[!grepl("^#", ids)]
+  if (length(ids) == 0L) return(NULL)
+  mat <- as.matrix(data.table::fread(matrix_path, header = FALSE,
+                                     showProgress = FALSE))
+  storage.mode(mat) <- "double"
+  if (nrow(mat) != length(ids) || ncol(mat) != length(ids)) return(NULL)
+  dimnames(mat) <- list(ids, ids)
+  list(LD = mat, present = ids)
+}
 
 dir.create(file.path(opt$outdir, "diagnostics"), showWarnings = FALSE, recursive = TRUE)
 
-tasks <- fread(opt$tasks)
+tasks <- fread(opt$`prepared-tasks`)
+if (nrow(tasks) == 0L) stop("prepared task manifest has no rows: ", opt$`prepared-tasks`)
 modality <- unique(tasks$modality)
 if (length(modality) != 1L) stop("task file mixes modalities: ", paste(modality, collapse = ","))
 diag_path <- file.path(opt$outdir, "diagnostics",
                        sprintf("%s.shard-%04d.diagnostics.tsv", modality, opt$`shard-index`))
-
-# round-robin shard assignment: row i -> shard ((i-1) %% n_shards) + 1
-shard_rows <- which(((seq_len(nrow(tasks)) - 1L) %% opt$`n-shards`) + 1L == opt$`shard-index`)
-tasks <- tasks[shard_rows, ]
-message(sprintf("[shard %d/%d] %d tasks from %s", opt$`shard-index`, opt$`n-shards`,
-                nrow(tasks), opt$tasks))
+message(sprintf("[shard %d/%d] %d prepared tasks from %s", opt$`shard-index`,
+                opt$`n-shards`, nrow(tasks), opt$`prepared-tasks`))
 
 sanitize <- sanitize_id
-get_n_xqtl <- psam_n
 
 # --- per-task worker ---------------------------------------------------------
 
-run_task <- function(task, tmp_dir) {
+run_task <- function(task) {
   t0 <- Sys.time()
   base <- sprintf("%s_%s_%s", task$ancestry, sanitize(task$phenotype_id), task$trait_id)
   res_dir <- file.path(opt$outdir, "results", task$modality)
@@ -115,6 +114,7 @@ run_task <- function(task, tmp_dir) {
                      walltime_sec = NA_real_)
 
   finish <- function(status, message = "") {
+    if (length(message) == 0L || is.na(message)) message <- ""
     diag$status <- status
     diag$message <- gsub("[\t\n\r]", " ", substr(message, 1, 300))
     diag$walltime_sec <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
@@ -130,39 +130,22 @@ run_task <- function(task, tmp_dir) {
 
   if (file.exists(done_path)) return(finish("ok", "already done"))
 
-  # 1. slice summary statistics ---------------------------------------------
-  xq <- tabix_slice(task$xqtl_file, task$chrom, task$start, task$end)
-  if (is.null(xq)) return(finish("no_xqtl_variants"))
-  xq <- xq[phenotype_id == task$phenotype_id]
-  if (nrow(xq) == 0L) return(finish("no_xqtl_variants", "phenotype absent from slice"))
+  # External I/O (tabix/plink2) has already run in the host-side preparer.
+  prep_status <- if (is.na(task$prep_status)) "error" else task$prep_status
+  prep_message <- if (is.na(task$prep_message)) "" else task$prep_message
+  if (prep_status != "ok") return(finish(prep_status, prep_message))
 
-  gw <- tabix_slice(task$gwas_file, task$chrom, task$start, task$end)
-  if (is.null(gw)) return(finish("no_gwas_variants"))
-
-  # 2. merge on var_id --------------------------------------------------------
-  xq <- xq[, .(var_id = variant_id, pos_x = pos, slope, slope_se, af,
-               pval_nominal)]
-  gw <- gw[, .(var_id, pos_g = pos, beta, se, eaf, pval, n)]
-  m <- merge(xq, gw, by = "var_id")
-  if (nrow(m) == 0L) return(finish("no_shared_variants"))
-  # dedupe (paranoid; ids should be unique) keeping the min xQTL p
-  setorder(m, pval_nominal)
-  m <- m[!duplicated(var_id)]
-  # usable rows only
-  m <- m[is.finite(slope) & is.finite(slope_se) & slope_se > 0 &
-         is.finite(beta) & is.finite(se) & se > 0 &
-         is.finite(af) & af > 0 & af < 1 &
-         is.finite(eaf) & eaf > 0 & eaf < 1]
+  m <- tryCatch(fread(task$merged_file), error = function(e) NULL)
+  if (is.null(m)) return(finish("error", "could not read prepared merged stats"))
   diag$nsnps_merged <- nrow(m)
   if (nrow(m) < opt$`min-variants`) return(finish("too_few_variants", "after merge"))
   setorder(m, pos_x)
   var_ids <- m$var_id
 
-  # 3. LD on both sides -------------------------------------------------------
-  ld_x <- run_ld(opt$plink2, task$ld_xqtl_pgen, NULL, var_ids, file.path(tmp_dir, "ld_xqtl"))
+  # 1. LD files prepared by plink2 outside R ---------------------------------
+  ld_x <- read_ld(task$ld_x_matrix, task$ld_x_vars)
   if (is.null(ld_x)) return(finish("ld_failed_xqtl"))
-  ld_g <- run_ld(opt$plink2, task$ld_gwas_pgen, task$ld_gwas_keep, var_ids,
-                 file.path(tmp_dir, "ld_gwas"))
+  ld_g <- read_ld(task$ld_g_matrix, task$ld_g_vars)
   if (is.null(ld_g)) return(finish("ld_failed_gwas"))
 
   keep <- intersect(var_ids, intersect(ld_x$present, ld_g$present))
@@ -177,9 +160,9 @@ run_task <- function(task, tmp_dir) {
   LDx <- ld_x$LD[m$var_id, m$var_id, drop = FALSE]
   LDg <- ld_g$LD[m$var_id, m$var_id, drop = FALSE]
 
-  # 4. coloc datasets ---------------------------------------------------------
-  n_xqtl <- get_n_xqtl(task$ld_xqtl_pgen)
-  if (is.na(n_xqtl) || n_xqtl < 10) return(finish("error", "could not read xQTL N from psam"))
+  # 2. coloc datasets ---------------------------------------------------------
+  n_xqtl <- suppressWarnings(as.numeric(task$n_xqtl))
+  if (is.na(n_xqtl) || n_xqtl < 10) return(finish("error", "invalid prepared xQTL N"))
   n_gwas <- as.numeric(stats::median(m$n, na.rm = TRUE))
   if (!is.finite(n_gwas)) n_gwas <- NA_real_
 
@@ -198,7 +181,7 @@ run_task <- function(task, tmp_dir) {
     d2$s <- s
   }
 
-  # 5. SuSiE fits + coloc -----------------------------------------------------
+  # 3. SuSiE fits + coloc -----------------------------------------------------
   L_x <- min(max(as.integer(task$L), 5L), opt$`max-L`)
   fit1 <- tryCatch(
     runsusie(d1, suffix = 1, repeat_until_convergence = FALSE, L = L_x),
@@ -224,7 +207,7 @@ run_task <- function(task, tmp_dir) {
   if (is.null(res$summary) || !("PP.H4.abf" %in% names(res$summary)))
     return(finish("no_cs_pair"))
 
-  # 6. outputs ----------------------------------------------------------------
+  # 4. outputs ----------------------------------------------------------------
   summ <- as.data.table(res$summary)
   meta <- data.table(modality = task$modality, phenotype_id = task$phenotype_id,
                      trait_id = task$trait_id, ancestry = task$ancestry,
@@ -266,17 +249,13 @@ run_task <- function(task, tmp_dir) {
 
 # --- run shard ---------------------------------------------------------------
 
-tmp_dir <- tempfile(pattern = "coloc_", tmpdir = opt$`tmp-dir`)
-dir.create(tmp_dir, showWarnings = FALSE, recursive = TRUE)
-on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
-
 diags <- vector("list", nrow(tasks))
 for (i in seq_len(nrow(tasks))) {
   task <- tasks[i, ]
   message(sprintf("[%d/%d] %s | %s | %s | %s:%d-%d", i, nrow(tasks),
                   task$ancestry, task$phenotype_id, task$trait_id,
                   task$chrom, task$start, task$end))
-  diags[[i]] <- tryCatch(run_task(task, tmp_dir),
+  diags[[i]] <- tryCatch(run_task(task),
                          error = function(e) data.table(
                            modality = task$modality, phenotype_id = task$phenotype_id,
                            trait_id = task$trait_id, ancestry = task$ancestry,

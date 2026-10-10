@@ -6,8 +6,9 @@
 #
 # Step 1 builds region/outcome manifests (43_prepare_colocboost.py) unless
 # present. Step 2 submits one LSF job array per ancestry; each element runs
-# 45a_run_colocboost_shard.sh -> 44_colocboost.R on a round-robin shard of
-# the region list. Per-region .done sentinels make reruns incremental.
+# 45a_run_colocboost_shard.sh, which prepares tabix/plink2 inputs on the host
+# and then runs 44_colocboost.R on a round-robin shard of the region list.
+# Per-region .done sentinels make reruns incremental.
 #
 # Prerequisites:
 #   - 36_install_coloc_env.sh completed (colocboost in the R library)

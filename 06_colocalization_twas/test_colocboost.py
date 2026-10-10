@@ -1,4 +1,4 @@
-"""Fixture test for 44_colocboost.R.
+"""Fixture test for 44_prepare_colocboost_inputs.py -> 44_colocboost.R.
 
 Reuses the simulated panels from test_susie_coloc.py. Builds one region with
 three outcomes sharing the same causal variant (two xQTL phenotypes + one
@@ -22,6 +22,7 @@ from test_susie_coloc import (CHROM, POSITIONS, VAR_IDS, make_pgen, regress,
                               simulate_genotypes, write_tabix_tsv, write_vcf)
 
 HERE = Path(__file__).resolve().parent
+PREP_SCRIPT = HERE / "44_prepare_colocboost_inputs.py"
 R_SCRIPT = HERE / "44_colocboost.R"
 RSCRIPT = os.environ.get("RSCRIPT", "Rscript")
 RNG = np.random.default_rng(7)
@@ -114,18 +115,27 @@ def cb_fixture(tmp_path_factory):
 
 
 def run_worker(tmp):
-    proc = subprocess.run(
-        [RSCRIPT, str(R_SCRIPT),
+    prep_dir = tmp / "prepared_colocboost"
+    prep_dir.mkdir(exist_ok=True)
+    manifest = prep_dir / "prepared.regions.tsv"
+    env = {**os.environ, "SCRIPTS_DIR": str(HERE)}
+    prep = subprocess.run(
+        ["python3", str(PREP_SCRIPT),
          "--regions", str(tmp / "EAS.regions.tsv"),
          "--outcomes", str(tmp / "EAS.outcomes.tsv"),
          "--shard-index", "1", "--n-shards", "1",
          "--outdir", str(tmp / "cb"),
+         "--work-dir", str(prep_dir), "--manifest", str(manifest),
          "--ld-xqtl-pgen", str(tmp / "EAS_qtl"),
          "--ld-gwas-pgen", str(tmp / "1kg"),
-         "--ld-gwas-keep", str(tmp / "EAS.1kg.keep"),
-         "--min-variants", "50"],
-        capture_output=True, text=True, timeout=3600,
-        env={**os.environ, "SCRIPTS_DIR": str(HERE)})
+         "--ld-gwas-keep", str(tmp / "EAS.1kg.keep")],
+        capture_output=True, text=True, timeout=3600, env=env)
+    assert prep.returncode == 0, f"preparer failed:\n{prep.stdout}\n{prep.stderr}"
+    proc = subprocess.run(
+        [RSCRIPT, str(R_SCRIPT),
+         "--prepared-manifest", str(manifest),
+         "--outdir", str(tmp / "cb"), "--min-variants", "50"],
+        capture_output=True, text=True, timeout=3600, env=env)
     assert proc.returncode == 0, f"worker failed:\n{proc.stdout}\n{proc.stderr}"
     return proc
 

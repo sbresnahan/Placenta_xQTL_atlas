@@ -27,6 +27,7 @@ from test_susie_coloc import (CHROM, POSITIONS, VAR_IDS, make_pgen, regress,
                               simulate_genotypes, write_vcf)
 
 HERE = Path(__file__).resolve().parent
+PREP_SCRIPT = HERE / "46_prepare_isotwas_inputs.py"
 R_SCRIPT = HERE / "46_isotwas_train.R"
 RSCRIPT = os.environ.get("RSCRIPT", "Rscript")
 FUSION_DIR = Path(os.environ.get("FUSION_DIR", "/workspace/fusion_twas"))
@@ -88,12 +89,23 @@ def twas_fixture(tmp_path_factory):
 
 def run_trainer(tmp, weight_set):
     outdir = tmp / "isotwas"
+    prep_dir = outdir / "prepared_test" / weight_set
+    prep_dir.mkdir(parents=True, exist_ok=True)
+    manifest = prep_dir / "shard-0001.tsv"
+    env = {**os.environ, "SCRIPTS_DIR": str(HERE)}
+    prep = subprocess.run(
+        ["python3", str(PREP_SCRIPT), "--weight-set", weight_set,
+         "--shard-index", "1", "--n-shards", "1",
+         "--qtl-dir", str(tmp / "qtl"), "--outdir", str(outdir),
+         "--work-dir", str(prep_dir), "--manifest", str(manifest),
+         "--force"],
+        capture_output=True, text=True, timeout=3600, env=env)
+    assert prep.returncode == 0, f"preparer failed:\n{prep.stdout}\n{prep.stderr}"
     cmd = [RSCRIPT, str(R_SCRIPT), "--weight-set", weight_set,
-           "--shard-index", "1", "--n-shards", "1",
+           "--shard-index", "1", "--prepared-manifest", str(manifest),
            "--qtl-dir", str(tmp / "qtl"), "--outdir", str(outdir),
            "--min-variants", "20", "--r2-min", "0.05"]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600,
-                          env={**os.environ, "SCRIPTS_DIR": str(HERE)})
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, env=env)
     assert proc.returncode == 0, f"trainer failed:\n{proc.stdout}\n{proc.stderr}"
     return proc
 
