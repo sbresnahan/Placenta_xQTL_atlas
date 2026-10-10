@@ -16,19 +16,31 @@ set -eo pipefail
 source /etc/profile.d/modules.sh
 module load plink samtools
 
+# Capture the module-provided PLINK2 before conda changes PATH.  The installed
+# PLINK v2.00a3.6LM can export dosages but cannot produce bulk LD matrices.
+PLINK2_BIN="$(command -v plink2 || true)"
+[ -n "$PLINK2_BIN" ] || { echo "ERROR: plink2 not found after 'module load plink'" >&2; exit 1; }
+
+# The host-side preparer computes signed LD from PLINK2-exported dosages with
+# NumPy. Explicitly activate tensorqtl so the batch job uses the same supported
+# Python environment as the mapping pipeline instead of the old system Python.
+eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
+conda activate tensorqtl
+PYTHON_BIN="$(command -v python3 || true)"
+[ -n "$PYTHON_BIN" ] || { echo "ERROR: python3 unavailable in tensorqtl env" >&2; exit 1; }
+"$PYTHON_BIN" -c 'import numpy' >/dev/null 2>&1 || {
+    echo "ERROR: NumPy unavailable in tensorqtl env" >&2
+    exit 1
+}
+
 # Some samtools module builds do not expose tabix. Match the existing pipeline
 # convention and stack the known conda environment only when needed.
 if ! command -v tabix >/dev/null 2>&1; then
     echo "  tabix not found from samtools module; stacking conda samtools-1.16.1"
-    eval "$(/risapps/rhel8/miniforge3/24.5.0-0/bin/conda shell.bash hook)"
     conda activate --stack samtools-1.16.1
 fi
 TABIX_BIN="$(command -v tabix || true)"
-PLINK2_BIN="$(command -v plink2 || true)"
-PLINK1_BIN="$(command -v plink || true)"
 [ -n "$TABIX_BIN" ] || { echo "ERROR: tabix unavailable after module + conda fallback" >&2; exit 1; }
-[ -n "$PLINK2_BIN" ] || { echo "ERROR: plink2 not found after 'module load plink'" >&2; exit 1; }
-[ -n "$PLINK1_BIN" ] || { echo "ERROR: PLINK 1.9 (plink) not found after 'module load plink'" >&2; exit 1; }
 
 SHARD_INDEX="${LSB_JOBINDEX:?ERROR: LSB_JOBINDEX not set (submit as a job array)}"
 
@@ -36,7 +48,7 @@ SHARD_INDEX="${LSB_JOBINDEX:?ERROR: LSB_JOBINDEX not set (submit as a job array)
 # re-runs them (worker skips tasks with existing .done otherwise).
 # Stdlib python only (csv/re/pathlib) — no conda Python dependency.
 if [ "${FORCE_RUN:-0}" = "1" ]; then
-    python3 - "$TASKS" "$SHARD_INDEX" "$N_SHARDS" "${COLOC_DIR}/results" <<'PYEOF'
+    "$PYTHON_BIN" - "$TASKS" "$SHARD_INDEX" "$N_SHARDS" "${COLOC_DIR}/results" <<'PYEOF'
 import csv
 import re
 import sys
@@ -68,7 +80,7 @@ PREPARED="${PREP_DIR}/shard-$(printf '%04d' "$SHARD_INDEX").tsv"
 rm -rf "$PREP_DIR"
 mkdir -p "$PREP_DIR"
 
-python3 "${SCRIPTS_DIR}/41_prepare_susie_coloc_inputs.py" \
+"$PYTHON_BIN" "${SCRIPTS_DIR}/41_prepare_susie_coloc_inputs.py" \
     --tasks "$TASKS" \
     --shard-index "$SHARD_INDEX" \
     --n-shards "$N_SHARDS" \
@@ -76,7 +88,6 @@ python3 "${SCRIPTS_DIR}/41_prepare_susie_coloc_inputs.py" \
     --out "$PREPARED" \
     --tabix "$TABIX_BIN" \
     --plink2 "$PLINK2_BIN" \
-    --plink1 "$PLINK1_BIN" \
     --min-variants "${MIN_VARIANTS:-50}"
 
 "$RSCRIPT" "${SCRIPTS_DIR}/41_susie_coloc.R" \

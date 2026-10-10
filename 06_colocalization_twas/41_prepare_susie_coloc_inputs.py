@@ -5,16 +5,19 @@ All external command-line I/O belongs here, outside R.  For each task assigned
 to this shard the script:
   * extracts the xQTL and GWAS locus with tabix;
   * merges/filters shared variants;
-  * subsets each PGEN with plink2, then computes signed LD with PLINK 1.9;
+  * exports ALT-coded dosages from each PGEN with plink2;
+  * computes signed LD from those dosages with NumPy;
   * writes a prepared-task manifest consumed by 41_susie_coloc.R.
 
 The R worker never invokes tabix, plink2, zcat, head, or any other command-line
 tool.  This is important because R runs inside Singularity whereas this script
 runs in the host LSF environment where the plink/samtools modules are loaded.
 
-PLINK 2.00a3.6LM (the cluster module) predates bulk --r/--r-unphased.
-For compatibility, PGEN filtering/conversion is done with plink2 and the actual
-signed correlation matrix is computed by PLINK 1.9 ``--r square``.
+PLINK 2.00a3.6LM (the cluster module) predates bulk --r/--r-unphased, but it
+does support dosage-aware ``--export Av``.  We therefore export variant-major
+ALT dosages with plink2 and calculate the signed Pearson correlation matrix in
+Python/NumPy.  This keeps the workflow compatible with the installed PLINK2
+without requiring PLINK 1.9.
 """
 
 import argparse
@@ -25,6 +28,8 @@ import math
 import re
 import subprocess
 from pathlib import Path
+
+import numpy as np
 
 
 PREP_FIELDS = [
@@ -164,67 +169,105 @@ def _alt_from_var_id(var_id):
     return parts[3]
 
 
-def run_ld(plink2, plink1, pgen, keep, var_ids, prefix):
+def run_ld(plink2, pgen, keep, var_ids, prefix):
+    """Export ALT-coded dosages with PLINK2 and compute signed LD in NumPy.
+
+    The installed PLINK v2.00a3.6LM predates bulk --r/--r-unphased, while
+    --export Av (variant-major additive dosage) is supported.  --export-allele
+    explicitly makes the canonical ALT allele the counted allele, matching the
+    effect direction in the harmonized xQTL/GWAS summary statistics.
+    """
     extract = Path(str(prefix) + ".extract.txt")
     extract.write_text("".join(f"{v}\n" for v in var_ids))
 
-    # The seadragon `module load plink` currently provides PLINK2
-    # v2.00a3.6LM (14 Aug 2022).  That build does not implement bulk --r;
-    # convert the filtered PGEN to a small PLINK1 binary fileset first.
-    bed_prefix = Path(str(prefix) + ".bedtmp")
+    alt_path = Path(str(prefix) + ".alt.txt")
+    alt_by_id = {}
+    with alt_path.open("w") as fh:
+        for vid in var_ids:
+            alt = _alt_from_var_id(vid)
+            alt_by_id[vid] = alt
+            fh.write(f"{vid} {alt}\n")
+
     cmd = [plink2, "--pfile", pgen, "--extract", str(extract),
-           "--max-alleles", "2", "--make-bed", "--threads", "1",
-           "--silent", "--out", str(bed_prefix)]
+           "--max-alleles", "2", "--export", "Av",
+           "--export-allele", str(alt_path), "--threads", "1",
+           "--silent", "--out", str(prefix)]
     if keep and Path(keep).exists():
         cmd[3:3] = ["--keep", keep]
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           universal_newlines=True, check=False)
-    bim = Path(str(bed_prefix) + ".bim")
-    bed = Path(str(bed_prefix) + ".bed")
-    fam = Path(str(bed_prefix) + ".fam")
-    if proc.returncode != 0 or not (bed.exists() and bim.exists() and fam.exists()):
+    traw = Path(str(prefix) + ".traw")
+    if proc.returncode != 0 or not traw.exists():
         msg = proc.stderr.strip() or proc.stdout.strip()
         if not msg:
-            msg = (f"plink2 exited {proc.returncode}; expected "
-                   f"{bed.name}/{bim.name}/{fam.name}")
+            msg = f"plink2 exited {proc.returncode}; expected {traw.name}"
         return None, msg[-1000:]
 
-    # Explicitly force A1 to the canonical ALT allele.  PLINK1's signed
-    # --r matrix is then on the same allele scale as the summary-stat effects.
-    a1_path = Path(str(prefix) + ".a1.txt")
-    with a1_path.open("w") as fh:
-        for vid in var_ids:
-            fh.write(f"{vid} {_alt_from_var_id(vid)}\n")
+    ids = []
+    dosage_rows = []
+    try:
+        with traw.open(newline="") as fh:
+            reader = csv.reader(fh, delimiter="\t")
+            header = next(reader, None)
+            if header is None or len(header) < 7:
+                return None, f"malformed PLINK2 dosage export: {traw.name}"
+            nsamples = len(header) - 6
+            for fields in reader:
+                if not fields or len(fields) != len(header):
+                    continue
+                vid = fields[1]
+                counted = fields[4]
+                expected_alt = alt_by_id.get(vid)
+                if expected_alt is None:
+                    continue
+                if counted != expected_alt:
+                    return None, (f"PLINK2 counted allele mismatch for {vid}: "
+                                  f"expected ALT={expected_alt}, got {counted}")
+                vals = []
+                for value in fields[6:]:
+                    if value in ("NA", "nan", ".", ""):
+                        vals.append(np.nan)
+                    else:
+                        vals.append(float(value))
+                if len(vals) != nsamples:
+                    return None, f"wrong dosage column count for {vid}"
+                ids.append(vid)
+                dosage_rows.append(vals)
+    except Exception as exc:
+        return None, f"could not parse {traw.name}: {exc}"
 
-    cmd = [plink1, "--bfile", str(bed_prefix), "--extract", str(extract),
-           "--a1-allele", str(a1_path), "2", "1",
-           "--keep-allele-order", "--r", "square", "--threads", "1",
-           "--silent", "--out", str(prefix)]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          universal_newlines=True, check=False)
+    if len(ids) == 0:
+        return None, f"no variants exported to {traw.name}"
+    if len(ids) != len(set(ids)):
+        return None, f"duplicate variant IDs in {traw.name}"
+    if nsamples < 2:
+        return None, f"fewer than 2 samples in {traw.name}"
+
+    G = np.asarray(dosage_rows, dtype=float)  # variants x samples
+    with np.errstate(invalid="ignore"):
+        means = np.nanmean(G, axis=1)
+    centered = G - means[:, None]
+    # Mean-impute missing dosages after centering (missing -> centered value 0).
+    centered[~np.isfinite(centered)] = 0.0
+    ss = np.sqrt(np.sum(centered * centered, axis=1))
+    denom = np.outer(ss, ss)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ld = centered.dot(centered.T) / denom
+    valid = np.isfinite(ss) & (ss > 0)
+    diag_idx = np.arange(len(ids))
+    ld[diag_idx[valid], diag_idx[valid]] = 1.0
+    ld[~np.isfinite(ld)] = np.nan
+    finite = np.isfinite(ld)
+    ld[finite] = np.clip(ld[finite], -1.0, 1.0)
+
     matrix = Path(str(prefix) + ".ld")
     vars_path = Path(str(prefix) + ".ld.vars")
-    if proc.returncode != 0 or not matrix.exists():
-        msg = proc.stderr.strip() or proc.stdout.strip()
-        if not msg:
-            msg = f"plink 1.9 exited {proc.returncode}; expected {matrix.name}"
-        return None, msg[-1000:]
-
-    # PLINK1 square matrices follow .bim variant order but do not emit an ID
-    # sidecar.  Capture that exact order for the pure-R reader.
-    bim_ids = []
-    with bim.open() as fh:
-        for line in fh:
-            fields = line.rstrip("\n").split()
-            if len(fields) >= 2:
-                bim_ids.append(fields[1])
-    if not bim_ids:
-        return None, f"no variants found in {bim.name}"
-    vars_path.write_text("".join(f"{v}\n" for v in bim_ids))
+    np.savetxt(str(matrix), ld, delimiter="\t", fmt="%.10g")
+    vars_path.write_text("".join(f"{v}\n" for v in ids))
     return (matrix, vars_path), ""
 
 
-def prepare_task(task, index, workdir, tabix, plink2, plink1, min_variants):
+def prepare_task(task, index, workdir, tabix, plink2, min_variants):
     out = dict(task)
     out.update({k: "" for k in PREP_FIELDS})
     task_dir = workdir / f"task-{index:04d}"
@@ -262,11 +305,11 @@ def prepare_task(task, index, workdir, tabix, plink2, plink1, min_variants):
         if n_xqtl is None or n_xqtl < 10:
             return fail("error", "could not read xQTL N from psam")
 
-        ldx, msg = run_ld(plink2, plink1, task["ld_xqtl_pgen"], "", var_ids,
+        ldx, msg = run_ld(plink2, task["ld_xqtl_pgen"], "", var_ids,
                           task_dir / "ld_xqtl")
         if ldx is None:
             return fail("ld_failed_xqtl", msg)
-        ldg, msg = run_ld(plink2, plink1, task["ld_gwas_pgen"],
+        ldg, msg = run_ld(plink2, task["ld_gwas_pgen"],
                           task.get("ld_gwas_keep", ""), var_ids,
                           task_dir / "ld_gwas")
         if ldg is None:
@@ -293,8 +336,6 @@ def main():
     p.add_argument("--out", required=True)
     p.add_argument("--tabix", default="tabix")
     p.add_argument("--plink2", default="plink2")
-    p.add_argument("--plink1", default="plink",
-                   help="PLINK 1.9 executable used for signed --r square LD")
     p.add_argument("--min-variants", type=int, default=50)
     args = p.parse_args()
 
@@ -308,7 +349,7 @@ def main():
     workdir = Path(args.work_dir)
     workdir.mkdir(parents=True, exist_ok=True)
     prepared = [prepare_task(t, i + 1, workdir, args.tabix, args.plink2,
-                             args.plink1, args.min_variants)
+                             args.min_variants)
                 for i, t in enumerate(selected)]
     fields = list(tasks[0].keys()) + PREP_FIELDS
     with open(args.out, "w", newline="") as fh:

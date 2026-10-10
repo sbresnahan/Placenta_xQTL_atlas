@@ -7,7 +7,7 @@ reference "1KG" pgen) over one locus with blocky LD, then generates:
   - task B: xQTL phenotype and GWAS trait driven by two DIFFERENT,
             low-LD causal variants -> expect PP.H4 < 0.7
 
-Requires plink2 + PLINK 1.9 (`plink`), bgzip, tabix on PATH and R with coloc installed.
+Requires plink2, bgzip, tabix on PATH, Python/NumPy, and R with coloc installed.
 Run:  pytest test_susie_coloc.py -v
 """
 
