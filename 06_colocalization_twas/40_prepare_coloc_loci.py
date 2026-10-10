@@ -26,17 +26,115 @@ Outputs
 """
 
 import argparse
+import io
+import re
 import sys
 from pathlib import Path
 
 import pandas as pd
 
 
+def _norm_col(name):
+    """Normalize table headers so IGSR and project-local names both match."""
+    return re.sub(r"[^a-z0-9]+", "_", str(name).strip().lower()).strip("_")
+
+
+def _sample_map_text(sample_map_path):
+    """Return data text with provenance comments removed.
+
+    csv.Sniffer (used by pandas ``sep=None``) fails when the first non-empty
+    line is a free-text comment. 1KG/IGSR-derived maps often carry such
+    provenance lines, so remove them explicitly. A comment-prefixed header
+    is retained when it clearly names both sample and superpopulation fields.
+    """
+    path = Path(sample_map_path)
+    if not path.exists():
+        sys.exit(f"ERROR: 1KG sample map does not exist: {path}")
+
+    kept = []
+    with path.open(errors="replace") as fh:
+        for raw in fh:
+            if not raw.strip():
+                continue
+            stripped = raw.lstrip()
+            if stripped.startswith("#"):
+                candidate = stripped.lstrip("#").strip()
+                norm = _norm_col(candidate)
+                if (("sample" in norm or "iid" in norm) and
+                        ("superpop" in norm or "superpopulation" in norm)):
+                    kept.append(candidate + "\n")
+                continue
+            kept.append(raw)
+
+    if not kept:
+        sys.exit(f"ERROR: 1KG sample map is empty after removing comments: {path}")
+    return "".join(kept)
+
+
+def read_kg_sample_map(sample_map_path):
+    """Read a 1KG sample->superpopulation map without delimiter sniffing.
+
+    Accepted headered formats include project-local TSV/whitespace tables
+    (``sample_id``, ``superpop``) and IGSR-style tables (``Sample name``,
+    ``Superpopulation code``). Comma-separated tables are also accepted.
+    """
+    text = _sample_map_text(sample_map_path)
+    sid_aliases = ("sample_id", "sample", "iid", "sampleid", "sample_name")
+    ssp_aliases = ("superpop", "superpopulation", "superpopulation_code",
+                   "super_pop", "super_pop_code", "population")
+
+    attempts = []
+    for label, sep in (("tab", "\t"), ("comma", ","),
+                       ("whitespace", r"\s+")):
+        try:
+            df = pd.read_csv(io.StringIO(text), sep=sep, engine="python",
+                             dtype=str)
+        except Exception as exc:
+            attempts.append(f"{label}: {exc}")
+            continue
+        if df.empty:
+            attempts.append(f"{label}: parsed 0 rows")
+            continue
+
+        cols = {_norm_col(c): c for c in df.columns}
+        sid = next((cols[c] for c in sid_aliases if c in cols), None)
+        ssp = next((cols[c] for c in ssp_aliases if c in cols), None)
+        if sid is None or ssp is None:
+            attempts.append(f"{label}: columns={list(df.columns)}")
+            continue
+
+        out = df[[sid, ssp]].copy()
+        out.columns = ["sample_id", "superpop"]
+        out["sample_id"] = out["sample_id"].astype(str).str.strip()
+        out["superpop"] = out["superpop"].astype(str).str.strip().str.upper()
+        out = out[(out["sample_id"] != "") & (out["superpop"] != "")]
+        if out.empty:
+            sys.exit(f"ERROR: 1KG sample map parsed but contains no usable "
+                     f"sample/superpopulation rows: {sample_map_path}")
+
+        conflicts = (out.groupby("sample_id")["superpop"].nunique() > 1)
+        if conflicts.any():
+            bad = conflicts[conflicts].index.tolist()[:5]
+            sys.exit("ERROR: 1KG sample map assigns conflicting "
+                     f"superpopulations to sample(s): {bad}")
+        out = out.drop_duplicates("sample_id", keep="first")
+        print(f"  parsed 1KG sample map: {len(out)} samples "
+              f"({label}-delimited; columns {sid!r}, {ssp!r})")
+        return out
+
+    detail = "; ".join(attempts)
+    preview = " | ".join(line.rstrip() for line in text.splitlines()[:3])
+    sys.exit("ERROR: cannot identify sample/superpopulation columns in "
+             f"{sample_map_path}. Tried tab, comma, and whitespace parsing. "
+             f"Details: {detail}. Preview: {preview!r}")
+
+
 def write_kg_keep_files(sample_map_path, ancestries, out_dir, kg_pgen=None):
     """Write {ANC}.1kg.keep files from a 1KG sample->superpopulation map.
 
-    The map must have columns sample_id and superpop (EAS/EUR/AFR/AMR/SAS),
-    e.g. the 1kGP pedigree/integrated_call_samples table.
+    The map must identify a sample and superpopulation (EAS/EUR/AFR/AMR/SAS).
+    Project-local ``sample_id``/``superpop`` and IGSR-style
+    ``Sample name``/``Superpopulation code`` headers are supported.
 
     plink2 --keep matches on FID+IID, and a single-column file is only
     interpreted as IID when every FID in the dataset is missing/'0'. To be
@@ -45,16 +143,15 @@ def write_kg_keep_files(sample_map_path, ancestries, out_dir, kg_pgen=None):
     true FID/IID; otherwise a two-column file with the sample ID duplicated
     is written (correct for the common FID==IID convention).
     """
-    sm = pd.read_csv(sample_map_path, sep=None, engine="python")
-    cols = {c.lower(): c for c in sm.columns}
-    sid = next((cols[c] for c in ("sample_id", "sample", "iid", "sampleid")
-                if c in cols), None)
-    ssp = next((cols[c] for c in ("superpop", "superpopulation",
-                                  "superpopulation_code", "population")
-                if c in cols), None)
-    if sid is None or ssp is None:
-        sys.exit(f"ERROR: cannot identify sample/superpop columns in "
-                 f"{sample_map_path} (columns: {list(sm.columns)})")
+    sm = read_kg_sample_map(sample_map_path)
+    sid, ssp = "sample_id", "superpop"
+    observed = set(sm[ssp].dropna().astype(str).str.upper())
+    missing_superpops = [a for a in ancestries if str(a).upper() not in observed]
+    if missing_superpops:
+        shown = ", ".join(sorted(observed)[:20]) or "<none>"
+        sys.exit("ERROR: 1KG sample map does not contain requested "
+                 f"superpopulation(s) {missing_superpops}; observed values: "
+                 f"{shown}")
 
     # map sample ID -> (FID, IID) from the pgen's psam when available
     id_map = {}
@@ -78,7 +175,7 @@ def write_kg_keep_files(sample_map_path, ancestries, out_dir, kg_pgen=None):
 
     written = {}
     for anc in ancestries:
-        ids = sm.loc[sm[ssp] == anc, sid].astype(str)
+        ids = sm.loc[sm[ssp] == str(anc).upper(), sid].astype(str)
         if len(ids) == 0:
             print(f"  WARNING: no 1KG samples for superpopulation {anc}")
             continue
