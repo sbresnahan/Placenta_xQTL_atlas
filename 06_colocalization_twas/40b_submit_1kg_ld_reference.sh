@@ -67,14 +67,23 @@ python3 "${SCRIPTS_DIR}/40b_prepare_1kg_reference.py" \
 ANCESTRIES_CSV="$(printf '%s\n' $ANCESTRIES | paste -sd: -)"
 N_ANC=$(echo "$ANCESTRIES" | wc -w)
 N_JOBS=$((N_ANC * 22))
-ARRAY_SPEC="1-${N_JOBS}%${MAXCONC}"
-if [ "$TEST" = "1" ]; then ARRAY_SPEC="1"; fi
+ARRAY_RANGE="1-${N_JOBS}"
+ARRAY_LIMIT="%${MAXCONC}"
+if [ "$TEST" = "1" ]; then
+    ARRAY_RANGE="1"
+    ARRAY_LIMIT=""
+fi
+
+# LSF array concurrency syntax places the limiter *after* the closing bracket:
+#   name[1-44]%4
+# not name[1-44%4], which LSF rejects as "Bad job name".
+ARRAY_DISPLAY="${ARRAY_RANGE}${ARRAY_LIMIT}"
 
 echo "=== 40b_submit_1kg_ld_reference.sh ==="
 echo "  ANCESTRIES:      $ANCESTRIES"
 echo "  KG_PGEN:         $KG_PGEN"
 echo "  KG_LD_REF_DIR:   $KG_LD_REF_DIR"
-echo "  ARRAY:           $ARRAY_SPEC (${N_JOBS} total; max ${MAXCONC} concurrent)"
+echo "  ARRAY:           $ARRAY_DISPLAY (${N_JOBS} total; max ${MAXCONC} concurrent)"
 echo "  QUEUE/WALLTIME:  $QUEUE / $WALLTIME"
 echo "  MEMORY:          ${MEM_GB}G LSF; ${PLINK_MEMORY_MB} MiB plink2 cap"
 
@@ -84,7 +93,7 @@ if bjobs -J "kg_ldref" 2>/dev/null | grep -q "kg_ldref"; then
 fi
 
 ENV_STR="SCRIPTS_DIR=${SCRIPTS_DIR},KG_PGEN=${KG_PGEN},KG_LD_REF_DIR=${KG_LD_REF_DIR},ANCESTRIES_CSV=${ANCESTRIES_CSV},PLINK_MEMORY_MB=${PLINK_MEMORY_MB},FORCE_REF=${FORCE_REF}"
-bsub -J "kg_ldref[${ARRAY_SPEC}]" -q "$QUEUE" -n 1 -W "$WALLTIME" \
+bsub -J "kg_ldref[${ARRAY_RANGE}]${ARRAY_LIMIT}" -q "$QUEUE" -n 1 -W "$WALLTIME" \
      -M "${MEM_GB}G" -R "rusage[mem=${MEM_GB}G]" \
      -o "${LOG_DIR}/kg_ldref_%J_%I.out" \
      -e "${LOG_DIR}/kg_ldref_%J_%I.err" \
