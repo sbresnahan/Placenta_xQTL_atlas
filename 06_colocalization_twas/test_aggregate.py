@@ -1,8 +1,9 @@
 """Smoke test for 49_aggregate_coloc_twas.py.
 
 Builds a fake results tree (coloc results + diagnostics, colocBoost clusters,
-FUSION TWAS outputs, .pos files, expression BED + covariates + deconvolution)
-and checks the aggregated tables.
+FUSION TWAS outputs, .pos files, Module-05 significant-locus/discovery-lead tables,
+expression BED + covariates + deconvolution + a fake plink2 dosage exporter)
+and checks the aggregated tables and R21 genotype x cell-proportion attribution.
 Run:  pytest test_aggregate.py -v
 """
 
@@ -80,11 +81,31 @@ def results_tree(tmp_path_factory):
                   "CHR": [1] * 3, "P0": [0] * 3, "P1": [1] * 3}
                  ).to_csv(wdir / "EAS.pos", sep="\t", index=False)
 
+    # --- Module-05 significant locus + stage-39 lead ----------------------------
+    loci_dir = results / "finemap" / "loci"
+    loci_dir.mkdir(parents=True)
+    pd.DataFrame([{
+        "modality": "expression", "phenotype_id": "GENE1", "chrom": "1",
+        "start": 1, "end": 1000, "n_signals": 1, "L": 5, "sig_in": "EAS",
+    }]).to_csv(loci_dir / "expression.loci.tsv", sep="\t", index=False)
+    lead_variant = "1:150:A:G"
+    pd.DataFrame([{
+        "phenotype_id": "GENE1", "variant_id": lead_variant,
+        "pval_nominal": 1e-10, "qval": 1e-6, "slope": 0.5, "slope_se": 0.05,
+    }]).to_csv(results / "EAS_expression_cisqtl_top.tsv",
+               sep="\t", index=False)
+
     # --- expression BED + covariates + deconvolution ---------------------------
     qtl.mkdir(parents=True)
     samples = [f"S{i}" for i in range(60)]
-    prop_a = RNG.uniform(0, 1, 60)
-    expr_g1 = 2.0 * prop_a + RNG.normal(0, 0.5, 60)  # correlated with CT_A
+    geno = np.asarray([i % 3 for i in range(60)], dtype=float)
+    prop_a = RNG.uniform(0.05, 0.80, 60)
+    prop_b = RNG.uniform(0.05, 0.80, 60)
+    c = np.arcsinh(prop_a)
+    c = c - c.mean()
+    g = geno - geno.mean()
+    expr_g1 = (0.3 * g + 0.2 * c + 2.5 * g * c
+               + RNG.normal(0, 0.08, 60))
     bed = pd.DataFrame({"#chr": ["1"] * 3, "start": [1] * 3, "end": [2] * 3,
                         "phenotype_id": ["GENE1", "GENE2", "GENE3"]})
     for i, s in enumerate(samples):
@@ -95,17 +116,35 @@ def results_tree(tmp_path_factory):
     for s in samples:
         cov[s] = RNG.normal(0, 1, 1)
     cov.to_csv(qtl / "EAS_covariates_expression.tsv", sep="\t", index=False)
-    pd.DataFrame({"sample_id": samples, "CT_A": prop_a,
-                  "CT_B": 1 - prop_a}).to_csv(
+    pd.DataFrame({"sample_id": samples, "CT_A": prop_a, "CT_B": prop_b,
+                  "Maternal": np.full(60, 0.05)}).to_csv(
         qtl / "EAS_deconvolution_harmonized.tsv", sep="\t", index=False)
-    return results, qtl
+
+    # _export_lead_dosages only needs these paths to exist; the fake plink2
+    # below writes the matching .raw dosage table without reading them.
+    for ext in (".pgen", ".pvar", ".psam"):
+        (qtl / f"EAS_qtl{ext}").touch()
+    fake_plink2 = tmp / "fake_plink2.py"
+    fake_plink2.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "out = sys.argv[sys.argv.index('--out') + 1]\n"
+        "lines = ['#FID IID SEX PHENOTYPE 1:150:A:G_G']\n"
+        "for i in range(60):\n"
+        "    lines.append(f'S{i} S{i} 0 -9 {i % 3}')\n"
+        "Path(out + '.raw').write_text('\\n'.join(lines) + '\\n')\n"
+    )
+    fake_plink2.chmod(0o755)
+    return results, qtl, fake_plink2
 
 
 def test_aggregation(results_tree):
-    results, qtl = results_tree
+    results, qtl, fake_plink2 = results_tree
     proc = subprocess.run(
         ["python3", str(SCRIPT), "--results-dir", str(results),
-         "--qtl-dir", str(qtl), "--ancestries", "EAS"],
+         "--qtl-dir", str(qtl), "--ancestries", "EAS",
+         "--plink2", str(fake_plink2)],
         capture_output=True, text=True, timeout=600)
     assert proc.returncode == 0, f"aggregator failed:\n{proc.stdout}\n{proc.stderr}"
     out = results / "coloc" / "aggregated"
@@ -128,7 +167,19 @@ def test_aggregation(results_tree):
     g3 = genes[genes["GENE"] == "GENE3"].iloc[0]
     assert g3["acat_p"] > 0.5
 
+    inter = pd.read_csv(out / "xqtl_celltype_interactions.tsv.gz", sep="\t")
+    a = inter[(inter["phenotype_id"] == "GENE1") & (inter["cell_type"] == "CT_A")].iloc[0]
+    assert a["status"] == "ok"
+    assert a["beta_GxC"] > 1.0
+    assert a["q_GxC"] < 0.05
+    assert a["maternal_sensitivity_p_GxC"] < 0.05
+
+    feat = pd.read_csv(out / "xqtl_celltype_annotation.tsv.gz", sep="\t")
+    f = feat[feat["phenotype_id"] == "GENE1"].iloc[0]
+    assert f["primary_cell_type"] == "CT_A"
+
     ann = pd.read_csv(out / "gene_celltype_annotation.tsv", sep="\t")
     row = ann[ann["gene"] == "GENE1"].iloc[0]
     assert row["primary_cell_type_EAS"] == "CT_A"
-    assert row["max_abs_spearman_EAS"] > 0.2
+    assert row["primary_GxC_q_EAS"] < 0.05
+    assert "max_abs_spearman_EAS" not in ann.columns

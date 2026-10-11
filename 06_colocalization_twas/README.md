@@ -28,10 +28,16 @@ weight, gestational duration, glycemic traits, and childhood adiposity:
    pooled (ancestry-stacked, ancestry-indicator residualized); FUSION-format
    per-model `.wgt.RDat`; association via `FUSION.assoc_test.R` with
    ancestry-matched 1KG LD references.
-6. **Aggregation** (49): coloc/colocBoost/TWAS result tables, gene-level
-   ACAT combination across isoform models, and primary cell-type annotation
-   (max |Spearman rho| between residualized expression and MuSiC
-   deconvolution proportions; "unassigned" when |rho| < 0.2).
+6. **Aggregation + cell-type attribution** (49): coloc/colocBoost/TWAS
+   result tables, gene-level ACAT combination across isoform models, and the
+   R21 Objective 1.4 genotype-by-cell-proportion test at ancestry-specific
+   FDR-significant xQTL leads. For each significant phenotype, the exact
+   Module-05 discovery lead variant is fit as `Y ~ G + C + G:C + covariates`;
+   the target cell-type
+   main-effect covariate is replaced by the explicit `C` term, other optimized
+   Module-05 covariates remain, and primary cell type is assigned only when
+   the `G:C` term survives BH FDR. Maternal fraction is not a target cell type;
+   a >10% maternal-fraction exclusion is reported as a sensitivity analysis.
 
 ## Script map
 
@@ -54,7 +60,7 @@ weight, gestational duration, glycemic traits, and childhood adiposity:
 | `46_isotwas_train.R` | Pure-R isoTWAS/TWAS weight trainer; FUSION-format per-model `.wgt.RDat` + shard `.pos` |
 | `47_submit_isotwas.sh` / `47a_run_isotwas_shard.sh` | LSF array driver (one array per weight set); host preparation runs before Singularity R |
 | `48_fusion_twas.sh` / `48a_run_fusion.sh` | FUSION association testing per weight set x trait; converts the prebuilt 40b/40c chromosome PGENs to FUSION BED views |
-| `49_aggregate_coloc_twas.py` | Aggregation + gene-level ACAT + cell-type annotation |
+| `49_aggregate_coloc_twas.py` | Aggregation + gene-level ACAT + R21 genotype x cell-proportion attribution at significant xQTL leads |
 | `coloc_common.R` | Pure-R shared helpers only; no command execution |
 | `gwas_catalog.tsv` | GWAS source catalog (see below) |
 
@@ -116,6 +122,8 @@ $RESULTS_DIR/
     colocboost/results/{ANC}/{region}.clusters.tsv / .vcp.tsv / .done
     aggregated/coloc_results.tsv.gz, coloc_best.tsv.gz,
                colocboost_clusters.tsv.gz, coloc_diagnostics_summary.tsv,
+               xqtl_celltype_interactions.tsv.gz,
+               xqtl_celltype_annotation.tsv.gz,
                gene_celltype_annotation.tsv
   isotwas/
     weights/{WS}/genes/{model}.wgt.RDat, shard-*.pos, {WS}.pos

@@ -11,7 +11,7 @@ This module integrates the Module 05 xQTL/fine-mapping outputs with external GWA
 4. Multi-trait colocBoost.
 5. isoTWAS/TWAS weight training.
 6. FUSION association testing.
-7. Aggregation and cell-type annotation.
+7. Aggregation and R21 cell-type attribution.
 
 The executable sequence is:
 
@@ -29,7 +29,7 @@ The executable sequence is:
 46  isoTWAS/TWAS training worker
 47  submit isoTWAS/TWAS training arrays
 48  FUSION TWAS association testing
-49  aggregate results + cell-type annotation
+49  aggregate results + genotype x cell-proportion attribution
 ```
 
 ---
@@ -1275,7 +1275,7 @@ SuSiE-coloc
 colocBoost
 FUSION TWAS
 gene-level ACAT
-cell-type annotation
+R21 genotype x cell-proportion attribution
 ```
 
 There is no shell wrapper; analysis controls are direct command-line flags.
@@ -1292,6 +1292,8 @@ bsub -Is -q medium -n 2 -M 16 -R "rusage[mem=16]" -W 4:00 bash
 
 ```bash
 conda activate tensorqtl     # pandas, numpy, scipy
+module load plink            # provides plink2; required for lead-dosage export
+plink2 --version
 ```
 
 Default run:
@@ -1308,10 +1310,15 @@ python3 "${SCRIPTS_DIR}/49_aggregate_coloc_twas.py" \
 |---|---:|---|
 | `--results-dir` | required | `$RESULTS_DIR` |
 | `--qtl-dir` | required | `$QTL_DIR` |
-| `--ancestries` | `EAS EUR` | Cell-type annotation strata |
-| `--pp-h4` | `0.7` | Coloc call threshold |
-| `--twas-q` | `0.05` | Gene-level TWAS threshold for annotation |
-| `--skip-celltype` | false | Skip cell-type annotation |
+| `--ancestries` | `EAS EUR` | Cell-type attribution strata |
+| `--pp-h4` | `0.7` | Coloc call threshold used to select genes for the compatibility gene summary |
+| `--twas-q` | `0.05` | Gene-level TWAS threshold used to select genes for the compatibility gene summary |
+| `--celltype-q` | `0.05` | BH FDR threshold for assigning a primary cell type from the `G:C` term |
+| `--cell-types` | all fetal numeric columns | Optional explicit deconvolution columns to test; `Maternal` is excluded by default |
+| `--celltype-min-n` | `20` | Minimum complete samples per interaction model |
+| `--maternal-threshold` | `0.10` | Maternal-fraction cutoff for the exclusion sensitivity analysis |
+| `--plink2` | `plink2` | plink2 executable used to export ancestry-specific lead-variant dosages |
+| `--skip-celltype` | false | Skip genotype x cell-proportion attribution |
 
 Explicit thresholds:
 
@@ -1321,10 +1328,11 @@ python3 "${SCRIPTS_DIR}/49_aggregate_coloc_twas.py" \
     --qtl-dir "$QTL_DIR" \
     --ancestries EAS EUR \
     --pp-h4 0.7 \
-    --twas-q 0.05
+    --twas-q 0.05 \
+    --celltype-q 0.05
 ```
 
-Skip cell-type annotation:
+Skip cell-type attribution:
 
 ```bash
 python3 "${SCRIPTS_DIR}/49_aggregate_coloc_twas.py" \
@@ -1333,15 +1341,45 @@ python3 "${SCRIPTS_DIR}/49_aggregate_coloc_twas.py" \
     --skip-celltype
 ```
 
-Cell-type annotation additionally expects, for each ancestry:
+Cell-type attribution follows R21 Objective 1.4 rather than expression/cell
+fraction correlation. For each phenotype in the Module-05 FDR-significant locus
+lists, Step 49 takes the exact ancestry-specific Module-05 discovery lead
+variant and fits
 
 ```text
-$QTL_DIR/{ANC}_deconvolution_harmonized.tsv
-$QTL_DIR/{ANC}_expression.bed.gz
-$QTL_DIR/{ANC}_covariates_expression.tsv
+Y = beta_G * G + beta_C * C + beta_GxC * (G x C) + Z * gamma + error
 ```
 
-If those are missing, that ancestry is skipped.
+where `Y` is the exact normalized xQTL phenotype, `G` is the in-sample lead
+variant dosage, `C` is the arcsinh-transformed/mean-centered cell proportion,
+and `Z` is the same optimized per-modality Module-05 covariate matrix. If the
+target cell type survived in `Z` as `ct_<celltype>`, that row is removed because
+`C` is included explicitly; all other optimized covariates remain. BH FDR is
+computed across phenotype x cell-type tests within ancestry x modality. A
+feature is `unassigned` unless its best `G:C` test has `q_GxC <= --celltype-q`.
+
+Required inputs are:
+
+```text
+$RESULTS_DIR/finemap/loci/*.loci.tsv
+$RESULTS_DIR/{ANC}_expression_cisqtl_top.tsv
+$RESULTS_DIR/{ANC}_{MOD}_ungrouped_cisqtl_top.tsv   # non-expression modalities
+$QTL_DIR/{ANC}_qtl.{pgen,pvar,psam}
+$QTL_DIR/{ANC}_{MOD}.bed.gz
+$QTL_DIR/{ANC}_covariates_{MOD}.tsv
+$QTL_DIR/{ANC}_deconvolution_harmonized.tsv
+```
+
+If a Module-05 discovery top table is absent, Step 49 can fall back to the
+stage-39 `{ANC}_{MOD}.nominal.top.tsv`, but prints a warning because the exact
+discovery lead is preferred.
+
+By default every numeric fetal deconvolution column is tested and any column
+whose name contains `Maternal` is excluded from primary-cell-type candidates.
+Use `--cell-types ...` to restrict to named R21 targets when desired. If a
+maternal fraction is present, every selected `G:C` test is also refit after
+excluding samples with maternal fraction > `--maternal-threshold` (default
+0.10).
 
 Expected aggregated outputs:
 
@@ -1353,6 +1391,8 @@ $COLOC_DIR/aggregated/
 ├── coloc_diagnostics_summary.tsv
 ├── twas_results.tsv.gz
 ├── twas_gene_results.tsv.gz
+├── xqtl_celltype_interactions.tsv.gz
+├── xqtl_celltype_annotation.tsv.gz
 └── gene_celltype_annotation.tsv
 ```
 
