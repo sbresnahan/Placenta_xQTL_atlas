@@ -25,7 +25,15 @@ Usage:
 
 import argparse
 import gzip
+import os
 from pathlib import Path
+
+# Cell-type attribution parallelizes independent feature fits with processes.
+# Keep each worker's BLAS footprint to one thread unless the caller explicitly
+# overrides these variables, avoiding severe CPU oversubscription on LSF/Slurm.
+for _thread_var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                    "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_thread_var, "1")
 
 import numpy as np
 import pandas as pd
@@ -69,6 +77,31 @@ def read_many(pattern, cols_dtype=None):
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+
+def _outputs_complete(*paths):
+    """True when every expected output exists and is non-empty."""
+    return all(Path(path).is_file() and Path(path).stat().st_size > 0
+               for path in paths)
+
+
+def _scheduler_workers():
+    """Infer an allocated process count without assuming a scheduler."""
+    for name in ("LSB_DJOB_NUMPROC", "SLURM_CPUS_PER_TASK", "NSLOTS"):
+        value = os.environ.get(name)
+        if not value:
+            continue
+        try:
+            workers = int(value)
+        except ValueError:
+            continue
+        if workers > 0:
+            return workers
+    return 1
+
+
+def _read_tsv(path):
+    return pd.read_csv(path, sep="\t")
 
 
 def aggregate_coloc(coloc_dir, out_dir, pp_h4):
@@ -457,8 +490,11 @@ def _fit_gxc(y, g, cell, cov, min_n=20):
     g0 = gv - np.mean(gv)
     c0 = cv - np.mean(cv)
     X = np.column_stack([np.ones(n), g0, c0, g0 * c0, z])
-    rank = int(np.linalg.matrix_rank(X))
     p = X.shape[1]
+    # np.linalg.lstsq already computes the design rank.  Reusing it here avoids
+    # a second SVD (matrix_rank) for every GxC model.
+    beta, _, rank, _ = np.linalg.lstsq(X, yv, rcond=None)
+    rank = int(rank)
     if rank < p:
         return {"status": "rank_deficient", "n": n, "af": af, "maf": maf,
                 "design_rank": rank, "design_cols": p}
@@ -467,7 +503,6 @@ def _fit_gxc(y, g, cell, cov, min_n=20):
         return {"status": "insufficient_df", "n": n, "af": af, "maf": maf,
                 "design_rank": rank, "design_cols": p}
 
-    beta, *_ = np.linalg.lstsq(X, yv, rcond=None)
     resid = yv - X @ beta
     sigma2 = float(np.dot(resid, resid) / df)
     xtx_inv = np.linalg.inv(X.T @ X)
@@ -529,10 +564,136 @@ def _genes_needing_annotation(best, genes_twas, pp_h4, twas_q):
     return sorted(genes)
 
 
+_GXC_WORKER_STATE = None
+
+
+def _fit_feature_celltypes(lead):
+    """Fit every target cell type for one lead xQTL feature.
+
+    Large phenotype/genotype/covariate matrices live in ``_GXC_WORKER_STATE``.
+    On Linux the worker pool is created with ``fork`` after that state is set,
+    so workers share those read-only pages copy-on-write instead of pickling the
+    full matrices once per feature.
+    """
+    state = _GXC_WORKER_STATE
+    if state is None:
+        raise RuntimeError("GxC worker state is not initialized")
+
+    pid = str(lead["phenotype_id"])
+    vid = str(lead["variant_id"])
+    phen = state["phen"]
+    dosages = state["dosages"]
+    if pid not in phen.columns or vid not in dosages.columns:
+        return []
+
+    y = phen[pid]
+    g = dosages[vid]
+    maternal_keep = state["maternal_keep"]
+    y_s = None
+    if maternal_keep is not None:
+        y_s = y.where(maternal_keep.reindex(y.index).fillna(False))
+
+    rows = []
+    for ct in state["targets"]:
+        fit = _fit_gxc(y, g, state["deconv_t"][ct],
+                       state["cov_by_ct"][ct], min_n=state["min_n"])
+        q25, q50, q75 = state["raw_quantiles"][ct]
+        rec = {
+            "ancestry": state["ancestry"], "modality": state["modality"],
+            "phenotype_id": pid, "variant_id": vid,
+            "lead_pval_nominal": lead.get("pval_nominal", np.nan),
+            "lead_source": lead.get("lead_source", ""),
+            "cell_type": ct,
+            "cell_prop_raw_q25": q25,
+            "cell_prop_raw_q50": q50,
+            "cell_prop_raw_q75": q75,
+        }
+        rec.update(fit)
+        rec.update({
+            "maternal_sensitivity_n": np.nan,
+            "maternal_sensitivity_beta_GxC": np.nan,
+            "maternal_sensitivity_se_GxC": np.nan,
+            "maternal_sensitivity_p_GxC": np.nan,
+            "maternal_sensitivity_status": "no_maternal_fraction",
+        })
+        if y_s is not None:
+            sens = _fit_gxc(y_s, g, state["deconv_t"][ct],
+                            state["cov_by_ct"][ct], min_n=state["min_n"])
+            rec["maternal_sensitivity_status"] = sens.get("status")
+            rec["maternal_sensitivity_n"] = sens.get("n", np.nan)
+            rec["maternal_sensitivity_beta_GxC"] = sens.get("beta_GxC", np.nan)
+            rec["maternal_sensitivity_se_GxC"] = sens.get("se_GxC", np.nan)
+            rec["maternal_sensitivity_p_GxC"] = sens.get("p_GxC", np.nan)
+        rows.append(rec)
+    return rows
+
+
+def _fit_modality_celltypes(anc, mod, mod_leads, phen, dosages, cov,
+                            deconv_raw, deconv_t, targets, maternal,
+                            maternal_threshold, min_n, workers):
+    """Fit one ancestry/modality block, parallelizing over xQTL features."""
+    global _GXC_WORKER_STATE
+
+    cov_by_ct = {ct: _drop_target_covariate(cov, ct) for ct in targets}
+    raw_quantiles = {
+        ct: tuple(float(x) for x in deconv_raw[ct].quantile([0.25, 0.50, 0.75]))
+        for ct in targets
+    }
+    maternal_keep = (maternal <= maternal_threshold) if maternal is not None else None
+    _GXC_WORKER_STATE = {
+        "ancestry": anc, "modality": mod, "phen": phen, "dosages": dosages,
+        "deconv_t": deconv_t, "targets": targets, "cov_by_ct": cov_by_ct,
+        "raw_quantiles": raw_quantiles, "maternal_keep": maternal_keep,
+        "min_n": min_n,
+    }
+
+    leads = mod_leads.to_dict("records")
+    n_features = len(leads)
+    if n_features == 0:
+        return []
+    workers = max(1, min(int(workers), n_features))
+
+    rows = []
+    if workers == 1:
+        for i, lead in enumerate(leads, 1):
+            rows.extend(_fit_feature_celltypes(lead))
+            if i % 250 == 0 or i == n_features:
+                print(f"    {anc}/{mod}: fitted {i}/{n_features} features")
+        _GXC_WORKER_STATE = None
+        return rows
+
+    import multiprocessing as mp
+
+    if "fork" not in mp.get_all_start_methods():
+        print("  celltype: WARNING multiprocessing 'fork' unavailable; "
+              f"running {anc}/{mod} serially")
+        for i, lead in enumerate(leads, 1):
+            rows.extend(_fit_feature_celltypes(lead))
+            if i % 250 == 0 or i == n_features:
+                print(f"    {anc}/{mod}: fitted {i}/{n_features} features")
+        _GXC_WORKER_STATE = None
+        return rows
+
+    ctx = mp.get_context("fork")
+    chunksize = max(1, n_features // (workers * 8))
+    print(f"    {anc}/{mod}: {n_features} features with {workers} worker(s)")
+    try:
+        with ctx.Pool(processes=workers) as pool:
+            for i, feature_rows in enumerate(
+                    pool.imap_unordered(_fit_feature_celltypes, leads,
+                                        chunksize=chunksize), 1):
+                rows.extend(feature_rows)
+                if i % 250 == 0 or i == n_features:
+                    print(f"    {anc}/{mod}: fitted {i}/{n_features} features")
+    finally:
+        _GXC_WORKER_STATE = None
+    return rows
+
+
 def annotate_cell_types(best, genes_twas, results_dir, qtl_dir, ancestries,
                         out_dir, pp_h4=0.7, twas_q=0.05, celltype_q=0.05,
                         cell_types=None, min_n=20, maternal_threshold=0.10,
-                        plink2="plink2"):
+                        plink2="plink2", workers=1):
     """R21 cell-type attribution via genotype x cell-proportion interactions."""
     import tempfile
 
@@ -564,7 +725,7 @@ def annotate_cell_types(best, genes_twas, results_dir, qtl_dir, ancestries,
             maternal = deconv_raw[maternal_col] if maternal_col else None
 
             print(f"  celltype: {anc}: {len(anc_leads)} significant xQTL phenotypes, "
-                  f"{len(targets)} fetal cell types")
+                  f"{len(targets)} fetal cell types, {workers} fit worker(s)")
             try:
                 dosages = _export_lead_dosages(
                     qtl_dir, anc, anc_leads["variant_id"].unique(), plink2,
@@ -589,57 +750,18 @@ def annotate_cell_types(best, genes_twas, results_dir, qtl_dir, ancestries,
                     print(f"  celltype: WARNING no selected phenotypes in {bed_path.name}")
                     continue
 
-                for _, lead in mod_leads.iterrows():
-                    pid = str(lead["phenotype_id"])
-                    vid = str(lead["variant_id"])
-                    if pid not in phen.columns or vid not in dosages.columns:
-                        continue
-                    y = phen[pid]
-                    g = dosages[vid]
-                    for ct in targets:
-                        cov_test = _drop_target_covariate(cov, ct)
-                        fit = _fit_gxc(y, g, deconv_t[ct], cov_test, min_n=min_n)
-                        rec = {
-                            "ancestry": anc, "modality": mod,
-                            "phenotype_id": pid, "variant_id": vid,
-                            "lead_pval_nominal": lead.get("pval_nominal", np.nan),
-                            "lead_source": lead.get("lead_source", ""),
-                            "cell_type": ct,
-                            "cell_prop_raw_q25": float(deconv_raw[ct].quantile(0.25)),
-                            "cell_prop_raw_q50": float(deconv_raw[ct].quantile(0.50)),
-                            "cell_prop_raw_q75": float(deconv_raw[ct].quantile(0.75)),
-                        }
-                        rec.update(fit)
-
-                        # R21 sensitivity: exclude samples with >10% inferred
-                        # maternal contribution, when a maternal fraction exists.
-                        rec.update({
-                            "maternal_sensitivity_n": np.nan,
-                            "maternal_sensitivity_beta_GxC": np.nan,
-                            "maternal_sensitivity_se_GxC": np.nan,
-                            "maternal_sensitivity_p_GxC": np.nan,
-                            "maternal_sensitivity_status": "no_maternal_fraction",
-                        })
-                        if maternal is not None:
-                            keep = maternal <= maternal_threshold
-                            y_s = y.where(keep.reindex(y.index).fillna(False))
-                            sens = _fit_gxc(y_s, g, deconv_t[ct], cov_test,
-                                            min_n=min_n)
-                            rec["maternal_sensitivity_status"] = sens.get("status")
-                            rec["maternal_sensitivity_n"] = sens.get("n", np.nan)
-                            rec["maternal_sensitivity_beta_GxC"] = sens.get(
-                                "beta_GxC", np.nan)
-                            rec["maternal_sensitivity_se_GxC"] = sens.get(
-                                "se_GxC", np.nan)
-                            rec["maternal_sensitivity_p_GxC"] = sens.get(
-                                "p_GxC", np.nan)
-                        interaction_rows.append(rec)
+                interaction_rows.extend(_fit_modality_celltypes(
+                    anc, mod, mod_leads, phen, dosages, cov, deconv_raw,
+                    deconv_t, targets, maternal, maternal_threshold, min_n,
+                    workers))
 
     if not interaction_rows:
         print("  celltype: no GxC interaction models could be fit")
         return
 
-    inter = pd.DataFrame(interaction_rows)
+    inter = (pd.DataFrame(interaction_rows)
+             .sort_values(["ancestry", "modality", "phenotype_id", "cell_type"])
+             .reset_index(drop=True))
     inter["q_GxC"] = np.nan
     for (_, _), idx in inter.groupby(["ancestry", "modality"]).groups.items():
         pvals = pd.to_numeric(inter.loc[idx, "p_GxC"], errors="coerce")
@@ -734,12 +856,21 @@ def main():
                         "deconvolution columns except Maternal")
     p.add_argument("--celltype-min-n", type=int, default=20,
                    help="minimum complete samples per GxC model")
+    p.add_argument("--celltype-workers", type=int, default=None,
+                   help="parallel feature-fit processes; default: scheduler CPU "
+                        "allocation (LSF/Slurm/SGE), otherwise 1")
     p.add_argument("--maternal-threshold", type=float, default=0.10,
                    help="maternal-fraction exclusion threshold for sensitivity")
     p.add_argument("--plink2", default="plink2",
                    help="plink2 executable for extracting lead-variant dosages")
     p.add_argument("--skip-celltype", action="store_true")
+    p.add_argument("--force", action="store_true",
+                   help="rebuild aggregation outputs even when completed files exist")
     args = p.parse_args()
+
+    workers = args.celltype_workers if args.celltype_workers is not None else _scheduler_workers()
+    if workers < 1:
+        p.error("--celltype-workers must be >= 1")
 
     results_dir = Path(args.results_dir)
     qtl_dir = Path(args.qtl_dir)
@@ -748,21 +879,57 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("[1/4] SuSiE-coloc")
-    best = aggregate_coloc(coloc_dir, out_dir, args.pp_h4)
+    coloc_results = out_dir / "coloc_results.tsv.gz"
+    coloc_best = out_dir / "coloc_best.tsv.gz"
+    if not args.force and _outputs_complete(coloc_results, coloc_best):
+        try:
+            best = _read_tsv(coloc_best)
+            pp_col = next((c for c in best.columns if c.startswith("PP.H4")), None)
+            n_calls = int(best[pp_col].ge(args.pp_h4).sum()) if pp_col else 0
+            print(f"  skipped (existing outputs); {len(best)} tasks, "
+                  f"{n_calls} colocalization calls (PP.H4 >= {args.pp_h4})")
+        except Exception as exc:
+            print(f"  WARNING: existing coloc outputs unreadable ({exc}); rebuilding")
+            best = aggregate_coloc(coloc_dir, out_dir, args.pp_h4)
+    else:
+        best = aggregate_coloc(coloc_dir, out_dir, args.pp_h4)
+
     print("[2/4] colocBoost")
-    aggregate_colocboost(coloc_dir, out_dir)
+    colocboost_out = out_dir / "colocboost_clusters.tsv.gz"
+    if not args.force and _outputs_complete(colocboost_out):
+        print("  skipped (existing output: colocboost_clusters.tsv.gz)")
+    else:
+        aggregate_colocboost(coloc_dir, out_dir)
+
     print("[3/4] isoTWAS/TWAS")
-    genes_twas = aggregate_twas(results_dir, out_dir)
+    twas_results = out_dir / "twas_results.tsv.gz"
+    twas_genes = out_dir / "twas_gene_results.tsv.gz"
+    if not args.force and _outputs_complete(twas_results, twas_genes):
+        try:
+            genes_twas = _read_tsv(twas_genes)
+            print(f"  skipped (existing outputs); {len(genes_twas)} gene rows")
+        except Exception as exc:
+            print(f"  WARNING: existing TWAS outputs unreadable ({exc}); rebuilding")
+            genes_twas = aggregate_twas(results_dir, out_dir)
+    else:
+        genes_twas = aggregate_twas(results_dir, out_dir)
 
     print("[4/4] cell-type attribution (genotype x cell proportion)")
     if args.skip_celltype:
         print("  skipped (--skip-celltype)")
         return
+    cell_inter = out_dir / "xqtl_celltype_interactions.tsv.gz"
+    cell_annot = out_dir / "xqtl_celltype_annotation.tsv.gz"
+    if not args.force and _outputs_complete(cell_inter, cell_annot):
+        print("  skipped (existing outputs: xqtl_celltype_interactions.tsv.gz, "
+              "xqtl_celltype_annotation.tsv.gz)")
+        return
     annotate_cell_types(
         best, genes_twas, results_dir, qtl_dir, args.ancestries, out_dir,
         pp_h4=args.pp_h4, twas_q=args.twas_q, celltype_q=args.celltype_q,
         cell_types=args.cell_types, min_n=args.celltype_min_n,
-        maternal_threshold=args.maternal_threshold, plink2=args.plink2)
+        maternal_threshold=args.maternal_threshold, plink2=args.plink2,
+        workers=workers)
 
 
 if __name__ == "__main__":
