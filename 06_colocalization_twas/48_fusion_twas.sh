@@ -25,6 +25,7 @@
 # Optional overrides:
 #   WEIGHT_SETS  — default "EAS EUR pooled"
 #   QUEUE        — default medium;  WALLTIME — default 04:00
+#   MEM_GB       — LSF memory request per weight-set x trait job, default 128 GB
 #   MIN_R2PRED   — FUSION GWAS Z imputation r2 filter, default 0.7
 #   FORCE_RUN=1  — rerun pairs with existing outputs
 # =============================================================================
@@ -46,6 +47,7 @@ LDREF_DIR="${LDREF_DIR:-${GWAS_DIR}/fusion_ldref}"
 WEIGHT_SETS="${WEIGHT_SETS:-EAS EUR pooled}"
 QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-04:00}"
+MEM_GB="${MEM_GB:-128}"
 MIN_R2PRED="${MIN_R2PRED:-0.7}"
 TEST="${TEST:-0}"
 FORCE_RUN="${FORCE_RUN:-0}"
@@ -72,6 +74,7 @@ echo "  WEIGHT_SETS: $WEIGHT_SETS"
 echo "  ISOTWAS_DIR: $ISOTWAS_DIR"
 echo "  FUSION_DIR:  $FUSION_DIR"
 echo "  LDREF_DIR:   $LDREF_DIR"
+echo "  MEMORY:      ${MEM_GB}G per FUSION LSF job"
 
 # --- Step 1: FUSION BED views of the prebuilt 1KG references ----------------
 for ANC in EAS EUR; do
@@ -159,6 +162,7 @@ for WS in $WEIGHT_SETS; do
         fi
         ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},ISOTWAS_DIR=${ISOTWAS_DIR},WEIGHT_SET=${WS},TRAIT_ID=${TRAIT_ID},SUMSTATS=${GWAS_DIR}/fusion/${TRAIT_ID}.fusion.tsv,LDREF_PREFIX=${LDREF_DIR}/${LD_ANC}.1kg.chr,MIN_R2PRED=${MIN_R2PRED},FUSION_DIR=${FUSION_DIR},RSCRIPT=${RSCRIPT}"
         bsub -J "$JOB" -q "$QUEUE" -n 1 -W "$WALLTIME" \
+             -M "${MEM_GB}G" -R "rusage[mem=${MEM_GB}G]" \
              -o "${LOG_DIR}/${JOB}.%J.out" -e "${LOG_DIR}/${JOB}.%J.err" \
              -env "$ENV_STR" < "${SCRIPTS_DIR}/48a_run_fusion.sh"
         echo "  submitted ${WS} x ${TRAIT_ID} (LD ref: ${LD_ANC})"

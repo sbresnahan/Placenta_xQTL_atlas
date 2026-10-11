@@ -30,6 +30,7 @@
 #   QUEUE        — default medium
 #   WALLTIME     — default 04:00
 #   THREADS      — default 2
+#   MEM_GB       — LSF memory request per array element, default 64 GB
 #   R2_MIN       — retention gate on CV R^2, default 0.01
 #   FORCE_RUN=1  — retrain genes with existing .wgt.RDat (worker deletes them)
 #   SKIP_COLLAPSE_CHECK=1 — skip the collapsed-replicate input audit
@@ -53,6 +54,7 @@ SHARD_SIZE="${SHARD_SIZE:-25}"
 QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-04:00}"
 THREADS="${THREADS:-2}"
+MEM_GB="${MEM_GB:-64}"
 R2_MIN="${R2_MIN:-0.01}"
 TEST="${TEST:-0}"
 FORCE_RUN="${FORCE_RUN:-0}"
@@ -64,6 +66,7 @@ echo "=== 47_submit_isotwas.sh ==="
 echo "  WEIGHT_SETS: $WEIGHT_SETS"
 echo "  ISOTWAS_DIR: $ISOTWAS_DIR"
 echo "  SHARD_SIZE:  $SHARD_SIZE   QUEUE: $QUEUE   WALLTIME: $WALLTIME"
+echo "  MEMORY:      ${MEM_GB}G per LSF array element"
 
 # --- Collapsed-replicate input audit ------------------------------------------
 # Weight training consumes sample-level qtl_inputs (BEDs, covariates, pgen).
@@ -128,6 +131,7 @@ for WS in $WEIGHT_SETS; do
 
     ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},QTL_DIR=${QTL_DIR},ISOTWAS_DIR=${ISOTWAS_DIR},WEIGHT_SET=${WS},N_SHARDS=${N_SHARDS},R2_MIN=${R2_MIN},FORCE_RUN=${FORCE_RUN},RSCRIPT=${RSCRIPT}"
     bsub -J "isotwas_${WS}[${ARRAY_SPEC}]" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
+         -M "${MEM_GB}G" -R "rusage[mem=${MEM_GB}G]" \
          -o "${LOG_DIR}/isotwas_${WS}_%J_%I.out" \
          -e "${LOG_DIR}/isotwas_${WS}_%J_%I.err" \
          -env "$ENV_STR" \
