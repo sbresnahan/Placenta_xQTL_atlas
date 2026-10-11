@@ -43,7 +43,7 @@ MODALITY_COLORS <- c(
 
 theme_report <- function(base_size = 11) {
   theme_classic(base_size = base_size) +
-    theme(text = element_text(family = "Liberation Sans"),
+    theme(text = element_text(family = "Helvetica"),
           strip.background = element_rect(fill = "grey92", color = NA),
           strip.text = element_text(face = "bold"),
           legend.key.size = unit(0.45, "cm"))
