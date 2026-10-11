@@ -59,7 +59,7 @@ weight, gestational duration, glycemic traits, and childhood adiposity:
 | `46_prepare_isotwas_inputs.py` | Host-side BED extraction + plink2 cis-dosage export for one isoTWAS shard |
 | `46_isotwas_train.R` | Pure-R isoTWAS/TWAS weight trainer; FUSION-format per-model `.wgt.RDat` + shard `.pos` |
 | `47_submit_isotwas.sh` / `47a_run_isotwas_shard.sh` | LSF array driver (one array per weight set); host preparation runs before Singularity R |
-| `48_fusion_twas.sh` / `48a_run_fusion.sh` | FUSION association testing per weight set x trait; converts the prebuilt 40b/40c chromosome PGENs to FUSION BED views |
+| `48_fusion_twas.sh` / `48a_run_fusion.sh` / `48c_merge_fusion.sh` | FUSION association testing per weight set x trait; one LSF array element per chromosome (bounded concurrency) plus dependent merge; converts the prebuilt 40b/40c chromosome PGENs to FUSION BED views |
 | `49_aggregate_coloc_twas.py` | Aggregation + gene-level ACAT + R21 genotype x cell-proportion attribution at significant xQTL leads |
 | `coloc_common.R` | Pure-R shared helpers only; no command execution |
 | `gwas_catalog.tsv` | GWAS source catalog (see below) |
@@ -127,6 +127,7 @@ $RESULTS_DIR/
                gene_celltype_annotation.tsv
   isotwas/
     weights/{WS}/genes/{model}.wgt.RDat, shard-*.pos, {WS}.pos
+    fusion/{WS}/per_chr/{trait}/chr{1..22}.twas.tsv(+ .done)
     fusion/{WS}/{WS}_{trait}.twas.tsv
     diagnostics/isotwas_{WS}.shard-*.diagnostics.tsv
   (aggregated TWAS tables land in coloc/aggregated/: twas_results.tsv.gz,

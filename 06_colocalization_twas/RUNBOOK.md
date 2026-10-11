@@ -172,7 +172,8 @@ it before running (the step has no shell driver).
 | 46/47 isoTWAS | login driver | `python3` stdlib only (gene counts, collapse audit) | — |
 | 46/47a workers | compute | `module load plink samtools`; R via `$RSCRIPT` | in-script (47a) |
 | 48 FUSION | login driver | `plink2` (compact PGEN -> FUSION BED conversion only) | in-script: `module load plink` attempted if missing |
-| 48a workers | compute | R via `$RSCRIPT` through `48b_fusion_assoc.R` (sets `.libPaths()` in R) | in-script |
+| 48a workers | compute | one chromosome per LSF array element; R via `$RSCRIPT` through `48b_fusion_assoc.R` (sets `.libPaths()` in R) | in-script |
+| 48c merge | compute | shell-only dependent merge after the full chromosome array ends; publishes only if all chromosomes succeeded | in-script |
 | 49 aggregate | **interactive node** | conda env `tensorqtl` (pandas, numpy, scipy) | **manual**: `conda activate tensorqtl` |
 
 The `tensorqtl` conda env is created by module-05 `21_install_tensorqtl.sh`
@@ -1161,18 +1162,30 @@ Step 48 performs four operations:
 1. Convert prebuilt 40b/40c chromosome PGENs to FUSION PLINK BED views.
 2. Convert harmonized GWAS to FUSION summary-statistic format.
 3. Merge isoTWAS shard .pos files.
-4. Submit one FUSION job per weight-set × GWAS trait.
+4. Submit one 22-element FUSION chromosome array per weight-set × GWAS trait,
+   followed by a dependent merge job that starts after the chromosome array ends.
 ```
+
+FUSION itself remains single-core within a chromosome. Parallelism is therefore
+implemented at the chromosome level: each `48a` array element requests one core
+and analyzes exactly one chromosome. `FUSION_MAX_PARALLEL` bounds how many of
+the 22 chromosome jobs for a pair can run concurrently. Completed chromosome
+outputs carry `.done` sentinels and are restart-safe; `48c_merge_fusion.sh`
+runs after all 22 array elements end and publishes the final pair-level table
+only if all 22 succeeded. If any chromosome fails, the merge exits non-zero
+instead of remaining permanently pending, so the pair can be resubmitted
+cleanly.
 
 **Required environment:** the driver needs `plink2` on the login node only for
 the compact chromosome-PGEN -> BED conversion; it no longer scans/subsets the
 full 1KG panel. It attempts `module load plink` automatically when `plink2` is
 not already on `PATH` (override with `PLINK2=/path/to/plink2`).
-The workers (`48a`) run R through `$RSCRIPT`, invoking FUSION via the repo
-wrapper `48b_fusion_assoc.R`, which sets `.libPaths()` **inside R** before
-sourcing `FUSION.assoc_test.R` (the external FUSION script has no in-R
+The chromosome workers (`48a`) run R through `$RSCRIPT`, invoking FUSION via
+the repo wrapper `48b_fusion_assoc.R`, which sets `.libPaths()` **inside R**
+before sourcing `FUSION.assoc_test.R` (the external FUSION script has no in-R
 library setup, and bash-level `R_LIBS_*` is not reliably propagated here).
-FUSION's `optparse` flags are unaffected by the wrapper.
+FUSION's `optparse` flags are unaffected by the wrapper. The dependent `48c`
+job is shell-only and concatenates chromosome tables in numeric order.
 
 ## Environment controls
 
@@ -1192,10 +1205,14 @@ FUSION's `optparse` flags are unaffected by the wrapper.
 | `LDREF_DIR` | `$GWAS_DIR/fusion_ldref` | PLINK1 LD references |
 | `WEIGHT_SETS` | `EAS EUR pooled` | Weight sets |
 | `QUEUE` | `medium` | LSF queue |
-| `WALLTIME` | `04:00` | Per pair |
+| `WALLTIME` | `04:00` | Per-chromosome array-element walltime |
+| `MEM_GB` | `128` | Memory in GB per chromosome array element |
+| `FUSION_MAX_PARALLEL` | `4` | Maximum simultaneously running chromosomes per weight-set × trait pair |
+| `MERGE_WALLTIME` | `00:30` | Dependent chromosome-merge walltime |
+| `MERGE_MEM_GB` | `4` | Memory in GB for the dependent merge job |
 | `MIN_R2PRED` | `0.7` | FUSION Z-imputation R² threshold |
-| `TEST` | `0` | `1` = submit one weight-set × trait pair |
-| `FORCE_RUN` | `0` | Rerun existing TWAS output |
+| `TEST` | `0` | `1` = submit one weight-set × trait chromosome array + merge |
+| `FORCE_RUN` | `0` | Rerun completed chromosomes and existing final TWAS output |
 | `RSCRIPT` | repository R wrapper | R launcher |
 | `PLINK2` | `plink2` | Converts compact chromosome PGENs to FUSION BED views |
 
@@ -1204,16 +1221,21 @@ FUSION's `optparse` flags are unaffected by the wrapper.
 ```bash
 TEST=1 \
 WEIGHT_SETS="EAS EUR pooled" \
+FUSION_MAX_PARALLEL=4 \
+MEM_GB=128 \
 MIN_R2PRED=0.7 \
 bash 48_fusion_twas.sh
 ```
 
-`TEST=1` here genuinely limits submission to one weight-set × trait pair.
+`TEST=1` here genuinely limits submission to one weight-set × trait pair, but
+that pair is submitted as a 22-element chromosome array (at most
+`FUSION_MAX_PARALLEL` elements running at once) plus a dependent merge job.
 
 Monitor:
 
 ```bash
 bjobs -J 'fusion_*'
+bjobs -J 'fusionmerge_*'
 ```
 
 Check output:
@@ -1227,6 +1249,8 @@ find "${ISOTWAS_DIR}/fusion" -name '*.twas.tsv' -ls
 ```bash
 TEST=0 \
 WEIGHT_SETS="EAS EUR pooled" \
+FUSION_MAX_PARALLEL=4 \
+MEM_GB=128 \
 MIN_R2PRED=0.7 \
 bash 48_fusion_twas.sh
 ```
@@ -1258,11 +1282,19 @@ $LDREF_DIR/EUR.1kg.chr1.bed
 $LDREF_DIR/EUR.1kg.chr22.bed
 ```
 
-Expected association output:
+Expected association outputs:
 
 ```text
+$ISOTWAS_DIR/fusion/{WEIGHT_SET}/per_chr/{trait_id}/chr1.twas.tsv(.done)
+...
+$ISOTWAS_DIR/fusion/{WEIGHT_SET}/per_chr/{trait_id}/chr22.twas.tsv(.done)
 $ISOTWAS_DIR/fusion/{WEIGHT_SET}/{WEIGHT_SET}_{trait_id}.twas.tsv
 ```
+
+The final table is written atomically by `48c_merge_fusion.sh` after all 22
+chromosome jobs complete successfully. If a chromosome array is resubmitted
+after a partial failure, completed chromosomes are skipped unless
+`FORCE_RUN=1`.
 
 ---
 
@@ -1563,11 +1595,24 @@ MIN_R2PRED
 FUSION_DIR
 RSCRIPT
 SCRIPTS_DIR
+FORCE_RUN
+LSB_JOBINDEX   # chromosome 1-22
+```
+
+## Step 48 / 48c merge worker
+
+```text
+WEIGHT_SET
+TRAIT_ID
+ISOTWAS_DIR
 ```
 
 The 42a/45a/47a workers additionally load the seadragon modules `plink` and
-`samtools` themselves; the 48a worker relies on `FUSION_DIR` from the
-submitter environment (consumed by `48b_fusion_assoc.R`).
+`samtools` themselves; each 48a chromosome worker relies on `FUSION_DIR` from
+the submitter environment (consumed by `48b_fusion_assoc.R`). The 48c merge
+worker is shell-only and runs after `ended(<array_job_id>)` for the full
+48a array, then requires all 22 per-chromosome `.done` sentinels before
+publishing the final table.
 
 ---
 
