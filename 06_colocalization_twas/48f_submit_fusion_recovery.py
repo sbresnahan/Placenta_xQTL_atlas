@@ -339,7 +339,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--merge-walltime",
-        default=os.environ.get("MERGE_WALLTIME", "00:30"),
+        default=os.environ.get("MERGE_WALLTIME", "04:00"),
     )
     parser.add_argument(
         "--merge-mem-gb",
@@ -602,9 +602,9 @@ def main() -> int:
                     "-R",
                     f"rusage[mem={args.mem_gb}]",
                     "-o",
-                    str(log_dir / f"{job_name}.%J_%I.out"),
+                    str(log_dir / f"redo_{job_name}.%J_%I.out"),
                     "-e",
-                    str(log_dir / f"{job_name}.%J_%I.err"),
+                    str(log_dir / f"redo_{job_name}.%J_%I.err"),
                     "-env",
                     array_env,
                 ]
@@ -645,9 +645,9 @@ def main() -> int:
                     merge_cmd += ["-w", f"ended({array_job_id})"]
                 merge_cmd += [
                     "-o",
-                    str(log_dir / f"{merge_job_name}.%J.out"),
+                    str(log_dir / f"redo_{merge_job_name}.%J.out"),
                     "-e",
-                    str(log_dir / f"{merge_job_name}.%J.err"),
+                    str(log_dir / f"redo_{merge_job_name}.%J.err"),
                     "-env",
                     merge_env,
                 ]
@@ -692,9 +692,9 @@ def main() -> int:
                     "-R",
                     f"rusage[mem={args.merge_mem_gb}]",
                     "-o",
-                    str(log_dir / f"{merge_job_name}.%J.out"),
+                    str(log_dir / f"redo_{merge_job_name}.%J.out"),
                     "-e",
-                    str(log_dir / f"{merge_job_name}.%J.err"),
+                    str(log_dir / f"redo_{merge_job_name}.%J.err"),
                     "-env",
                     merge_env,
                 ]

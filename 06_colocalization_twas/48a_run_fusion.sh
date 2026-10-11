@@ -98,4 +98,12 @@ mv -f "$TMP_OUT" "$SHARD_OUT"
 touch "$DONE"
 trap - EXIT
 
-echo "${SHARD_STEM}: wrote $SHARD_OUT ($(awk 'END{print (NR > 0 ? NR - 1 : 0)}' "$SHARD_OUT") model rows)"
+N_ROWS=$(awk 'END{print (NR > 0 ? NR - 1 : 0)}' "$SHARD_OUT")
+STATUS_COL=$(awk -F '\t' 'NR==1 {for (i=1; i<=NF; i++) if ($i=="FUSION.STATUS") {print i; exit}}' "$SHARD_OUT")
+if [ -n "$STATUS_COL" ]; then
+    N_FAILED=$(awk -F '\t' -v c="$STATUS_COL" 'NR>1 && $c!="ok" {n++} END{print n+0}' "$SHARD_OUT")
+    N_OK=$((N_ROWS - N_FAILED))
+    echo "${SHARD_STEM}: wrote $SHARD_OUT (${N_OK} successful, ${N_FAILED} failed/skipped phenotype rows)"
+else
+    echo "${SHARD_STEM}: wrote $SHARD_OUT (${N_ROWS} model rows; legacy output without FUSION.STATUS)"
+fi
