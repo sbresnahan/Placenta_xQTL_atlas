@@ -92,18 +92,20 @@ if [ "$TEST" = "1" ]; then
     echo "TEST=1: EAS only, HC3/permutations off, 2 downsample replicates to N=40"
 fi
 
-HC3_FLAG=""
-[ "$HC3" = "0" ] && HC3_FLAG="--skip-hc3"
-FORCE_FLAG=""
-[ "$FORCE" = "1" ] && FORCE_FLAG="--force"
-
 JOB="celltype_diag"
 if bjobs -J "$JOB" 2>/dev/null | grep -q "$JOB"; then
     echo "SKIP: $JOB already running/pending"
     exit 0
 fi
 
-ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},QTL_DIR=${QTL_DIR},RESULTS_DIR=${RESULTS_DIR},OUT_DIR=${OUT_DIR},ANCESTRIES=${ANCESTRIES},THREADS=${THREADS},PERMUTATIONS=${PERMUTATIONS},PERMUTE_TOP=${PERMUTE_TOP},PERMUTE_RANDOM=${PERMUTE_RANDOM},DOWNSAMPLE_REPS=${DOWNSAMPLE_REPS},DOWNSAMPLE_N=${DOWNSAMPLE_N},DOWNSAMPLE_ANCESTRY=${DOWNSAMPLE_ANCESTRY},DOWNSAMPLE_REFERENCE=${DOWNSAMPLE_REFERENCE},HC3_FLAG=${HC3_FLAG},FORCE_FLAG=${FORCE_FLAG},PYENV=${PYENV}"
+# LSF's -env parser rejects empty NAME= entries on this cluster.  Keep the
+# environment list non-empty-valued and append optional DOWNSAMPLE_N only when
+# explicitly set.  Boolean command-line flags are reconstructed in the worker
+# from HC3/FORCE rather than passed as possibly-empty strings.
+ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},QTL_DIR=${QTL_DIR},RESULTS_DIR=${RESULTS_DIR},OUT_DIR=${OUT_DIR},ANCESTRIES=${ANCESTRIES},THREADS=${THREADS},PERMUTATIONS=${PERMUTATIONS},PERMUTE_TOP=${PERMUTE_TOP},PERMUTE_RANDOM=${PERMUTE_RANDOM},DOWNSAMPLE_REPS=${DOWNSAMPLE_REPS},DOWNSAMPLE_ANCESTRY=${DOWNSAMPLE_ANCESTRY},DOWNSAMPLE_REFERENCE=${DOWNSAMPLE_REFERENCE},HC3=${HC3},FORCE=${FORCE},PYENV=${PYENV}"
+if [ -n "$DOWNSAMPLE_N" ]; then
+    ENV_STR="${ENV_STR},DOWNSAMPLE_N=${DOWNSAMPLE_N}"
+fi
 
 bsub -J "$JOB" -q "$QUEUE" -n "$THREADS" -W "$WALLTIME" \
      -M "${MEM_GB}G" -R "rusage[mem=${MEM_GB}G]" \
@@ -123,7 +125,11 @@ import numpy, pandas, scipy
 print("python diagnostics deps OK", numpy.__version__, pandas.__version__, scipy.__version__)
 PY
 DOWNSAMPLE_N_FLAG=()
-[ -n "$DOWNSAMPLE_N" ] && DOWNSAMPLE_N_FLAG=(--downsample-n "$DOWNSAMPLE_N")
+[ -n "${DOWNSAMPLE_N:-}" ] && DOWNSAMPLE_N_FLAG=(--downsample-n "$DOWNSAMPLE_N")
+HC3_FLAG=()
+[ "$HC3" = "0" ] && HC3_FLAG=(--skip-hc3)
+FORCE_FLAG=()
+[ "$FORCE" = "1" ] && FORCE_FLAG=(--force)
 python3 "${SCRIPTS_DIR}/50_celltype_diagnostics.py" \
     --results-dir "$RESULTS_DIR" \
     --qtl-dir "$QTL_DIR" \
@@ -137,7 +143,7 @@ python3 "${SCRIPTS_DIR}/50_celltype_diagnostics.py" \
     --downsample-ancestry "$DOWNSAMPLE_ANCESTRY" \
     --downsample-reference-ancestry "$DOWNSAMPLE_REFERENCE" \
     "${DOWNSAMPLE_N_FLAG[@]}" \
-    $HC3_FLAG $FORCE_FLAG
+    "${HC3_FLAG[@]}" "${FORCE_FLAG[@]}"
 EOF
 
 echo "Submitted $JOB"
