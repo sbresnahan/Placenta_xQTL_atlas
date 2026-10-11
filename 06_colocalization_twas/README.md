@@ -59,7 +59,7 @@ weight, gestational duration, glycemic traits, and childhood adiposity:
 | `46_prepare_isotwas_inputs.py` | Host-side BED extraction + plink2 cis-dosage export for one isoTWAS shard |
 | `46_isotwas_train.R` | Pure-R isoTWAS/TWAS weight trainer; FUSION-format per-model `.wgt.RDat` + shard `.pos` |
 | `47_submit_isotwas.sh` / `47a_run_isotwas_shard.sh` | LSF array driver (one array per weight set); host preparation runs before Singularity R |
-| `48_fusion_twas.sh` / `48a_run_fusion.sh` / `48c_merge_fusion.sh` | FUSION association testing per weight set x trait; one LSF array element per chromosome (bounded concurrency) plus dependent merge; converts the prebuilt 40b/40c chromosome PGENs to FUSION BED views |
+| `48_fusion_twas.sh` / `48a_run_fusion.sh` / `48c_merge_fusion.sh` / `48d_prepare_fusion_shards.py` | FUSION association testing per weight set x trait; adaptive chromosome x feature shards in one bounded-concurrency LSF array plus dependent merge; pre-splits GWAS by chromosome and converts prebuilt 40b/40c chromosome PGENs to FUSION BED views |
 | `49_aggregate_coloc_twas.py` | Aggregation + gene-level ACAT + R21 genotype x cell-proportion attribution at significant xQTL leads |
 | `coloc_common.R` | Pure-R shared helpers only; no command execution |
 | `gwas_catalog.tsv` | GWAS source catalog (see below) |
@@ -127,7 +127,8 @@ $RESULTS_DIR/
                gene_celltype_annotation.tsv
   isotwas/
     weights/{WS}/genes/{model}.wgt.RDat, shard-*.pos, {WS}.pos
-    fusion/{WS}/per_chr/{trait}/chr{1..22}.twas.tsv(+ .done)
+    weights/{WS}/fusion_shards/features_{N}_{hash}/manifest.tsv, chr*.shard*.pos
+    fusion/{WS}/per_shard/{trait}/features_{N}_{hash}/chr*.shard*.twas.tsv(+ .done)
     fusion/{WS}/{WS}_{trait}.twas.tsv
     diagnostics/isotwas_{WS}.shard-*.diagnostics.tsv
   (aggregated TWAS tables land in coloc/aggregated/: twas_results.tsv.gz,
@@ -137,7 +138,7 @@ $RESULTS_DIR/
 ## Tests
 
 `pytest test_1kg_ld_reference.py test_susie_coloc.py test_colocboost.py test_isotwas_train.py
-test_no_r_cli_downstream.py test_aggregate.py` — fixture-based: shared vs distinct causal variants for
+test_fusion_shards.py test_no_r_cli_downstream.py test_aggregate.py` — fixture-based: shared vs distinct causal variants for
 coloc/colocBoost; weight recovery + R^2 gate + FUSION round-trip for isoTWAS;
 aggregation smoke test. Fixtures need `plink2`, `bgzip`, `tabix`, and R with
 `coloc`, `colocboost`, `glmnet` (sandbox: run 36 or use the conda R).

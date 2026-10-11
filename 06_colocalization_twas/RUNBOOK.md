@@ -172,8 +172,9 @@ it before running (the step has no shell driver).
 | 46/47 isoTWAS | login driver | `python3` stdlib only (gene counts, collapse audit) | — |
 | 46/47a workers | compute | `module load plink samtools`; R via `$RSCRIPT` | in-script (47a) |
 | 48 FUSION | login driver | `plink2` (compact PGEN -> FUSION BED conversion only) | in-script: `module load plink` attempted if missing |
-| 48a workers | compute | one chromosome per LSF array element; R via `$RSCRIPT` through `48b_fusion_assoc.R` (sets `.libPaths()` in R) | in-script |
-| 48c merge | compute | shell-only dependent merge after the full chromosome array ends; publishes only if all chromosomes succeeded | in-script |
+| 48a workers | compute | one chromosome x feature shard per LSF array element; chromosome-specific GWAS; R via `$RSCRIPT` through `48b_fusion_assoc.R` (sets `.libPaths()` in R) | in-script |
+| 48c merge | compute | shell-only dependent merge after the full feature-shard array ends; publishes only if every shard succeeded | in-script |
+| 48d shard prep | login driver | Python stdlib only; deterministic adaptive sharding of merged `.pos` models by chromosome and feature count | in-script |
 | 49 aggregate | **interactive node** | conda env `tensorqtl` (pandas, numpy, scipy) | **manual**: `conda activate tensorqtl` |
 
 The `tensorqtl` conda env is created by module-05 `21_install_tensorqtl.sh`
@@ -1160,32 +1161,56 @@ Step 48 performs four operations:
 
 ```text
 1. Convert prebuilt 40b/40c chromosome PGENs to FUSION PLINK BED views.
-2. Convert harmonized GWAS to FUSION summary-statistic format.
-3. Merge isoTWAS shard .pos files.
-4. Submit one 22-element FUSION chromosome array per weight-set × GWAS trait,
-   followed by a dependent merge job that starts after the chromosome array ends.
+2. Convert harmonized GWAS to FUSION format and pre-split each trait by chromosome.
+3. Merge isoTWAS shard .pos files, then adaptively shard models within chromosome.
+4. Submit one global chromosome x feature-shard LSF array per weight-set × GWAS
+   trait, followed by a dependent merge job after the array ends.
 ```
 
-FUSION itself remains single-core within a chromosome. Parallelism is therefore
-implemented at the chromosome level: each `48a` array element requests one core
-and analyzes exactly one chromosome. `FUSION_MAX_PARALLEL` bounds how many of
-the 22 chromosome jobs for a pair can run concurrently. Completed chromosome
-outputs carry `.done` sentinels and are restart-safe; `48c_merge_fusion.sh`
-runs after all 22 array elements end and publishes the final pair-level table
-only if all 22 succeeded. If any chromosome fails, the merge exits non-zero
-instead of remaining permanently pending, so the pair can be resubmitted
-cleanly.
+FUSION itself remains single-core, and its command interface is chromosome-
+specific. A chromosome-only array therefore leaves a long runtime tail when,
+for example, chr1 carries many more trained models than chr21. Step 48 now
+parallelizes at the finer **chromosome x feature-shard** level. The merged
+weight-set `.pos` is grouped by chromosome; for a chromosome with `N` trained
+models, `48d_prepare_fusion_shards.py` creates
+`ceil(N / FUSION_FEATURES_PER_SHARD)` near-equal shards. Thus a chromosome
+with 401 models and the default target of 200 becomes 134/134/133, while a
+chromosome with 50 models remains one 50-model shard. Sharding never crosses
+chromosome boundaries, so each FUSION invocation still receives one `--chr`
+and one ancestry-matched chromosome LD reference.
+
+All chromosome x feature shards for a weight-set × trait pair are submitted as
+**one global LSF array**, rather than one array per chromosome. This lets LSF
+immediately refill a freed slot from any chromosome and minimizes the long
+runtime tail. `FUSION_MAX_PARALLEL` bounds the number of simultaneously running
+shards for that pair. The tradeoff is intentional: multiple shards from the
+same chromosome independently load the chromosome LD reference, increasing
+aggregate RAM/I/O while reducing wall-clock time and improving scheduler
+utilization.
+
+To reduce repeated parsing, Step 48 also writes chromosome-specific GWAS files
+once under `$GWAS_DIR/fusion/{trait}/chr{1..22}.fusion.tsv`; each worker reads
+only its own chromosome rather than the genome-wide FUSION sumstats table.
+
+Shard plans are deterministic and content-addressed by the merged `.pos` bytes
+plus `FUSION_FEATURES_PER_SHARD`, e.g.
+`features_200_1a2b3c4d5e6f/`. Completed shard outputs carry `.done` sentinels
+under the matching plan ID. Partial failures are therefore restart-safe, and a
+change in the weight list or shard size cannot accidentally reuse stale shard
+outputs. `48c_merge_fusion.sh` runs after the array **ends** and publishes the
+final pair-level table only if every manifest row has a completed output. If
+any shard fails, the merge exits non-zero rather than remaining permanently
+pending; rerunning Step 48 skips already completed shards unless `FORCE_RUN=1`.
 
 **Required environment:** the driver needs `plink2` on the login node only for
 the compact chromosome-PGEN -> BED conversion; it no longer scans/subsets the
 full 1KG panel. It attempts `module load plink` automatically when `plink2` is
-not already on `PATH` (override with `PLINK2=/path/to/plink2`).
-The chromosome workers (`48a`) run R through `$RSCRIPT`, invoking FUSION via
-the repo wrapper `48b_fusion_assoc.R`, which sets `.libPaths()` **inside R**
-before sourcing `FUSION.assoc_test.R` (the external FUSION script has no in-R
-library setup, and bash-level `R_LIBS_*` is not reliably propagated here).
-FUSION's `optparse` flags are unaffected by the wrapper. The dependent `48c`
-job is shell-only and concatenates chromosome tables in numeric order.
+not already on `PATH` (override with `PLINK2=/path/to/plink2`). Shard planning
+uses only Python's standard library. Workers (`48a`) run R through `$RSCRIPT`,
+invoking FUSION via the repo wrapper `48b_fusion_assoc.R`, which sets
+`.libPaths()` **inside R** before sourcing `FUSION.assoc_test.R`. FUSION's
+`optparse` flags are unaffected by the wrapper. The dependent `48c` job is
+shell-only.
 
 ## Environment controls
 
@@ -1199,20 +1224,21 @@ job is shell-only and concatenates chromosome tables in numeric order.
 | `LOG_DIR` | `$OUTPUT_BASE/logs` | Logs |
 | `COLOC_DIR` | `$RESULTS_DIR/coloc` | Contains prebuilt 1KG reference directory |
 | `ISOTWAS_DIR` | `$RESULTS_DIR/isotwas` | Weights and TWAS outputs |
-| `GWAS_DIR` | `$OUTPUT_BASE/gwas` | Harmonized GWAS |
+| `GWAS_DIR` | `$OUTPUT_BASE/gwas` | Harmonized GWAS and chromosome-specific FUSION sumstats |
 | `KG_LD_REF_DIR` | `$COLOC_DIR/ld_reference/1kg` | Source compact ancestry/chromosome PGENs from 40b/40c |
 | `FUSION_DIR` | hard-coded FUSION default | FUSION scripts |
 | `LDREF_DIR` | `$GWAS_DIR/fusion_ldref` | PLINK1 LD references |
 | `WEIGHT_SETS` | `EAS EUR pooled` | Weight sets |
 | `QUEUE` | `medium` | LSF queue |
-| `WALLTIME` | `04:00` | Per-chromosome array-element walltime |
-| `MEM_GB` | `128` | Memory in GB per chromosome array element |
-| `FUSION_MAX_PARALLEL` | `4` | Maximum simultaneously running chromosomes per weight-set × trait pair |
-| `MERGE_WALLTIME` | `00:30` | Dependent chromosome-merge walltime |
+| `WALLTIME` | `04:00` | Per-feature-shard array-element walltime |
+| `MEM_GB` | `128` | Memory in GB per feature-shard array element |
+| `FUSION_FEATURES_PER_SHARD` | `200` | Maximum target models per chromosome-specific shard; large chromosomes are split adaptively |
+| `FUSION_MAX_PARALLEL` | `4` | Maximum simultaneously running feature shards per weight-set × trait pair |
+| `MERGE_WALLTIME` | `00:30` | Dependent shard-merge walltime |
 | `MERGE_MEM_GB` | `4` | Memory in GB for the dependent merge job |
 | `MIN_R2PRED` | `0.7` | FUSION Z-imputation R² threshold |
-| `TEST` | `0` | `1` = submit one weight-set × trait chromosome array + merge |
-| `FORCE_RUN` | `0` | Rerun completed chromosomes and existing final TWAS output |
+| `TEST` | `0` | `1` = submit one weight-set × trait feature-shard array + merge |
+| `FORCE_RUN` | `0` | Rerun completed shards and existing final TWAS output |
 | `RSCRIPT` | repository R wrapper | R launcher |
 | `PLINK2` | `plink2` | Converts compact chromosome PGENs to FUSION BED views |
 
@@ -1221,21 +1247,32 @@ job is shell-only and concatenates chromosome tables in numeric order.
 ```bash
 TEST=1 \
 WEIGHT_SETS="EAS EUR pooled" \
+FUSION_FEATURES_PER_SHARD=200 \
 FUSION_MAX_PARALLEL=4 \
 MEM_GB=128 \
 MIN_R2PRED=0.7 \
 bash 48_fusion_twas.sh
 ```
 
-`TEST=1` here genuinely limits submission to one weight-set × trait pair, but
-that pair is submitted as a 22-element chromosome array (at most
-`FUSION_MAX_PARALLEL` elements running at once) plus a dependent merge job.
+`TEST=1` limits submission to one weight-set × trait pair. That pair still
+uses its complete adaptive shard plan, but no more than
+`FUSION_MAX_PARALLEL` shards run simultaneously. This is the correct pilot for
+measuring real FUSION memory because each worker loads an actual chromosome LD
+reference.
 
 Monitor:
 
 ```bash
 bjobs -J 'fusion_*'
 bjobs -J 'fusionmerge_*'
+```
+
+Inspect the generated shard plan and feature balance:
+
+```bash
+cat "${ISOTWAS_DIR}/weights/EAS/fusion_shards/latest_manifest.txt"
+MANIFEST=$(cat "${ISOTWAS_DIR}/weights/EAS/fusion_shards/latest_manifest.txt")
+column -t -s $'\t' "$MANIFEST" | less -S
 ```
 
 Check output:
@@ -1249,11 +1286,19 @@ find "${ISOTWAS_DIR}/fusion" -name '*.twas.tsv' -ls
 ```bash
 TEST=0 \
 WEIGHT_SETS="EAS EUR pooled" \
+FUSION_FEATURES_PER_SHARD=200 \
 FUSION_MAX_PARALLEL=4 \
 MEM_GB=128 \
 MIN_R2PRED=0.7 \
 bash 48_fusion_twas.sh
 ```
+
+If completed pilot jobs show ample memory headroom, increasing
+`FUSION_MAX_PARALLEL` (for example to 8) raises throughput without changing the
+scientific calculation. Lowering `FUSION_FEATURES_PER_SHARD` creates more,
+shorter jobs but duplicates chromosome-LD loading more often; increasing it
+reduces repeated setup/I/O but makes the longest shard slower. The default 200
+is a starting point, not a statistical parameter.
 
 Subset:
 
@@ -1282,19 +1327,33 @@ $LDREF_DIR/EUR.1kg.chr1.bed
 $LDREF_DIR/EUR.1kg.chr22.bed
 ```
 
-Expected association outputs:
+Expected shard-plan / GWAS / association outputs:
 
 ```text
-$ISOTWAS_DIR/fusion/{WEIGHT_SET}/per_chr/{trait_id}/chr1.twas.tsv(.done)
+$GWAS_DIR/fusion/{trait_id}/chr1.fusion.tsv
 ...
-$ISOTWAS_DIR/fusion/{WEIGHT_SET}/per_chr/{trait_id}/chr22.twas.tsv(.done)
+$GWAS_DIR/fusion/{trait_id}/chr22.fusion.tsv
+
+$ISOTWAS_DIR/weights/{WEIGHT_SET}/fusion_shards/
+  features_{FUSION_FEATURES_PER_SHARD}_{hash}/
+    manifest.tsv
+    chr01.shard0001.pos
+    chr01.shard0002.pos
+    ...
+
+$ISOTWAS_DIR/fusion/{WEIGHT_SET}/per_shard/{trait_id}/
+  features_{FUSION_FEATURES_PER_SHARD}_{hash}/
+    chr01.shard0001.twas.tsv(.done)
+    chr01.shard0002.twas.tsv(.done)
+    ...
+
 $ISOTWAS_DIR/fusion/{WEIGHT_SET}/{WEIGHT_SET}_{trait_id}.twas.tsv
 ```
 
-The final table is written atomically by `48c_merge_fusion.sh` after all 22
-chromosome jobs complete successfully. If a chromosome array is resubmitted
-after a partial failure, completed chromosomes are skipped unless
-`FORCE_RUN=1`.
+The final table is written atomically by `48c_merge_fusion.sh` after every
+manifest shard completes successfully. On resubmission after a partial
+failure, completed shards from the same content-addressed plan are skipped
+unless `FORCE_RUN=1`.
 
 ---
 

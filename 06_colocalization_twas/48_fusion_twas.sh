@@ -8,11 +8,16 @@
 # Step 1 converts the already-prebuilt ancestry/chromosome 1KG PGEN references
 # from 40b/40c to the PLINK BED format required by FUSION. The full 1KG PGEN
 # and ancestry keep files are not touched here.
-# Step 2 converts each harmonized GWAS to FUSION format (SNP A1 A2 Z BETA SE).
-# Step 3 merges shard .pos fragments into one .pos per weight set.
-# Step 4 submits one 22-element LSF chromosome array per weight set x trait.
-# Each 48a array element runs one chromosome. A dependent 48c job runs after
-# the whole array ends and publishes the final table only if all 22 succeeded.
+# Step 2 converts each harmonized GWAS to FUSION format and writes one smaller
+# chromosome-specific summary-statistic file per autosome.
+# Step 3 merges shard .pos fragments into one .pos per weight set, then builds
+# deterministic chromosome x feature shards. Chromosomes with more models get
+# more shards; small chromosomes get one. Shards are balanced to contain at
+# most FUSION_FEATURES_PER_SHARD models.
+# Step 4 submits one global LSF feature-shard array per weight set x trait.
+# Each 48a array element runs one chromosome-specific subset of models. A
+# dependent 48c job runs after the array ends and publishes the final table
+# only if every shard succeeded.
 #
 # LD reference ancestry: the trait's primary_ancestry when EAS/EUR; traits
 # labeled "both" use the weight set's ancestry (EUR for the pooled set).
@@ -20,19 +25,20 @@
 # Prerequisites: 40b/40c compact 1KG refs, 46/47 weights, FUSION clone (36).
 #
 # Usage:
-#   TEST=1 bash 48_fusion_twas.sh   # prep + ONE pair (22-chr array + merge)
+#   TEST=1 bash 48_fusion_twas.sh   # prep + ONE pair (feature-shard array + merge)
 #   bash 48_fusion_twas.sh
 #
 # Optional overrides:
-#   WEIGHT_SETS         — default "EAS EUR pooled"
-#   QUEUE               — default medium
-#   WALLTIME            — per-chromosome walltime, default 04:00
-#   MEM_GB              — memory per chromosome array element, default 128 GB
-#   FUSION_MAX_PARALLEL — max concurrent chromosomes per pair, default 4
-#   MERGE_WALLTIME      — dependent concatenation walltime, default 00:30
-#   MERGE_MEM_GB        — dependent concatenation memory, default 4 GB
-#   MIN_R2PRED          — FUSION GWAS Z imputation r2 filter, default 0.7
-#   FORCE_RUN=1         — rerun completed chromosomes/final pair outputs
+#   WEIGHT_SETS                 — default "EAS EUR pooled"
+#   QUEUE                       — default medium
+#   WALLTIME                    — per-feature-shard walltime, default 04:00
+#   MEM_GB                      — memory per feature-shard array element, default 128 GB
+#   FUSION_FEATURES_PER_SHARD   — target maximum models per shard, default 200
+#   FUSION_MAX_PARALLEL         — max concurrent feature shards per pair, default 4
+#   MERGE_WALLTIME              — dependent concatenation walltime, default 00:30
+#   MERGE_MEM_GB                — dependent concatenation memory, default 4 GB
+#   MIN_R2PRED                  — FUSION GWAS Z imputation r2 filter, default 0.7
+#   FORCE_RUN=1                 — rerun completed shards/final pair outputs
 # =============================================================================
 set -eo pipefail
 
@@ -53,6 +59,7 @@ WEIGHT_SETS="${WEIGHT_SETS:-EAS EUR pooled}"
 QUEUE="${QUEUE:-medium}"
 WALLTIME="${WALLTIME:-04:00}"
 MEM_GB="${MEM_GB:-128}"
+FUSION_FEATURES_PER_SHARD="${FUSION_FEATURES_PER_SHARD:-200}"
 FUSION_MAX_PARALLEL="${FUSION_MAX_PARALLEL:-4}"
 MERGE_WALLTIME="${MERGE_WALLTIME:-00:30}"
 MERGE_MEM_GB="${MERGE_MEM_GB:-4}"
@@ -63,16 +70,22 @@ RSCRIPT="${RSCRIPT:-${REPO_ROOT}/bin/Rscript_sif}"
 PLINK2="${PLINK2:-plink2}"
 N_CHR=22
 
-case "$FUSION_MAX_PARALLEL" in
-    ''|*[!0-9]*)
-        echo "ERROR: FUSION_MAX_PARALLEL must be an integer in [1, ${N_CHR}]" >&2
+for SPEC in \
+    "FUSION_FEATURES_PER_SHARD:${FUSION_FEATURES_PER_SHARD}" \
+    "FUSION_MAX_PARALLEL:${FUSION_MAX_PARALLEL}"; do
+    NAME="${SPEC%%:*}"
+    VALUE="${SPEC#*:}"
+    case "$VALUE" in
+        ''|*[!0-9]*)
+            echo "ERROR: ${NAME} must be a positive integer (got '${VALUE}')" >&2
+            exit 1
+            ;;
+    esac
+    if [ "$VALUE" -lt 1 ]; then
+        echo "ERROR: ${NAME} must be >= 1 (got ${VALUE})" >&2
         exit 1
-        ;;
-esac
-if [ "$FUSION_MAX_PARALLEL" -lt 1 ] || [ "$FUSION_MAX_PARALLEL" -gt "$N_CHR" ]; then
-    echo "ERROR: FUSION_MAX_PARALLEL must be in [1, ${N_CHR}] (got ${FUSION_MAX_PARALLEL})" >&2
-    exit 1
-fi
+    fi
+done
 
 # --- Toolchain ---------------------------------------------------------------
 # Step 1 builds the 1KG LD references with plink2 on the login node. Load the
@@ -86,17 +99,22 @@ if ! command -v "$PLINK2" >/dev/null 2>&1; then
     echo "  Load a module/env providing plink2 or set PLINK2=/path/to/plink2." >&2
     exit 1
 fi
+if [ ! -x "${SCRIPTS_DIR}/48d_prepare_fusion_shards.py" ]; then
+    echo "ERROR: missing executable shard preparer: ${SCRIPTS_DIR}/48d_prepare_fusion_shards.py" >&2
+    exit 1
+fi
 
 mkdir -p "$LDREF_DIR" "${GWAS_DIR}/fusion" "$LOG_DIR"
 
 echo "=== 48_fusion_twas.sh ==="
-echo "  WEIGHT_SETS:         $WEIGHT_SETS"
-echo "  ISOTWAS_DIR:         $ISOTWAS_DIR"
-echo "  FUSION_DIR:          $FUSION_DIR"
-echo "  LDREF_DIR:           $LDREF_DIR"
-echo "  CHROMOSOME ARRAY:    1-${N_CHR}, max ${FUSION_MAX_PARALLEL} concurrent per pair"
-echo "  CHROMOSOME MEMORY:   ${MEM_GB}G per array element"
-echo "  MERGE MEMORY:        ${MERGE_MEM_GB}G"
+echo "  WEIGHT_SETS:             $WEIGHT_SETS"
+echo "  ISOTWAS_DIR:             $ISOTWAS_DIR"
+echo "  FUSION_DIR:              $FUSION_DIR"
+echo "  LDREF_DIR:               $LDREF_DIR"
+echo "  FEATURES/SHARD:          <= ${FUSION_FEATURES_PER_SHARD}"
+echo "  MAX CONCURRENT SHARDS:   ${FUSION_MAX_PARALLEL} per pair"
+echo "  SHARD MEMORY:            ${MEM_GB}G per array element"
+echo "  MERGE MEMORY:            ${MERGE_MEM_GB}G"
 
 # --- Step 1: FUSION BED views of the prebuilt 1KG references ----------------
 for ANC in EAS EUR; do
@@ -113,13 +131,13 @@ for ANC in EAS EUR; do
     done
 done
 
-# --- Step 2: FUSION-format GWAS sumstats --------------------------------------
+# --- Step 2: FUSION-format GWAS sumstats, split by chromosome -----------------
 TRAITS=()
 while IFS=$'\t' read -r TRAIT_ID PRIMARY_ANC; do
     HARM="${GWAS_DIR}/${TRAIT_ID}.sumstats.tsv.gz"
     [ -f "$HARM" ] || continue
     FUS="${GWAS_DIR}/fusion/${TRAIT_ID}.fusion.tsv"
-    if [ ! -f "$FUS" ]; then
+    if [ ! -f "$FUS" ] || [ "$HARM" -nt "$FUS" ]; then
         echo "  converting $TRAIT_ID to FUSION format"
         # harmonized schema: chr pos rsid effect_allele other_allele eaf
         # beta se pval n var_id trait_id  ->  FUSION: SNP A1 A2 Z BETA SE N
@@ -129,6 +147,42 @@ while IFS=$'\t' read -r TRAIT_ID PRIMARY_ANC; do
                                            $11, $4, $5, $7/$8, $7, $8, $10 }' \
             > "$FUS"
     fi
+
+    # Every shard is chromosome-specific. Pre-split the GWAS once so each
+    # FUSION R process parses only the chromosome it actually analyzes.
+    FUS_CHR_DIR="${GWAS_DIR}/fusion/${TRAIT_ID}"
+    NEED_SPLIT=0
+    for CHR in $(seq 1 "$N_CHR"); do
+        [ -s "${FUS_CHR_DIR}/chr${CHR}.fusion.tsv" ] || NEED_SPLIT=1
+        [ -e "${FUS_CHR_DIR}/chr${CHR}.fusion.tsv" ] && [ "$FUS" -nt "${FUS_CHR_DIR}/chr${CHR}.fusion.tsv" ] && NEED_SPLIT=1
+    done
+    if [ "$NEED_SPLIT" = "1" ]; then
+        echo "  splitting $TRAIT_ID FUSION sumstats by chromosome"
+        mkdir -p "$FUS_CHR_DIR"
+        TMP_TAG="tmp.$$"
+        awk -F '\t' -v OFS='\t' -v outdir="$FUS_CHR_DIR" -v tag="$TMP_TAG" '
+            NR == 1 {
+                header=$0
+                for (c=1; c<=22; c++) {
+                    f=outdir "/chr" c ".fusion.tsv." tag
+                    print header > f
+                    files[c]=f
+                }
+                next
+            }
+            {
+                split($1, a, ":")
+                c=a[1]
+                sub(/^chr/, "", c)
+                if (c ~ /^[0-9]+$/ && c >= 1 && c <= 22) print $0 >> files[c]
+            }
+            END { for (c=1; c<=22; c++) close(files[c]) }
+        ' "$FUS"
+        for CHR in $(seq 1 "$N_CHR"); do
+            mv -f "${FUS_CHR_DIR}/chr${CHR}.fusion.tsv.${TMP_TAG}" \
+                  "${FUS_CHR_DIR}/chr${CHR}.fusion.tsv"
+        done
+    fi
     TRAITS+=("${TRAIT_ID}:${PRIMARY_ANC}")
 done < <(tail -n +2 "${SCRIPTS_DIR}/gwas_catalog.tsv" | cut -f1,12)
 
@@ -137,7 +191,9 @@ if [ "${#TRAITS[@]}" -eq 0 ]; then
     exit 1
 fi
 
-# --- Step 3: merge shard .pos fragments ---------------------------------------
+# --- Step 3: merge .pos fragments and build adaptive feature shards -----------
+declare -A SHARD_MANIFESTS
+declare -A SHARD_COUNTS
 for WS in $WEIGHT_SETS; do
     POS_DIR="${ISOTWAS_DIR}/weights/${WS}"
     POS_OUT="${ISOTWAS_DIR}/weights/${WS}.pos"
@@ -146,17 +202,35 @@ for WS in $WEIGHT_SETS; do
         for SHARD_POS in "${POS_DIR}"/shard-*.pos; do
             tail -n +2 "$SHARD_POS" >> "$POS_OUT"
         done
-        echo "  ${WS}: $(( $(wc -l < "$POS_OUT") - 1 )) models in $(basename "$POS_OUT")"
+        N_MODELS=$(( $(wc -l < "$POS_OUT") - 1 ))
+        echo "  ${WS}: ${N_MODELS} models in $(basename "$POS_OUT")"
+        MANIFEST=$(python3 "${SCRIPTS_DIR}/48d_prepare_fusion_shards.py" \
+            --pos "$POS_OUT" \
+            --out-root "${POS_DIR}/fusion_shards" \
+            --features-per-shard "$FUSION_FEATURES_PER_SHARD")
+        if [ ! -s "$MANIFEST" ]; then
+            echo "ERROR: shard preparer did not produce a manifest for ${WS}: ${MANIFEST}" >&2
+            exit 1
+        fi
+        N_SHARDS=$(( $(wc -l < "$MANIFEST") - 1 ))
+        if [ "$N_SHARDS" -le 0 ]; then
+            echo "ERROR: zero FUSION feature shards for ${WS}" >&2
+            exit 1
+        fi
+        SHARD_MANIFESTS["$WS"]="$MANIFEST"
+        SHARD_COUNTS["$WS"]="$N_SHARDS"
+        echo "  ${WS}: ${N_MODELS} models -> ${N_SHARDS} chromosome x feature shards"
     else
         echo "  WARNING: no shard .pos files for ${WS} (has 47 run?)"
     fi
 done
 
-# --- Step 4: submit chromosome arrays + dependent merges ----------------------
+# --- Step 4: submit global feature-shard arrays + dependent merges ------------
 N=0
 for WS in $WEIGHT_SETS; do
-    POS_OUT="${ISOTWAS_DIR}/weights/${WS}.pos"
-    [ -s "$POS_OUT" ] || continue
+    MANIFEST="${SHARD_MANIFESTS[$WS]:-}"
+    N_SHARDS="${SHARD_COUNTS[$WS]:-0}"
+    [ -s "$MANIFEST" ] || continue
     for TRAIT_SPEC in "${TRAITS[@]}"; do
         TRAIT_ID="${TRAIT_SPEC%%:*}"
         PRIMARY_ANC="${TRAIT_SPEC##*:}"
@@ -182,12 +256,12 @@ for WS in $WEIGHT_SETS; do
         MERGE_JOB="fusionmerge_${WS}_${TRAIT_ID}"
         if bjobs -J "$JOB" 2>/dev/null | grep -q "$JOB" || \
            bjobs -J "$MERGE_JOB" 2>/dev/null | grep -q "$MERGE_JOB"; then
-            echo "  SKIP ${WS} x ${TRAIT_ID}: chromosome array or merge running/pending"
+            echo "  SKIP ${WS} x ${TRAIT_ID}: feature-shard array or merge running/pending"
             continue
         fi
 
-        ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},ISOTWAS_DIR=${ISOTWAS_DIR},WEIGHT_SET=${WS},TRAIT_ID=${TRAIT_ID},SUMSTATS=${GWAS_DIR}/fusion/${TRAIT_ID}.fusion.tsv,LDREF_PREFIX=${LDREF_DIR}/${LD_ANC}.1kg.chr,MIN_R2PRED=${MIN_R2PRED},FUSION_DIR=${FUSION_DIR},RSCRIPT=${RSCRIPT},FORCE_RUN=${FORCE_RUN}"
-        SUBMIT_OUT=$(bsub -J "${JOB}[1-${N_CHR}]%${FUSION_MAX_PARALLEL}" \
+        ENV_STR="CONFIG=${CONFIG},SCRIPTS_DIR=${SCRIPTS_DIR},REPO_ROOT=${REPO_ROOT},ISOTWAS_DIR=${ISOTWAS_DIR},WEIGHT_SET=${WS},TRAIT_ID=${TRAIT_ID},SUMSTATS_PREFIX=${GWAS_DIR}/fusion/${TRAIT_ID}/chr,LDREF_PREFIX=${LDREF_DIR}/${LD_ANC}.1kg.chr,SHARD_MANIFEST=${MANIFEST},MIN_R2PRED=${MIN_R2PRED},FUSION_DIR=${FUSION_DIR},RSCRIPT=${RSCRIPT},FORCE_RUN=${FORCE_RUN}"
+        SUBMIT_OUT=$(bsub -J "${JOB}[1-${N_SHARDS}]%${FUSION_MAX_PARALLEL}" \
              -q "$QUEUE" -n 1 -W "$WALLTIME" \
              -M "$MEM_GB" -R "rusage[mem=${MEM_GB}]" \
              -o "${LOG_DIR}/${JOB}.%J_%I.out" -e "${LOG_DIR}/${JOB}.%J_%I.err" \
@@ -199,22 +273,22 @@ for WS in $WEIGHT_SETS; do
             exit 1
         fi
 
-        MERGE_ENV_STR="ISOTWAS_DIR=${ISOTWAS_DIR},WEIGHT_SET=${WS},TRAIT_ID=${TRAIT_ID}"
+        MERGE_ENV_STR="ISOTWAS_DIR=${ISOTWAS_DIR},WEIGHT_SET=${WS},TRAIT_ID=${TRAIT_ID},SHARD_MANIFEST=${MANIFEST}"
         bsub -J "$MERGE_JOB" -q "$QUEUE" -n 1 -W "$MERGE_WALLTIME" \
              -M "$MERGE_MEM_GB" -R "rusage[mem=${MERGE_MEM_GB}]" \
              -w "ended(${ARRAY_JOB_ID})" \
              -o "${LOG_DIR}/${MERGE_JOB}.%J.out" -e "${LOG_DIR}/${MERGE_JOB}.%J.err" \
              -env "$MERGE_ENV_STR" < "${SCRIPTS_DIR}/48c_merge_fusion.sh"
 
-        echo "  submitted ${WS} x ${TRAIT_ID}: chr1-${N_CHR} array (max ${FUSION_MAX_PARALLEL}) + dependent merge; LD ref: ${LD_ANC}"
+        echo "  submitted ${WS} x ${TRAIT_ID}: ${N_SHARDS} chromosome x feature shards (max ${FUSION_MAX_PARALLEL} concurrent) + dependent merge; LD ref: ${LD_ANC}"
         N=$((N + 1))
         if [ "$TEST" = "1" ]; then
             echo ""
-            echo "TEST=1: submitted one pair (${WS} x ${TRAIT_ID}) as a chromosome array + merge."
+            echo "TEST=1: submitted one pair (${WS} x ${TRAIT_ID}) as an adaptive feature-shard array + merge."
             exit 0
         fi
     done
 done
 
 echo ""
-echo "Submitted $N FUSION chromosome arrays (+ dependent merge jobs)."
+echo "Submitted $N FUSION feature-shard arrays (+ dependent merge jobs)."
