@@ -88,7 +88,12 @@ def _load_stage49(path: Path):
     if spec is None or spec.loader is None:
         raise SystemExit(f"ERROR: cannot import stage-49 helpers from {path}")
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    sys.modules[spec.name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        raise
     required = [
         "_load_selected_bed", "_load_covariates", "_load_deconvolution",
         "_export_lead_dosages", "_drop_target_covariate", "bh_qvalues",

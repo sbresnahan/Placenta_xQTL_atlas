@@ -26,7 +26,17 @@ def load_core(script_dir: Path):
     if spec is None or spec.loader is None:
         raise SystemExit(f"ERROR: cannot import {path}")
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # multiprocessing pickles worker callables by fully qualified module name.
+    # Dynamic modules are not registered automatically by module_from_spec(),
+    # so Pool.imap_unordered() cannot pickle core._diagnose_feature /
+    # core._downsample_replicate unless the module is present in sys.modules.
+    # Register before exec so forked workers inherit an import-resolvable module.
+    sys.modules[spec.name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        raise
     return mod
 
 

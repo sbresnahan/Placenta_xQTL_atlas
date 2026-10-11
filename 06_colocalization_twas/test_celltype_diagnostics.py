@@ -237,3 +237,17 @@ def test_batched_downsampling_parallel_smoke():
     assert len(tt)==len(sub)
     assert len(ff)==k
     assert np.all(rr['target_n']==60)
+
+def test_shard_dynamic_core_worker_is_pickleable():
+    """Regression test for LSF Pool PicklingError in 50b shard workers."""
+    import pickle
+    shard_script = Path(__file__).with_name('50b_run_celltype_diag_shard.py')
+    shard_spec = importlib.util.spec_from_file_location('ctdiag_shard_loader_test', shard_script)
+    shard_mod = importlib.util.module_from_spec(shard_spec)
+    sys.modules[shard_spec.name] = shard_mod
+    shard_spec.loader.exec_module(shard_mod)
+    core = shard_mod.load_core(Path(__file__).resolve().parent)
+    assert sys.modules.get('celltype_diag_core') is core
+    # This was the exact operation failing while multiprocessing queued tasks.
+    pickle.dumps(core._diagnose_feature)
+    pickle.dumps(core._downsample_replicate)
