@@ -377,17 +377,33 @@ def _export_lead_dosages(qtl_dir, anc, variants, plink2, work_dir):
     raw[iid_col] = raw[iid_col].astype(str)
     meta_norm = {"fid", "iid", "pat", "mat", "sex", "phenotype"}
     geno_cols = [c for c in raw.columns if str(c).lstrip("#").lower() not in meta_norm]
-    out = pd.DataFrame(index=raw[iid_col])
+
+    # Build the dosage matrix in one shot.  Assigning thousands of columns one
+    # at a time fragments pandas' internal BlockManager and can make this step
+    # extremely slow (and emits one PerformanceWarning after another).  PLINK
+    # names --export A dosage columns either exactly as the variant ID or as
+    # <variant_id>_<counted allele>.  Our harmonized IDs are chr:pos:ref:alt,
+    # so a single rsplit safely recovers the variant ID for the latter form.
+    exact_cols = {str(c): c for c in geno_cols}
+    suffixed_cols = {}
+    for c in geno_cols:
+        name = str(c)
+        if "_" in name:
+            suffixed_cols.setdefault(name.rsplit("_", 1)[0], c)
+
+    dosage_cols = {}
     missing = []
     for vid in variants:
-        matches = [c for c in geno_cols if str(c) == vid or str(c).startswith(vid + "_")]
-        if not matches:
+        col = exact_cols.get(vid, suffixed_cols.get(vid))
+        if col is None:
             missing.append(vid)
             continue
-        # Variant IDs are chr:pos:ref:alt and therefore do not contain '_';
-        # PLINK appends '_<counted allele>' to the dosage column name.
-        col = matches[0]
-        out[vid] = pd.to_numeric(raw[col], errors="coerce").to_numpy()
+        dosage_cols[vid] = pd.to_numeric(raw[col], errors="coerce").to_numpy()
+
+    out = pd.DataFrame(
+        dosage_cols,
+        index=pd.Index(raw[iid_col].to_numpy(), name=str(iid_col)),
+    )
     if missing:
         print(f"  celltype: WARNING {anc}: {len(missing)}/{len(variants)} lead "
               "variants absent from dosage export")
