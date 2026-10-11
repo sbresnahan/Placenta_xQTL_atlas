@@ -7,6 +7,8 @@ import pandas as pd
 SCRIPT = Path(__file__).with_name('50_celltype_diagnostics.py')
 spec = importlib.util.spec_from_file_location('ctdiag', SCRIPT)
 ctdiag = importlib.util.module_from_spec(spec)
+import sys
+sys.modules['ctdiag'] = ctdiag
 spec.loader.exec_module(ctdiag)
 
 
@@ -152,3 +154,86 @@ def test_matched_ancestry_marks_variant_mismatch():
     assert len(matched) == 2
     assert matched['same_variant'].sum() == 1
     assert summ.iloc[0]['same_variant_rate'] == 0.5
+
+
+def test_batched_fwl_matches_scalar_exact_fits():
+    rng = np.random.default_rng(404)
+    n, k = 180, 9
+    g = rng.binomial(2, 0.3, size=(n, k)).astype(float)
+    c = rng.normal(size=n)
+    z = rng.normal(size=(n, 6))
+    y = (0.2 * g + 0.4 * c[:, None] +
+         0.7 * (g - g.mean(axis=0)) * (c - c.mean())[:, None] +
+         z[:, [0]] * 0.2 + rng.normal(scale=0.8, size=(n, k)))
+    # Exercise the rare feature-specific missingness fallback too.
+    y[3, -1] = np.nan
+    b, p, nn, st = ctdiag._batch_fwl_celltype(y, g, c, z, min_n=20)
+    for j in range(k):
+        bs, ps, ns, ss = ctdiag._fit_classical_arrays(y[:, j], g[:, j], c, z, min_n=20)
+        assert st[j] == ss == 'ok'
+        assert nn[j] == ns
+        assert np.isclose(b[j], bs, rtol=1e-9, atol=1e-10)
+        assert np.isclose(p[j], ps, rtol=1e-8, atol=1e-10)
+
+
+def test_qr_hc3_matches_explicit_sandwich():
+    rng = np.random.default_rng(505)
+    n = 220
+    idx = pd.Index([f's{i}' for i in range(n)])
+    g = rng.binomial(2, 0.25, n).astype(float)
+    c_raw = rng.beta(2, 5, n)
+    c = np.arcsinh(c_raw); c -= c.mean()
+    z = rng.normal(size=(n, 8))
+    y = 0.3*g + 0.5*c + 0.9*(g-g.mean())*c + z[:,0]*0.2 + rng.normal(size=n)
+    d, _ = ctdiag._prepare_design(
+        pd.Series(y,index=idx), pd.Series(g,index=idx), pd.Series(c,index=idx),
+        pd.Series(c_raw,index=idx), pd.DataFrame(z,index=idx), None
+    )
+    fast = ctdiag._ols_hc3_metrics(d)
+    X, yy = d['X'], d['y']
+    beta, _, rank, _ = np.linalg.lstsq(X, yy, rcond=None)
+    assert rank == X.shape[1]
+    resid = yy - X @ beta
+    inv = np.linalg.inv(X.T @ X)
+    h = np.einsum('ij,jk,ik->i', X, inv, X)
+    omega = (resid / np.clip(1-h,1e-8,None))**2
+    meat = X.T @ (X * omega[:,None])
+    cov_hc3 = inv @ meat @ inv
+    se = np.sqrt(cov_hc3[3,3])
+    assert fast['diag_status'] == 'ok'
+    assert np.isclose(fast['recalc_beta_GxC'], beta[3], rtol=1e-10, atol=1e-12)
+    assert np.isclose(fast['hc3_se_GxC'], se, rtol=1e-9, atol=1e-11)
+
+
+def test_batched_downsampling_parallel_smoke():
+    rng = np.random.default_rng(606)
+    n, k = 90, 6
+    ids = pd.Index([f's{i}' for i in range(n)])
+    pids = [f'p{i}' for i in range(k)]
+    vids = [f'v{i}' for i in range(k)]
+    phen = pd.DataFrame(rng.normal(size=(n,k)), index=ids, columns=pids)
+    dos = pd.DataFrame(rng.binomial(2,.3,size=(n,k)), index=ids, columns=vids)
+    deconv = pd.DataFrame({'A':rng.normal(size=n),'B':rng.normal(size=n)}, index=ids)
+    cov = pd.DataFrame({'z1':rng.normal(size=n),'z2':rng.normal(size=n)}, index=ids)
+    rows=[]
+    for pid,vid in zip(pids,vids):
+        for ct in ['A','B']:
+            rows.append({'phenotype_id':pid,'variant_id':vid,'cell_type':ct,
+                         'n':n,'beta_GxC':0.0,'p_GxC':0.5,'q_GxC':0.8})
+    sub=pd.DataFrame(rows)
+    class Stage:
+        @staticmethod
+        def _drop_target_covariate(cov, ct):
+            return cov
+        @staticmethod
+        def bh_qvalues(p):
+            p=np.asarray(p,float); order=np.argsort(p); q=np.empty(len(p)); prev=1.0
+            for i in range(len(p)-1,-1,-1):
+                prev=min(prev,p[order[i]]*len(p)/(i+1)); q[order[i]]=prev
+            return np.minimum(q,1.0)
+    rr,tt,ff=ctdiag._run_batched_downsampling(
+        sub,phen,dos,deconv,cov,Stage,'EAS','expression',60,4,3,20,2,'EUR')
+    assert len(rr)==4
+    assert len(tt)==len(sub)
+    assert len(ff)==k
+    assert np.all(rr['target_n']==60)

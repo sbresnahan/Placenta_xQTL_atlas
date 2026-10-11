@@ -56,6 +56,7 @@ from scipy import stats
 
 KEYS = ["ancestry", "modality", "phenotype_id", "variant_id", "cell_type"]
 _DIAG_STATE = None
+_DOWNSAMPLE_STATE = None
 
 
 def _norm_name(value):
@@ -340,7 +341,15 @@ def _prepare_design(y, g, cell_t, cell_raw, cov, cohort=None):
     }, attr
 
 
+
 def _support_metrics(d):
+    """Cheap support diagnostics for a reconstructed full-N GxC model.
+
+    Interaction information is the residual sum of squares of GxC after
+    projecting it off the reduced model.  QR projection is materially faster
+    than solving a fresh least-squares problem for each of ~57k tests and is
+    algebraically equivalent for full-rank designs.
+    """
     g = d["g"]
     c = d["cell_t"]
     cr = d["cell_raw"]
@@ -355,15 +364,13 @@ def _support_metrics(d):
     n0, n1, n2 = (int(np.sum(hard == k)) for k in (0, 1, 2))
     carrier = hard >= 1
 
-    # Cell-composition tertiles. arcsinh is monotone, so raw/transformed
-    # tertiles induce the same ordering; use raw fractions for readability.
     q33, q67 = np.quantile(cr, [1 / 3, 2 / 3])
     bins = np.where(cr <= q33, 0, np.where(cr <= q67, 1, 2))
     carrier_counts = [int(np.sum(carrier & (bins == k))) for k in range(3)]
     bin_counts = [int(np.sum(bins == k)) for k in range(3)]
 
-    coef_w, *_ = np.linalg.lstsq(X0, w, rcond=None)
-    wr = w - X0 @ coef_w
+    q0, _ = np.linalg.qr(X0, mode="reduced")
+    wr = w - q0 @ (q0.T @ w)
     interaction_info = float(np.dot(wr, wr))
 
     corr = np.corrcoef(g, c)[0, 1] if np.std(g) > 0 and np.std(c) > 0 else np.nan
@@ -391,10 +398,23 @@ def _support_metrics(d):
 
 
 def _ols_hc3_metrics(d):
+    """Classical and HC3 inference using one QR decomposition.
+
+    The previous implementation used SVD/lstsq + an explicit inverse + a
+    sandwich matrix multiply for every test.  With tens of thousands of tests,
+    that cubic work dominates.  QR gives the same OLS fit, hat diagonals, and
+    coefficient-specific HC3 variance without forming the full inverse or full
+    sandwich covariance matrix.
+    """
     X, y = d["X"], d["y"]
     n, p = X.shape
-    beta, _, rank, singular = np.linalg.lstsq(X, y, rcond=None)
-    rank = int(rank)
+    q, r = np.linalg.qr(X, mode="reduced")
+    if r.shape[0] != p:
+        return {"diag_design_rank": int(min(r.shape)), "diag_design_cols": int(p),
+                "diag_status": "rank_deficient"}
+    diag_r = np.abs(np.diag(r))
+    tol = np.finfo(float).eps * max(X.shape) * (diag_r.max() if len(diag_r) else 0.0)
+    rank = int(np.sum(diag_r > tol))
     out = {"diag_design_rank": rank, "diag_design_cols": int(p)}
     if rank < p:
         out["diag_status"] = "rank_deficient"
@@ -404,10 +424,17 @@ def _ols_hc3_metrics(d):
         out["diag_status"] = "insufficient_df"
         return out
 
-    resid = y - X @ beta
-    xtx_inv = np.linalg.inv(X.T @ X)
+    qty = q.T @ y
+    beta = np.linalg.solve(r, qty)
+    resid = y - q @ qty
     sigma2 = float(np.dot(resid, resid) / df)
-    classical_var = sigma2 * xtx_inv[3, 3]
+
+    e3 = np.zeros(p, dtype=float)
+    e3[3] = 1.0
+    # v = (X'X)^-1 e3 = R^-1 R^-T e3.
+    a = np.linalg.solve(r.T, e3)
+    v = np.linalg.solve(r, a)
+    classical_var = sigma2 * float(v[3])
     if classical_var <= 0 or not np.isfinite(classical_var):
         out["diag_status"] = "invalid_classical_se"
         return out
@@ -415,18 +442,23 @@ def _ols_hc3_metrics(d):
     classical_t = float(beta[3] / classical_se)
     classical_p = float(2 * stats.t.sf(abs(classical_t), df))
 
-    h = np.einsum("ij,jk,ik->i", X, xtx_inv, X)
+    h = np.einsum("ij,ij->i", q, q)
     one_minus_h = np.clip(1.0 - h, 1e-8, None)
     omega = (resid / one_minus_h) ** 2
-    meat = X.T @ (X * omega[:, None])
-    hc3_cov = xtx_inv @ meat @ xtx_inv
-    hc3_var = float(hc3_cov[3, 3])
+    # x_i' v = row_i(Q) %*% a.  Only the interaction-coefficient
+    # sandwich element is needed, so avoid constructing p x p covariance.
+    xv = q @ a
+    hc3_var = float(np.dot(omega, xv * xv))
     if hc3_var <= 0 or not np.isfinite(hc3_var):
         out["diag_status"] = "invalid_hc3_se"
         return out
     hc3_se = float(np.sqrt(hc3_var))
     hc3_t = float(beta[3] / hc3_se)
     hc3_p = float(2 * stats.t.sf(abs(hc3_t), df))
+
+    # Condition number is diagnostic only.  R has the same non-zero singular
+    # values as X, but is much smaller than X.
+    singular = np.linalg.svd(r, compute_uv=False)
     cond = float(singular[0] / singular[-1]) if len(singular) and singular[-1] > 0 else np.inf
     out.update({
         "diag_status": "ok", "diag_df": int(df),
@@ -439,7 +471,6 @@ def _ols_hc3_metrics(d):
         "design_condition_number": cond,
     })
     return out
-
 
 def _stable_seed(base_seed, key):
     text = "|".join(map(str, key)).encode("utf-8")
@@ -493,6 +524,289 @@ def _fit_classical_subset(d, keep_ids, min_n=20):
     pval = float(2 * stats.t.sf(abs(tval), df))
     return float(beta[3]), pval, int(n), "ok"
 
+
+
+def _make_downsample_indices(n_ids, n_target, n_reps, seed, key):
+    """Reproducible row-index subsets for the batched downsampling engine."""
+    if n_reps <= 0 or n_target is None or n_target <= 0 or n_ids < n_target:
+        return np.empty((0, 0), dtype=np.int32)
+    rng = np.random.default_rng(_stable_seed(seed, key))
+    out = np.empty((int(n_reps), int(n_target)), dtype=np.int32)
+    base = np.arange(int(n_ids), dtype=np.int32)
+    for r in range(int(n_reps)):
+        out[r] = rng.choice(base, size=int(n_target), replace=False)
+    return out
+
+
+def _fit_classical_arrays(y, g, c, z, min_n=20):
+    """Exact classical GxC fallback for one feature with feature-specific NA."""
+    y = np.asarray(y, dtype=float)
+    g = np.asarray(g, dtype=float)
+    c = np.asarray(c, dtype=float)
+    z = np.asarray(z, dtype=float)
+    finite = np.isfinite(y) & np.isfinite(g) & np.isfinite(c)
+    if z.ndim == 2 and z.shape[1]:
+        finite &= np.isfinite(z).all(axis=1)
+    y, g, c = y[finite], g[finite], c[finite]
+    z = z[finite] if z.ndim == 2 else np.empty((len(y), 0))
+    n = len(y)
+    if n < min_n:
+        return np.nan, np.nan, int(n), "insufficient_n"
+    if z.shape[1]:
+        keep = np.nanstd(z, axis=0) > 1e-12
+        z = z[:, keep]
+    g0 = g - np.mean(g)
+    c0 = c - np.mean(c)
+    if np.std(g0) <= 1e-12:
+        return np.nan, np.nan, int(n), "monomorphic"
+    if np.std(c0) <= 1e-12:
+        return np.nan, np.nan, int(n), "no_celltype_variation"
+    X = np.column_stack([np.ones(n), g0, c0, g0 * c0, z])
+    p = X.shape[1]
+    if n <= p + 2:
+        return np.nan, np.nan, int(n), "insufficient_df"
+    beta, _, rank, _ = np.linalg.lstsq(X, y, rcond=None)
+    if int(rank) < p:
+        return np.nan, np.nan, int(n), "rank_deficient"
+    resid = y - X @ beta
+    df = n - p
+    xtx = X.T @ X
+    try:
+        e3 = np.zeros(p); e3[3] = 1.0
+        inv_col = np.linalg.solve(xtx, e3)
+    except np.linalg.LinAlgError:
+        return np.nan, np.nan, int(n), "rank_deficient"
+    sigma2 = float(np.dot(resid, resid) / df)
+    var_b = sigma2 * float(inv_col[3])
+    if not np.isfinite(var_b) or var_b <= 0:
+        return np.nan, np.nan, int(n), "invalid_se"
+    se = math.sqrt(var_b)
+    pval = float(2 * stats.t.sf(abs(float(beta[3] / se)), df))
+    return float(beta[3]), pval, int(n), "ok"
+
+
+def _batch_fwl_celltype(y, g, c, z, min_n=20):
+    """Vectorized exact GxC fits for many features sharing one cell type.
+
+    Uses Frisch-Waugh-Lovell: project Y, G, and G*C off [1, C, Z] once, then
+    solve the remaining two-predictor model independently for all features.
+    For fully observed columns this is algebraically identical to
+    Y ~ G + C + G*C + Z.  Columns with feature-specific missingness fall back
+    to the scalar exact fitter.
+    """
+    y = np.asarray(y, dtype=float)
+    g = np.asarray(g, dtype=float)
+    c = np.asarray(c, dtype=float)
+    z = np.asarray(z, dtype=float)
+    if y.ndim == 1:
+        y = y[:, None]
+    if g.ndim == 1:
+        g = g[:, None]
+    k = y.shape[1]
+    betas = np.full(k, np.nan, dtype=float)
+    pvals = np.full(k, np.nan, dtype=float)
+    ns = np.zeros(k, dtype=float)
+    statuses = np.full(k, "insufficient_n", dtype=object)
+
+    base_ok = np.isfinite(c)
+    if z.ndim == 2 and z.shape[1]:
+        base_ok &= np.isfinite(z).all(axis=1)
+    y_ok = np.isfinite(y)
+    g_ok = np.isfinite(g)
+    full_cols = np.all(y_ok & g_ok | ~base_ok[:, None], axis=0)
+
+    rows = np.where(base_ok)[0]
+    if len(rows) >= min_n and np.any(full_cols):
+        yb = y[np.ix_(rows, np.where(full_cols)[0])]
+        gb = g[np.ix_(rows, np.where(full_cols)[0])]
+        cb = c[rows]
+        zb = z[rows] if z.ndim == 2 else np.empty((len(rows), 0))
+        if zb.shape[1]:
+            keep_z = np.nanstd(zb, axis=0) > 1e-12
+            zb = zb[:, keep_z]
+        B = np.column_stack([np.ones(len(rows)), cb, zb])
+        p_full = B.shape[1] + 2
+        if len(rows) > p_full + 2:
+            q, r = np.linalg.qr(B, mode="reduced")
+            diag_r = np.abs(np.diag(r)) if r.shape[0] == r.shape[1] else np.array([])
+            tol = np.finfo(float).eps * max(B.shape) * (diag_r.max() if len(diag_r) else 0.0)
+            rank_b = int(np.sum(diag_r > tol)) if len(diag_r) else 0
+            if rank_b == B.shape[1]:
+                wr0 = gb * cb[:, None]
+                yr = yb - q @ (q.T @ yb)
+                gr = gb - q @ (q.T @ gb)
+                wr = wr0 - q @ (q.T @ wr0)
+                sgg = np.einsum("ij,ij->j", gr, gr)
+                sww = np.einsum("ij,ij->j", wr, wr)
+                sgw = np.einsum("ij,ij->j", gr, wr)
+                sgy = np.einsum("ij,ij->j", gr, yr)
+                swy = np.einsum("ij,ij->j", wr, yr)
+                syy = np.einsum("ij,ij->j", yr, yr)
+                det = sgg * sww - sgw * sgw
+                scale = np.maximum(sgg * sww, 1.0)
+                good = np.isfinite(det) & (det > np.finfo(float).eps * 100 * scale)
+                bg = np.full(len(det), np.nan)
+                bw = np.full(len(det), np.nan)
+                bg[good] = (sgy[good] * sww[good] - swy[good] * sgw[good]) / det[good]
+                bw[good] = (swy[good] * sgg[good] - sgy[good] * sgw[good]) / det[good]
+                sse = syy - bg * sgy - bw * swy
+                df = len(rows) - p_full
+                var = np.full(len(det), np.nan)
+                var[good] = (sse[good] / df) * sgg[good] / det[good]
+                good &= np.isfinite(var) & (var > 0)
+                tval = np.full(len(det), np.nan)
+                tval[good] = bw[good] / np.sqrt(var[good])
+                pv = np.full(len(det), np.nan)
+                pv[good] = 2 * stats.t.sf(np.abs(tval[good]), df)
+                dest = np.where(full_cols)[0]
+                betas[dest[good]] = bw[good]
+                pvals[dest[good]] = pv[good]
+                ns[dest] = len(rows)
+                statuses[dest] = np.where(good, "ok", "rank_deficient")
+            else:
+                dest = np.where(full_cols)[0]
+                ns[dest] = len(rows)
+                statuses[dest] = "rank_deficient"
+
+    # Rare feature-specific missingness fallback.  This is intentionally not
+    # the hot path; production BED/genotype matrices are ordinarily complete.
+    for j in np.where(~full_cols)[0]:
+        b, pv, nn, st = _fit_classical_arrays(y[:, j], g[:, j], c, z, min_n=min_n)
+        betas[j], pvals[j], ns[j], statuses[j] = b, pv, nn, st
+    return betas, pvals, ns, statuses
+
+
+def _downsample_replicate(rep_idx):
+    state = _DOWNSAMPLE_STATE
+    if state is None:
+        raise RuntimeError("downsample worker state not initialized")
+    rows = state["sample_indices"][rep_idx]
+    n_tests = state["n_tests"]
+    betas = np.full(n_tests, np.nan, dtype=float)
+    pvals = np.full(n_tests, np.nan, dtype=float)
+    ns = np.full(n_tests, np.nan, dtype=float)
+    for ct, info in state["ct_groups"].items():
+        test_idx = info["test_idx"]
+        feat_idx = info["feat_idx"]
+        b, pv, nn, _ = _batch_fwl_celltype(
+            state["Y"][rows][:, feat_idx],
+            state["G"][rows][:, feat_idx],
+            state["cell_by_ct"][ct][rows],
+            state["cov_by_ct"][ct][rows],
+            min_n=state["min_n"],
+        )
+        betas[test_idx] = b
+        pvals[test_idx] = pv
+        ns[test_idx] = nn
+    return int(rep_idx), betas, pvals, ns
+
+
+def _run_batched_downsampling(sub, phen, dosages, deconv_t, cov, stage49,
+                              anc, mod, n_target, n_reps, seed, min_n,
+                              workers, reference_anc):
+    """Run exact repeated downsampling in vectorized replicate batches.
+
+    The old engine performed one Python/linear-algebra fit for every
+    test x replicate (~2.5 million fits for EAS at 100 reps).  Here each
+    replicate is processed in <= number-of-cell-types matrix batches and
+    replicates are distributed across worker processes.
+    """
+    global _DOWNSAMPLE_STATE
+    if n_reps <= 0 or n_target is None or sub.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    base_ids = sorted(
+        set(phen.index.astype(str)) & set(dosages.index.astype(str)) &
+        set(deconv_t.index.astype(str)) & set(cov.index.astype(str))
+    )
+    if len(base_ids) < n_target:
+        print(f"    WARNING: cannot downsample {anc}/{mod}: eligible N={len(base_ids)} < target N={n_target}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    feature_table = sub[["phenotype_id", "variant_id"]].drop_duplicates().copy()
+    feature_table["phenotype_id"] = feature_table["phenotype_id"].astype(str)
+    feature_table["variant_id"] = feature_table["variant_id"].astype(str)
+    feature_table = feature_table.reset_index(drop=True)
+    feat_map = {(r.phenotype_id, r.variant_id): i for i, r in feature_table.iterrows()}
+    pids = feature_table["phenotype_id"].tolist()
+    vids = feature_table["variant_id"].tolist()
+
+    Y = phen.reindex(base_ids)[pids].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    G = dosages.reindex(base_ids)[vids].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+
+    sub2 = sub.copy().reset_index(drop=True)
+    sub2["phenotype_id"] = sub2["phenotype_id"].astype(str)
+    sub2["variant_id"] = sub2["variant_id"].astype(str)
+    sub2["cell_type"] = sub2["cell_type"].astype(str)
+    ct_groups = {}
+    cell_by_ct = {}
+    cov_by_ct = {}
+    for ct, ss in sub2.groupby("cell_type", sort=False):
+        if ct not in deconv_t.columns:
+            continue
+        test_idx = ss.index.to_numpy(dtype=int)
+        feat_idx = np.asarray([feat_map[(p, v)] for p, v in zip(ss["phenotype_id"], ss["variant_id"])], dtype=int)
+        ct_groups[ct] = {"test_idx": test_idx, "feat_idx": feat_idx}
+        cell_by_ct[ct] = pd.to_numeric(deconv_t[ct].reindex(base_ids), errors="coerce").to_numpy(dtype=float)
+        ctest = stage49._drop_target_covariate(cov, ct).reindex(base_ids)
+        # Match stage49: convert all retained covariates to numeric; constants
+        # are dropped inside each replicate after subsetting.
+        cov_by_ct[ct] = ctest.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+
+    sample_indices = _make_downsample_indices(
+        len(base_ids), n_target, n_reps, seed,
+        ("downsample", anc, mod, n_target)
+    )
+    if len(sample_indices) == 0:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    n_tests = len(sub2)
+    pmat = np.full((n_tests, n_reps), np.nan, dtype=float)
+    bmat = np.full((n_tests, n_reps), np.nan, dtype=float)
+    nmat = np.full((n_tests, n_reps), np.nan, dtype=float)
+    _DOWNSAMPLE_STATE = {
+        "Y": Y, "G": G, "cell_by_ct": cell_by_ct, "cov_by_ct": cov_by_ct,
+        "ct_groups": ct_groups, "sample_indices": sample_indices,
+        "n_tests": n_tests, "min_n": min_n,
+    }
+    print(f"    batched downsampling {anc}/{mod}: {len(base_ids)} eligible -> N={n_target}, "
+          f"{n_reps} replicate(s), {len(ct_groups)} cell-type matrix batches/replicate, "
+          f"{min(workers, n_reps)} worker(s)")
+    t0 = time.time()
+    if workers > 1 and sys.platform.startswith("linux"):
+        ctx = mp.get_context("fork")
+        nproc = min(int(workers), int(n_reps))
+        chunksize = max(1, int(n_reps) // (nproc * 4))
+        with ctx.Pool(nproc) as pool:
+            for done, (r, b, pv, nn) in enumerate(
+                pool.imap_unordered(_downsample_replicate, range(n_reps), chunksize=chunksize), 1
+            ):
+                bmat[:, r] = b; pmat[:, r] = pv; nmat[:, r] = nn
+                if done % max(1, n_reps // 5) == 0 or done == n_reps:
+                    print(f"      downsample replicates {done}/{n_reps}")
+    else:
+        for done, r in enumerate(range(n_reps), 1):
+            rr, b, pv, nn = _downsample_replicate(r)
+            bmat[:, rr] = b; pmat[:, rr] = pv; nmat[:, rr] = nn
+            if done % max(1, n_reps // 5) == 0 or done == n_reps:
+                print(f"      downsample replicates {done}/{n_reps}")
+    _DOWNSAMPLE_STATE = None
+    print(f"    batched downsampling {anc}/{mod} finished in {time.time()-t0:.1f}s")
+
+    records = []
+    for i, row in sub2.iterrows():
+        records.append({
+            "phenotype_id": row["phenotype_id"], "variant_id": row["variant_id"],
+            "cell_type": row["cell_type"],
+            "full_n": pd.to_numeric(row.get("n"), errors="coerce"),
+            "full_beta": pd.to_numeric(row.get("beta_GxC"), errors="coerce"),
+            "full_p": pd.to_numeric(row.get("p_GxC"), errors="coerce"),
+            "full_q": pd.to_numeric(row.get("q_GxC"), errors="coerce"),
+            "betas": bmat[i], "pvals": pmat[i], "ns": nmat[i],
+        })
+    return _summarize_downsample_modality(
+        records, stage49, anc, mod, n_target, reference_anc
+    )
 
 def _summarize_downsample_modality(records, stage49, source_anc, mod,
                                    n_target, reference_anc):
@@ -679,11 +993,13 @@ def _matched_ancestry_tables(merged, annotations, anc_a="EAS", anc_b="EUR"):
     return matched, pd.DataFrame(rows)
 
 
-def _permute_residual_test(d, n_perm, seed):
-    """Freedman-Lane-style reduced-model residual permutation within cohort.
 
-    The reduced model contains G, C, and the covariates; the tested term is GxC.
-    Residuals are shuffled within cohort when cohort labels are available.
+def _permute_residual_test(d, n_perm, seed):
+    """Vectorized Freedman-Lane residual permutation within cohort.
+
+    The reduced-model QR projection is computed once.  All permutations are
+    then residualized in one matrix operation instead of running n_perm fresh
+    least-squares decompositions.
     """
     if n_perm <= 0:
         return {}
@@ -695,20 +1011,23 @@ def _permute_residual_test(d, n_perm, seed):
     if df <= 2:
         return {"perm_status": "insufficient_df"}
 
-    b0, _, rank0, _ = np.linalg.lstsq(X0, y, rcond=None)
-    if int(rank0) < X0.shape[1]:
+    q0, r0 = np.linalg.qr(X0, mode="reduced")
+    if r0.shape[0] != X0.shape[1]:
         return {"perm_status": "reduced_rank_deficient"}
-    resid0 = y - X0 @ b0
-    bw, *_ = np.linalg.lstsq(X0, w, rcond=None)
-    wr = w - X0 @ bw
+    diag_r = np.abs(np.diag(r0))
+    tol = np.finfo(float).eps * max(X0.shape) * (diag_r.max() if len(diag_r) else 0.0)
+    if int(np.sum(diag_r > tol)) < X0.shape[1]:
+        return {"perm_status": "reduced_rank_deficient"}
+
+    fitted0 = q0 @ (q0.T @ y)
+    resid0 = y - fitted0
+    wr = w - q0 @ (q0.T @ w)
     info = float(np.dot(wr, wr))
     if not np.isfinite(info) or info <= 1e-12:
         return {"perm_status": "no_interaction_information"}
 
-    # FWL observed statistic.
-    yr = resid0
-    beta_obs = float(np.dot(wr, yr) / info)
-    full_resid = yr - beta_obs * wr
+    beta_obs = float(np.dot(wr, resid0) / info)
+    full_resid = resid0 - beta_obs * wr
     se_obs = math.sqrt(float(np.dot(full_resid, full_resid) / df) / info)
     if not np.isfinite(se_obs) or se_obs <= 0:
         return {"perm_status": "invalid_observed_se"}
@@ -716,22 +1035,25 @@ def _permute_residual_test(d, n_perm, seed):
 
     groups = [np.where(cohort == label)[0] for label in pd.unique(cohort)]
     rng = np.random.default_rng(seed)
-    exceed = 0
-    t_perm_abs = np.empty(n_perm, dtype=float)
-    for b in range(n_perm):
-        ep = resid0.copy()
+    eperm = np.empty((n, int(n_perm)), dtype=float)
+    base = np.arange(n)
+    for b in range(int(n_perm)):
+        order = base.copy()
         for idx in groups:
             if len(idx) > 1:
-                ep[idx] = ep[rng.permutation(idx)]
-        # Shuffling can reintroduce projection onto X0; residualize again.
-        bp, *_ = np.linalg.lstsq(X0, ep, rcond=None)
-        epr = ep - X0 @ bp
-        beta = float(np.dot(wr, epr) / info)
-        rr = epr - beta * wr
-        se = math.sqrt(float(np.dot(rr, rr) / df) / info)
-        tval = beta / se if se > 0 and np.isfinite(se) else 0.0
-        t_perm_abs[b] = abs(tval)
-        exceed += abs(tval) >= abs(t_obs)
+                order[idx] = idx[rng.permutation(len(idx))]
+        eperm[:, b] = resid0[order]
+
+    # Projection off X0 for all permutations at once.
+    epr = eperm - q0 @ (q0.T @ eperm)
+    beta = (wr @ epr) / info
+    rr = epr - wr[:, None] * beta[None, :]
+    sse = np.einsum("ij,ij->j", rr, rr)
+    se = np.sqrt((sse / df) / info)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t_perm_abs = np.abs(beta / se)
+    t_perm_abs = np.where(np.isfinite(t_perm_abs), t_perm_abs, 0.0)
+    exceed = int(np.sum(t_perm_abs >= abs(t_obs)))
     empirical = (exceed + 1.0) / (n_perm + 1.0)
     return {
         "perm_status": "ok", "permutations": int(n_perm),
@@ -742,7 +1064,6 @@ def _permute_residual_test(d, n_perm, seed):
         "perm_abs_t_q95": float(np.quantile(t_perm_abs, 0.95)),
         "perm_abs_t_q99": float(np.quantile(t_perm_abs, 0.99)),
     }
-
 
 def _diagnose_feature(task):
     state = _DIAG_STATE
@@ -799,25 +1120,6 @@ def _diagnose_feature(task):
                 d, state["n_perm"], _stable_seed(state["seed"], key)
             ))
 
-        # Exact repeated EAS -> EUR-sized fits.  The same participant subset is
-        # used for every feature/cell type within a modality and replicate.
-        if state.get("downsample_sets") and rec.get("diag_status") == "ok":
-            betas, pvals, ns, statuses = [], [], [], []
-            for keep_ids in state["downsample_sets"]:
-                b, pv, nn, st = _fit_classical_subset(
-                    d, keep_ids, min_n=state["min_n"]
-                )
-                betas.append(b); pvals.append(pv); ns.append(nn); statuses.append(st)
-            rec["_downsample"] = {
-                "phenotype_id": pid, "variant_id": vid, "cell_type": ct,
-                "full_n": rec.get("n_complete", np.nan),
-                "full_beta": rec.get("recalc_beta_GxC", np.nan),
-                "full_p": rec.get("recalc_classical_p_GxC", np.nan),
-                "betas": np.asarray(betas, dtype=float),
-                "pvals": np.asarray(pvals, dtype=float),
-                "ns": np.asarray(ns, dtype=float),
-                "statuses": statuses,
-            }
         rows.append(rec)
     return rows
 
@@ -844,13 +1146,49 @@ def _select_permutation_tests(interactions, n_top, n_random, seed):
     return selected
 
 
-def _run_model_diagnostics(qtl_dir, interactions, ancestries, stage49, args, tmpdir):
+
+def _run_model_diagnostics(qtl_dir, interactions, ancestries, stage49, args,
+                           tmpdir, checkpoint_dir=None):
     global _DIAG_STATE
-    all_rows = []
+    all_frames = []
     down_rep_frames, down_test_frames, down_feat_frames = [], [], []
     permute_keys = _select_permutation_tests(
         interactions, args.permute_top, args.permute_random, args.seed
     ) if args.permutations > 0 else {}
+
+    checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
+    if checkpoint_dir:
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    def _cat(frames):
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+    def _cache_paths(anc, mod, sub):
+        if checkpoint_dir is None:
+            return None
+        key_cols = [c for c in KEYS + ["status", "p_GxC", "q_GxC"] if c in sub.columns]
+        payload = {
+            "engine": "v3-batched-fwl",
+            "anc": anc, "mod": mod, "min_n": args.min_n,
+            "hc3": not args.skip_hc3,
+            "permutations": args.permutations,
+            "permute_top": args.permute_top, "permute_random": args.permute_random,
+            "downsample_reps": args.downsample_reps,
+            "downsample_n": args.downsample_n,
+            "downsample_ancestry": args.downsample_ancestry,
+            "seed": args.seed,
+            "input": sub[key_cols].astype(str).to_csv(index=False),
+        }
+        sig = hashlib.blake2b(
+            json.dumps(payload, sort_keys=True).encode("utf-8"), digest_size=8
+        ).hexdigest()
+        stem = f"{_norm_name(anc)}.{_norm_name(mod)}.{sig}"
+        return {
+            "diag": checkpoint_dir / f"{stem}.diag.pkl.gz",
+            "down_rep": checkpoint_dir / f"{stem}.down_rep.pkl.gz",
+            "down_test": checkpoint_dir / f"{stem}.down_test.pkl.gz",
+            "down_feat": checkpoint_dir / f"{stem}.down_feat.pkl.gz",
+        }
 
     for anc in ancestries:
         anc_i = interactions[interactions["ancestry"] == anc].copy()
@@ -863,14 +1201,38 @@ def _run_model_diagnostics(qtl_dir, interactions, ancestries, stage49, args, tmp
         deconv_t = np.arcsinh(deconv_raw[targets].apply(pd.to_numeric, errors="coerce"))
         deconv_t = deconv_t - deconv_t.mean(axis=0)
 
-        variants = anc_i["variant_id"].dropna().astype(str).unique()
-        print(f"  {anc}: exporting {len(variants)} lead variants")
+        mods = sorted(anc_i["modality"].dropna().astype(str).unique())
+        pending = []
+        for mod in mods:
+            sub = anc_i[anc_i["modality"] == mod].copy()
+            cp = _cache_paths(anc, mod, sub)
+            if cp and not args.force and all(path.exists() for path in cp.values()):
+                try:
+                    df = pd.read_pickle(cp["diag"], compression="gzip")
+                    rr = pd.read_pickle(cp["down_rep"], compression="gzip")
+                    tt = pd.read_pickle(cp["down_test"], compression="gzip")
+                    ff = pd.read_pickle(cp["down_feat"], compression="gzip")
+                    all_frames.append(df)
+                    if len(rr): down_rep_frames.append(rr)
+                    if len(tt): down_test_frames.append(tt)
+                    if len(ff): down_feat_frames.append(ff)
+                    print(f"  {anc}/{mod}: resumed completed diagnostic shard")
+                    continue
+                except Exception as exc:
+                    print(f"  WARNING: could not load checkpoint {anc}/{mod}: {exc}; rebuilding")
+            pending.append((mod, sub, cp))
+
+        if not pending:
+            continue
+        pending_variants = pd.concat([x[1][["variant_id"]] for x in pending], ignore_index=True)
+        variants = pending_variants["variant_id"].dropna().astype(str).unique()
+        print(f"  {anc}: exporting {len(variants)} lead variants for {len(pending)} pending modality(ies)")
         dosages = stage49._export_lead_dosages(
             qtl_dir, anc, variants, args.plink2, Path(tmpdir)
         )
 
-        for mod in sorted(anc_i["modality"].dropna().astype(str).unique()):
-            sub = anc_i[anc_i["modality"] == mod].copy()
+        for mod, sub, cp in pending:
+            t_mod = time.time()
             bed_path = qtl_dir / f"{anc}_{mod}.bed.gz"
             cov, cov_path = stage49._load_covariates(qtl_dir, anc, mod)
             if not bed_path.exists() or cov is None:
@@ -887,22 +1249,6 @@ def _run_model_diagnostics(qtl_dir, interactions, ancestries, stage49, args, tmp
                 tests_by_feature[(str(pid), str(vid))] = list(ss["cell_type"].astype(str))
             tasks = list(tests_by_feature.keys())
 
-            downsample_sets = []
-            if (anc == args.downsample_ancestry and args.downsample_reps > 0
-                    and args.downsample_n is not None):
-                eligible = (set(phen.index.astype(str)) & set(dosages.index.astype(str)) &
-                            set(deconv_raw.index.astype(str)) & set(cov.index.astype(str)))
-                downsample_sets = _make_downsample_sets(
-                    eligible, args.downsample_n, args.downsample_reps, args.seed,
-                    ("downsample", anc, mod, args.downsample_n)
-                )
-                if downsample_sets:
-                    print(f"    downsampling {anc}/{mod}: {len(eligible)} eligible -> "
-                          f"N={args.downsample_n}, {len(downsample_sets)} replicate(s)")
-                else:
-                    print(f"    WARNING: cannot downsample {anc}/{mod}: "
-                          f"eligible N={len(eligible)} < target N={args.downsample_n}")
-
             _DIAG_STATE = {
                 "ancestry": anc, "modality": mod,
                 "phen": phen, "dosages": dosages,
@@ -912,12 +1258,12 @@ def _run_model_diagnostics(qtl_dir, interactions, ancestries, stage49, args, tmp
                 "drop_target": stage49._drop_target_covariate,
                 "min_n": args.min_n, "do_hc3": not args.skip_hc3,
                 "permute_keys": permute_keys, "n_perm": args.permutations,
-                "seed": args.seed, "downsample_sets": downsample_sets,
+                "seed": args.seed,
             }
             workers = args.workers
             print(
                 f"  {anc}/{mod}: {len(tasks)} features, {len(sub)} GxC tests, "
-                f"{workers} worker(s)"
+                f"{workers} feature worker(s)"
             )
             mod_rows = []
             if workers > 1 and sys.platform.startswith("linux"):
@@ -929,44 +1275,42 @@ def _run_model_diagnostics(qtl_dir, interactions, ancestries, stage49, args, tmp
                     ):
                         mod_rows.extend(rows)
                         if i % 250 == 0 or i == len(tasks):
-                            print(f"    completed {i}/{len(tasks)} features")
+                            print(f"    full-N diagnostics {i}/{len(tasks)} features")
             else:
                 if workers > 1:
-                    print("    multiprocessing fork unavailable; using serial fits")
+                    print("    multiprocessing fork unavailable; using serial full-N fits")
                 for i, task in enumerate(tasks, 1):
                     mod_rows.extend(_diagnose_feature(task))
                     if i % 250 == 0 or i == len(tasks):
-                        print(f"    completed {i}/{len(tasks)} features")
-            down_records = []
-            for rec in mod_rows:
-                rec["ancestry"] = anc
-                rec["modality"] = mod
-                ds = rec.pop("_downsample", None)
-                if ds is not None:
-                    full_key = ((sub["phenotype_id"].astype(str) == str(ds["phenotype_id"])) &
-                                (sub["variant_id"].astype(str) == str(ds["variant_id"])) &
-                                (sub["cell_type"].astype(str) == str(ds["cell_type"])))
-                    ss = sub.loc[full_key]
-                    if len(ss):
-                        ds["full_p"] = pd.to_numeric(ss.iloc[0].get("p_GxC"), errors="coerce")
-                        ds["full_q"] = pd.to_numeric(ss.iloc[0].get("q_GxC"), errors="coerce")
-                        ds["full_beta"] = pd.to_numeric(ss.iloc[0].get("beta_GxC"), errors="coerce")
-                        ds["full_n"] = pd.to_numeric(ss.iloc[0].get("n"), errors="coerce")
-                    down_records.append(ds)
-            all_rows.extend(mod_rows)
-            if down_records:
-                rr, tt, ff = _summarize_downsample_modality(
-                    down_records, stage49, anc, mod, args.downsample_n,
-                    args.downsample_reference_ancestry
+                        print(f"    full-N diagnostics {i}/{len(tasks)} features")
+            _DIAG_STATE = None
+            mod_df = pd.DataFrame(mod_rows)
+            if len(mod_df):
+                mod_df["ancestry"] = anc
+                mod_df["modality"] = mod
+            all_frames.append(mod_df)
+
+            rr = tt = ff = pd.DataFrame()
+            if (anc == args.downsample_ancestry and args.downsample_reps > 0
+                    and args.downsample_n is not None):
+                rr, tt, ff = _run_batched_downsampling(
+                    sub, phen, dosages, deconv_t, cov, stage49,
+                    anc, mod, args.downsample_n, args.downsample_reps,
+                    args.seed, args.min_n, args.workers,
+                    args.downsample_reference_ancestry,
                 )
                 if len(rr): down_rep_frames.append(rr)
                 if len(tt): down_test_frames.append(tt)
                 if len(ff): down_feat_frames.append(ff)
-            _DIAG_STATE = None
 
-    def _cat(frames):
-        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    return (pd.DataFrame(all_rows), permute_keys,
+            if cp:
+                mod_df.to_pickle(cp["diag"], compression="gzip")
+                rr.to_pickle(cp["down_rep"], compression="gzip")
+                tt.to_pickle(cp["down_test"], compression="gzip")
+                ff.to_pickle(cp["down_feat"], compression="gzip")
+            print(f"  {anc}/{mod}: completed in {time.time()-t_mod:.1f}s")
+
+    return (_cat(all_frames), permute_keys,
             _cat(down_rep_frames), _cat(down_test_frames), _cat(down_feat_frames))
 
 
@@ -1227,7 +1571,8 @@ def main():
     print("[2/5] GxC support / robust-SE + EAS->EUR-sized downsampling")
     with tempfile.TemporaryDirectory(prefix="celltype_diag_", dir=str(out_dir)) as tmp:
         diag, permute_keys, down_rep, down_test, down_feat = _run_model_diagnostics(
-            qtl_dir, interactions, args.ancestries, stage49, args, tmp
+            qtl_dir, interactions, args.ancestries, stage49, args, tmp,
+            checkpoint_dir=out_dir / ".strata"
         )
     if diag.empty:
         raise SystemExit("ERROR: no diagnostic GxC models could be reconstructed")
