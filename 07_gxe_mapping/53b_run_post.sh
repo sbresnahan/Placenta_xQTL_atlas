@@ -1,7 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # 53b_run_post.sh — LSF worker for the post-scan steps (dispatched by
-# POST_MODE): tier1_meta | tier2 | sensitivity | tnt | aggregate. Submitted by
+# POST_MODE): tier1_meta | tier2 | tier2_scan | tier2_merge | sensitivity |
+# tnt | aggregate. Submitted by
 # 53_submit_gxe.sh.
 # Optional env: CONDA_EXE, CONDA_ENV.
 # =============================================================================
@@ -25,6 +26,8 @@ CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
 CONDA_ENV="${CONDA_ENV:-tensorqtl}"
 MAF_THRESHOLD="${MAF_THRESHOLD:-0.01}"
 MAF_THRESHOLD_INTERACTION="${MAF_THRESHOLD_INTERACTION:-0.05}"
+CHROMS="${CHROMS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22}"
+TIER2_MERGE_CHROMS="${TIER2_MERGE_CHROMS:-$CHROMS}"
 
 source /etc/profile.d/modules.sh
 [ -x "$CONDA_EXE" ] || { echo "ERROR: conda executable not found/executable: $CONDA_EXE"; exit 1; }
@@ -41,9 +44,36 @@ case "$POST_MODE" in
         --modality "$MODALITY" --exposure "$EXPOSURE"
     ;;
   tier2)
+    # Backward-compatible single-process execution over all autosomes.
     MODALITY="${MODALITY:?tier2 needs MODALITY}"
     EXPOSURE="${EXPOSURE:?tier2 needs EXPOSURE}"
     python3 "${SCRIPTS_DIR}/54_tier2_stratified.py" \
+        --mode full \
+        --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR" \
+        --ancestries $ANCESTRIES --modality "$MODALITY" --exposure "$EXPOSURE" \
+        --maf-threshold "$MAF_THRESHOLD" \
+        --maf-threshold-interaction "$MAF_THRESHOLD_INTERACTION"
+    ;;
+  tier2_scan)
+    MODALITY="${MODALITY:?tier2_scan needs MODALITY}"
+    EXPOSURE="${EXPOSURE:?tier2_scan needs EXPOSURE}"
+    IDX="${LSB_JOBINDEX:?tier2_scan must run under an LSF array}"
+    CHROM="$(echo $CHROMS | awk -v i="$IDX" '{print $i}')"
+    [ -n "$CHROM" ] || {
+        echo "ERROR: LSB_JOBINDEX=$IDX outside CHROMS='$CHROMS'"; exit 1;
+    }
+    python3 "${SCRIPTS_DIR}/54_tier2_stratified.py" \
+        --mode scan --chrom "$CHROM" \
+        --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR" \
+        --ancestries $ANCESTRIES --modality "$MODALITY" --exposure "$EXPOSURE" \
+        --maf-threshold "$MAF_THRESHOLD" \
+        --maf-threshold-interaction "$MAF_THRESHOLD_INTERACTION"
+    ;;
+  tier2_merge)
+    MODALITY="${MODALITY:?tier2_merge needs MODALITY}"
+    EXPOSURE="${EXPOSURE:?tier2_merge needs EXPOSURE}"
+    python3 "${SCRIPTS_DIR}/54_tier2_stratified.py" \
+        --mode merge --chroms $TIER2_MERGE_CHROMS \
         --qtl-dir "$QTL_DIR" --results-dir "$RESULTS_DIR" --gxe-dir "$GXE_DIR" \
         --ancestries $ANCESTRIES --modality "$MODALITY" --exposure "$EXPOSURE" \
         --maf-threshold "$MAF_THRESHOLD" \

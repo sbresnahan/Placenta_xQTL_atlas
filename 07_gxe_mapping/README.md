@@ -82,7 +82,7 @@ results.
 | 2 | Tier-1 adaptive cis-permutation scans per ancestry × modality × exposure × chromosome |
 | 3 | Merge chromosomes and compute Storey q-values within ancestry |
 | 4 | Cross-ancestry tier-1 synthesis |
-| 5 | Aim-1 prioritized tier-2 ancestry-stratified scan + IVW |
+| 5 | Aim-1 prioritized tier-2 chromosome arrays + cross-ancestry IVW merge |
 | 6 | Sensitivity and transmitted/non-transmitted follow-ups |
 | 7 | Aggregate atlas tables/status |
 

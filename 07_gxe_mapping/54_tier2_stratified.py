@@ -14,9 +14,8 @@ Prioritized phenotypes per modality (union):
 Per ancestry, the nominal interaction model (same tensorQTL-mirroring math
 as the tier-1 scanner, gxe_core) is fit over the cis window of each
 prioritized phenotype: per-ancestry BED, per-ancestry covariates
-({ANC}_covariates_{MOD}.tsv; GA appended as a covariate row when the
-exposure is not GA — the aims' Zcov includes GA), per-ancestry pgen, and
-the pooled exposure vector restricted to that ancestry's samples.
+({ANC}_covariates_{MOD}.tsv), per-ancestry pgen, and the pooled exposure
+vector restricted to that ancestry's samples.
 
 Per variant x phenotype, per-ancestry b_gi/se are meta-analyzed by fixed-
 effect IVW (Cochran's Q / I^2 for heterogeneity). Per phenotype, the top
@@ -24,9 +23,15 @@ variant by meta p-value is reported; BH q-values across the prioritized set
 within the modality x exposure (tier 2 is a small hypothesis-driven set —
 Storey pi0 is unstable there, so BH; documented in the README).
 
+Execution modes:
+  full   — scan all autosomes and finalize in one process (backward compatible)
+  scan   — scan one chromosome and write a shard for LSF array execution
+  merge  — combine requested chromosome shards and run the IVW/BH finalization
+
 Outputs ({GXE_DIR}/tier2/):
-  {MOD}_{EXP}.tier2.tsv           — one row per prioritized phenotype
+  {MOD}_{EXP}.tier2.tsv             — one row per prioritized phenotype
   {MOD}_{EXP}.tier2_variants.tsv.gz — every tested variant x phenotype row
+  shards/{MOD}_{EXP}.chrN.tier2_variants.tsv.gz — per-chromosome scan shards
 """
 
 import argparse
@@ -40,6 +45,12 @@ import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import gxe_core
+
+
+VARIANT_COLUMNS = [
+    "phenotype_id", "variant_id", "tss_distance", "ancestry",
+    "b_gi", "b_gi_se", "tstat_gi", "pval_nominal", "dof",
+]
 
 
 def log(msg):
@@ -154,7 +165,8 @@ def prioritized_phenotypes(modality, ancestries, qtl_dir, results_dir,
     return phenos
 
 
-def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
+def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args,
+                  chrom_filter=None):
     """Nominal interaction scan at prioritized phenotypes for one ancestry."""
     import torch
     import tensorqtl
@@ -166,7 +178,7 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
     for f in [bed, cov_path, pgen + ".pgen"]:
         if not os.path.exists(f):
             log(f"  WARNING: missing {f} — skipping {anc}")
-            return pd.DataFrame()
+            return pd.DataFrame(columns=VARIANT_COLUMNS)
 
     pheno, pheno_pos = tensorqtl.read_phenotype_bed(bed)
 
@@ -184,9 +196,8 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
     pheno = pheno[pheno.index.isin(pheno_keep)]
     pheno_pos = pheno_pos.loc[pheno.index]
 
-    # Module 07 is autosomal only.  Tier 2 reads the original ancestry BEDs
-    # directly (rather than the pooled Stage-0 BED), so enforce chr1-22 here
-    # independently as well.
+    # Module 07 is autosomal only. Tier 2 reads the original ancestry BEDs
+    # directly (rather than the pooled Stage-0 BED), so enforce chr1-22 here.
     pos_chrom = pheno_pos["chr"].astype(str).str.replace(
         r"^chr", "", case=False, regex=True)
     chrom_num = pd.to_numeric(pos_chrom, errors="coerce")
@@ -197,9 +208,17 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
     pheno = pheno.loc[autosomal.values]
     pheno_pos = pheno_pos.loc[autosomal.values]
 
+    if chrom_filter is not None:
+        pos_chrom = pheno_pos["chr"].astype(str).str.replace(
+            r"^chr", "", case=False, regex=True)
+        keep_chrom = (pos_chrom == str(chrom_filter)).values
+        pheno = pheno.loc[keep_chrom]
+        pheno_pos = pheno_pos.loc[keep_chrom]
+
     if len(pheno) == 0:
-        log(f"  {anc}: no prioritized phenotypes in the BED")
-        return pd.DataFrame()
+        suffix = f" on chr{chrom_filter}" if chrom_filter is not None else ""
+        log(f"  {anc}: no prioritized phenotypes{suffix} in the BED")
+        return pd.DataFrame(columns=VARIANT_COLUMNS)
 
     exp = pd.read_csv(os.path.join(args.gxe_dir, "inputs", "exposures.tsv"),
                       sep="\t", index_col=0).loc[exposure_id].dropna()
@@ -207,7 +226,7 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
     samples = [s for s in pheno.columns if s in exp.index and s in cov.columns]
     if len(samples) < 20:
         log(f"  WARNING: {anc} has {len(samples)} samples — skipping")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=VARIANT_COLUMNS)
     pheno = pheno[samples]
     cov = cov[samples]
     # The exposure main effect is fitted explicitly in the GxE model.
@@ -260,62 +279,45 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
                 tstat_gi=t_gi, pval_nominal=pval, dof=int(dof)))
             rows.append(df[np.isfinite(df["pval_nominal"])])
         log(f"  {anc} chr{chrom}: done ({sum(len(r) for r in rows)} rows so far)")
-    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+    return (pd.concat(rows, ignore_index=True) if rows
+            else pd.DataFrame(columns=VARIANT_COLUMNS))
 
 
-def main():
-    p = argparse.ArgumentParser(description="Tier-2 ancestry-stratified GxE + IVW meta")
-    p.add_argument("--qtl-dir", required=True)
-    p.add_argument("--results-dir", required=True)
-    p.add_argument("--gxe-dir", required=True)
-    p.add_argument("--ancestries", nargs="+", default=["EAS", "EUR"])
-    p.add_argument("--modality", required=True)
-    p.add_argument("--exposure", required=True)
-    p.add_argument("--pp-h4", type=float, default=0.7)
-    p.add_argument("--twas-q", type=float, default=0.05)
-    p.add_argument("--cis-window", type=int, default=1000000)
-    p.add_argument("--maf-threshold", type=float, default=0.01,
-                   help="overall in-sample MAF prefilter (default: 0.01)")
-    p.add_argument("--maf-threshold-interaction", type=float, default=0.05,
-                   help="tensorQTL-style MAF floor required in both lower and "
-                        "upper exposure halves (default: 0.05)")
-    p.add_argument("--dosages", action="store_true")
-    args = p.parse_args()
+def shard_path(args, chrom):
+    shard_dir = args.shard_dir or os.path.join(args.gxe_dir, "tier2", "shards")
+    return os.path.join(
+        shard_dir,
+        f"{args.modality}_{args.exposure}.chr{chrom}.tier2_variants.tsv.gz")
 
-    for name, value in [("maf_threshold", args.maf_threshold),
-                        ("maf_threshold_interaction", args.maf_threshold_interaction)]:
-        if not (0.0 <= value <= 0.5):
-            p.error(f"--{name.replace(chr(95), chr(45))} must be between 0 and 0.5")
 
-    out_dir = os.path.join(args.gxe_dir, "tier2")
-    os.makedirs(out_dir, exist_ok=True)
-    out_pheno = os.path.join(out_dir, f"{args.modality}_{args.exposure}.tier2.tsv")
-    out_var = os.path.join(out_dir, f"{args.modality}_{args.exposure}.tier2_variants.tsv.gz")
-    if os.path.exists(out_pheno) and os.environ.get("FORCE", "0") != "1":
-        log(f"{out_pheno} exists — skipping (FORCE=1 to redo)")
+def empty_top_columns(ancestries):
+    cols = [
+        "modality", "exposure", "phenotype_id", "variant_id", "tss_distance",
+        "n_ancestries", "beta_meta", "se_meta", "z_meta", "p_meta",
+        "q_het", "p_het", "i2",
+    ]
+    for anc in ancestries:
+        cols.extend([f"b_gi_{anc}", f"b_gi_se_{anc}", f"pval_{anc}"])
+    cols.append("q_meta")
+    return cols
+
+
+def write_empty_final(args, out_pheno, out_var):
+    pd.DataFrame(columns=VARIANT_COLUMNS).to_csv(
+        out_var, sep="\t", index=False, compression="gzip")
+    pd.DataFrame(columns=empty_top_columns(args.ancestries)).to_csv(
+        out_pheno, sep="\t", index=False)
+    log(f"  wrote empty {out_var}")
+    log(f"  wrote empty {out_pheno}")
+
+
+def finalize_results(allv, args, out_pheno, out_var):
+    """Write combined variant rows and the per-phenotype IVW/BH summary."""
+    if allv.empty:
+        write_empty_final(args, out_pheno, out_var)
         return
 
-    scanner = load_scanner_module()
-    pheno_keep = prioritized_phenotypes(args.modality, args.ancestries,
-                                        args.qtl_dir, args.results_dir,
-                                        args.pp_h4, args.twas_q)
-    if not pheno_keep:
-        log("  no prioritized phenotypes — writing empty outputs")
-        pd.DataFrame().to_csv(out_pheno, sep="\t", index=False)
-        pd.DataFrame().to_csv(out_var, sep="\t", index=False)
-        return
-
-    per_anc = []
-    for anc in args.ancestries:
-        df = scan_ancestry(scanner, anc, args.modality, args.exposure,
-                           pheno_keep, args)
-        if len(df):
-            per_anc.append(df)
-    if not per_anc:
-        sys.exit("ERROR: no ancestry produced tier-2 results")
-    allv = pd.concat(per_anc, ignore_index=True)
-
-    # IVW meta per phenotype x variant across ancestries
+    # IVW meta per phenotype x variant across ancestries.
     metas = []
     for (pid, vid), g in allv.groupby(["phenotype_id", "variant_id"], sort=False):
         r = gxe_core.ivw_meta(g["b_gi"].values, g["b_gi_se"].values)
@@ -328,7 +330,7 @@ def main():
     allv.to_csv(out_var, sep="\t", index=False, compression="gzip")
     log(f"  wrote {out_var} ({len(allv)} rows)")
 
-    # top variant per phenotype by meta p + per-ancestry stats at that variant
+    # Top variant per phenotype by meta p + per-ancestry stats at that variant.
     top = (meta_df.sort_values("p_meta")
            .groupby("phenotype_id", sort=False).head(1).copy())
     for anc in args.ancestries:
@@ -345,6 +347,114 @@ def main():
     top.to_csv(out_pheno, sep="\t", index=False)
     log(f"  wrote {out_pheno} ({len(top)} phenotypes; "
         f"{(top['q_meta'] <= 0.05).sum()} at BH q<=0.05)")
+
+
+def scan_requested(args, chrom_filter=None):
+    scanner = load_scanner_module()
+    pheno_keep = prioritized_phenotypes(args.modality, args.ancestries,
+                                        args.qtl_dir, args.results_dir,
+                                        args.pp_h4, args.twas_q)
+    if not pheno_keep:
+        log("  no prioritized phenotypes")
+        return pd.DataFrame(columns=VARIANT_COLUMNS)
+
+    per_anc = []
+    for anc in args.ancestries:
+        df = scan_ancestry(scanner, anc, args.modality, args.exposure,
+                           pheno_keep, args, chrom_filter=chrom_filter)
+        if len(df):
+            per_anc.append(df)
+    return (pd.concat(per_anc, ignore_index=True) if per_anc
+            else pd.DataFrame(columns=VARIANT_COLUMNS))
+
+
+def main():
+    p = argparse.ArgumentParser(description="Tier-2 ancestry-stratified GxE + IVW meta")
+    p.add_argument("--qtl-dir", required=True)
+    p.add_argument("--results-dir", required=True)
+    p.add_argument("--gxe-dir", required=True)
+    p.add_argument("--ancestries", nargs="+", default=["EAS", "EUR"])
+    p.add_argument("--modality", required=True)
+    p.add_argument("--exposure", required=True)
+    p.add_argument("--mode", choices=["full", "scan", "merge"], default="full",
+                   help="full=legacy all-chromosome run; scan=one chromosome shard; "
+                        "merge=combine shards and finalize")
+    p.add_argument("--chrom", type=int,
+                   help="chromosome for --mode scan")
+    p.add_argument("--chroms", nargs="+", type=int,
+                   help="expected chromosome shards for --mode merge")
+    p.add_argument("--shard-dir",
+                   help="override tier-2 shard directory")
+    p.add_argument("--pp-h4", type=float, default=0.7)
+    p.add_argument("--twas-q", type=float, default=0.05)
+    p.add_argument("--cis-window", type=int, default=1000000)
+    p.add_argument("--maf-threshold", type=float, default=0.01,
+                   help="overall in-sample MAF prefilter (default: 0.01)")
+    p.add_argument("--maf-threshold-interaction", type=float, default=0.05,
+                   help="tensorQTL-style MAF floor required in both lower and "
+                        "upper exposure halves (default: 0.05)")
+    p.add_argument("--dosages", action="store_true")
+    args = p.parse_args()
+
+    for name, value in [("maf_threshold", args.maf_threshold),
+                        ("maf_threshold_interaction", args.maf_threshold_interaction)]:
+        if not (0.0 <= value <= 0.5):
+            p.error(f"--{name.replace(chr(95), chr(45))} must be between 0 and 0.5")
+
+    if args.mode == "scan":
+        if args.chrom is None:
+            p.error("--mode scan requires --chrom")
+        if not 1 <= args.chrom <= 22:
+            p.error("--chrom must be between 1 and 22")
+    if args.mode == "merge":
+        if not args.chroms:
+            p.error("--mode merge requires --chroms")
+        bad = [c for c in args.chroms if not 1 <= c <= 22]
+        if bad:
+            p.error(f"--chroms contains non-autosomal values: {bad}")
+
+    out_dir = os.path.join(args.gxe_dir, "tier2")
+    os.makedirs(out_dir, exist_ok=True)
+    out_pheno = os.path.join(out_dir, f"{args.modality}_{args.exposure}.tier2.tsv")
+    out_var = os.path.join(out_dir, f"{args.modality}_{args.exposure}.tier2_variants.tsv.gz")
+
+    if args.mode == "scan":
+        out_shard = shard_path(args, args.chrom)
+        os.makedirs(os.path.dirname(out_shard), exist_ok=True)
+        if os.path.exists(out_shard) and os.environ.get("FORCE", "0") != "1":
+            log(f"{out_shard} exists — skipping (FORCE=1 to redo)")
+            return
+        allv = scan_requested(args, chrom_filter=args.chrom)
+        allv.to_csv(out_shard, sep="\t", index=False, compression="gzip")
+        log(f"  wrote {out_shard} ({len(allv)} rows)")
+        return
+
+    if os.path.exists(out_pheno) and os.environ.get("FORCE", "0") != "1":
+        log(f"{out_pheno} exists — skipping (FORCE=1 to redo)")
+        return
+
+    if args.mode == "merge":
+        paths = [shard_path(args, chrom) for chrom in args.chroms]
+        missing = [path for path in paths if not os.path.exists(path)]
+        if missing:
+            preview = "\n    ".join(missing[:10])
+            extra = "" if len(missing) <= 10 else f"\n    ... +{len(missing) - 10} more"
+            sys.exit(f"ERROR: missing {len(missing)} tier-2 chromosome shard(s):\n"
+                     f"    {preview}{extra}")
+        frames = []
+        for path in paths:
+            df = pd.read_csv(path, sep="\t")
+            if len(df):
+                frames.append(df)
+        allv = (pd.concat(frames, ignore_index=True) if frames
+                else pd.DataFrame(columns=VARIANT_COLUMNS))
+        log(f"  merging {len(paths)} chromosome shards ({len(allv)} rows)")
+        finalize_results(allv, args, out_pheno, out_var)
+        return
+
+    # Backward-compatible single-process execution over all autosomes.
+    allv = scan_requested(args)
+    finalize_results(allv, args, out_pheno, out_var)
 
 
 if __name__ == "__main__":

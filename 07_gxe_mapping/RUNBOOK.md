@@ -417,15 +417,35 @@ STAGES="5" bash 53_submit_gxe.sh
 ```
 
 Tier 2 retains the existing prioritized-locus strategy (Module-06 coloc / TWAS
-phenotypes) but now uses the same ancestry-specific Module-07 BEDs and covariates as
-tier 1.
+phenotypes) and uses the same ancestry-specific Module-07 BEDs and covariates as
+tier 1. Stage 5 is chromosome-sharded like Stage 2: for each modality × exposure,
+`53_submit_gxe.sh` submits an LSF array over `CHROMS`; each array element scans both
+ancestries for one chromosome and writes a shard. A dependent merge job requires
+all requested shards, concatenates them, performs the same variant-level fixed-effect
+IVW meta-analysis / heterogeneity calculations, selects the top meta-analysis variant
+per phenotype, and computes BH q-values.
 
-Outputs:
+Intermediate shards:
+
+```text
+${GXE_DIR}/tier2/shards/{MOD}_{EXP}.chr{CHR}.tier2_variants.tsv.gz
+```
+
+Final outputs are unchanged:
 
 ```text
 ${GXE_DIR}/tier2/{MOD}_{EXP}.tier2.tsv
 ${GXE_DIR}/tier2/{MOD}_{EXP}.tier2_variants.tsv.gz
 ```
+
+Existing chromosome shards are reused unless `FORCE=1`; the final summary is skipped
+when it already exists unless `FORCE=1`. `CHROMS` controls which chromosome array
+elements are submitted. In production, the merge independently expects all autosomes
+(`TIER2_MERGE_CHROMS=1 ... 22` by default), so a partial recovery such as `CHROMS="7"`
+can safely regenerate one shard and then rebuild the complete final output from all
+existing shards. `TEST=1` automatically restricts both scan and merge to chr21. To
+intentionally create a chromosome-subset final result outside test mode, explicitly set
+`TIER2_MERGE_CHROMS="$CHROMS"`.
 
 ## 11. Stage 6 — sensitivity and transmitted/non-transmitted analyses
 

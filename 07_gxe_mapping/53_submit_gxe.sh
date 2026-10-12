@@ -8,7 +8,7 @@
 #   2  tier-1 ancestry cis-perm scans — chr arrays per ancestry x modality x exposure
 #   3  ancestry merge + Storey q      — one merge per ancestry x modality x exposure
 #   4  cross-ancestry tier-1 synthesis— ACAT feature evidence + exact-lead IVW
-#   5  Aim-1 prioritized tier 2       — ancestry-stratified nominal + IVW
+#   5  Aim-1 prioritized tier 2       — chr arrays + ancestry-stratified IVW merge
 #   6  sensitivity + T/NT             — status-gated
 #   7  aggregate atlas tables         — 57_aggregate_gxe.py
 # =============================================================================
@@ -29,7 +29,10 @@ STAGES="${STAGES:-0 1 2 3 4 5 6 7}"
 QUEUE="${QUEUE:-medium}"
 TEST="${TEST:-0}"
 FORCE="${FORCE:-0}"
-CHROMS="${CHROMS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22}"
+DEFAULT_CHROMS="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22"
+CHROMS="${CHROMS:-$DEFAULT_CHROMS}"
+TIER2_MERGE_CHROMS_WAS_SET="${TIER2_MERGE_CHROMS+x}"
+TIER2_MERGE_CHROMS="${TIER2_MERGE_CHROMS:-$DEFAULT_CHROMS}"
 R_PACKAGE_LIB="${R_PACKAGE_LIB:-/rsrch5/home/epi/bhattacharya_lab/software/R_package_library/ubuntu/4.3.1}"
 CONDA_EXE="${CONDA_EXE:-/risapps/rhel8/miniforge3/24.5.0-0/bin/conda}"
 CONDA_ENV="${CONDA_ENV:-tensorqtl}"
@@ -40,6 +43,9 @@ if [ "$TEST" = "1" ]; then
     MODALITIES="expression"
     EXPOSURES="$(echo "$EXPOSURES" | awk '{print $1}')"
     CHROMS="21"
+    if [ -z "$TIER2_MERGE_CHROMS_WAS_SET" ]; then
+        TIER2_MERGE_CHROMS="$CHROMS"
+    fi
     echo "TEST=1: expression x ${EXPOSURES}, chr21"
 fi
 
@@ -55,6 +61,7 @@ echo "  EXPOSURES:  $EXPOSURES"
 echo "  STAGES:     $STAGES"
 echo "  MAF_THRESHOLD: $MAF_THRESHOLD"
 echo "  MAF_THRESHOLD_INTERACTION: $MAF_THRESHOLD_INTERACTION"
+echo "  TIER2_MERGE_CHROMS: $TIER2_MERGE_CHROMS"
 echo "  COLLAPSED_ANCESTRY_MAP: $COLLAPSED_ANCESTRY_MAP"
 
 has_stage() { case " $STAGES " in *" $1 "*) return 0;; *) return 1;; esac; }
@@ -172,20 +179,38 @@ if has_stage 4; then
 fi
 
 # ---- Stage 5: prioritized tier 2 ------------------------------------------
+# One chromosome array per modality x exposure scans both ancestries for that
+# chromosome. A dependent merge job concatenates the requested chromosome
+# shards and performs the same variant-level IVW/BH finalization as before.
 declare -a TIER2_JOBS=()
 if has_stage 5; then
     meta_dep=$(dep_expr "${META_JOBS[@]}")
     for MOD in $MODALITIES; do
         for EXP in $EXPOSURES; do
+            FINAL_T2="${GXE_DIR}/tier2/${MOD}_${EXP}.tier2.tsv"
+            if [ -f "$FINAL_T2" ] && [ "$FORCE" != "1" ]; then
+                echo "  stage 5: tier2 ${MOD} x ${EXP} exists — skipping (FORCE=1 to redo)"
+                continue
+            fi
+
             DEP_ARGS=(); [ -n "$meta_dep" ] && DEP_ARGS=(-w "$meta_dep")
             J=$(bsub -q "$QUEUE" -n 4 -M 32G -R "rusage[mem=32G]" -W 8:00 \
-                -J "gxe_t2_${MOD}_${EXP}" "${DEP_ARGS[@]}" \
-                -o "${LOG_DIR}/gxe_t2_${MOD}_${EXP}.%J.out" \
-                -e "${LOG_DIR}/gxe_t2_${MOD}_${EXP}.%J.err" \
-                -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,POST_MODE=tier2,MAF_THRESHOLD=$MAF_THRESHOLD,MAF_THRESHOLD_INTERACTION=$MAF_THRESHOLD_INTERACTION,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+                -J "gxe_t2_scan_${MOD}_${EXP}[1-${N_CHROMS}]" "${DEP_ARGS[@]}" \
+                -o "${LOG_DIR}/gxe_t2_scan_${MOD}_${EXP}.%J.%I.out" \
+                -e "${LOG_DIR}/gxe_t2_scan_${MOD}_${EXP}.%J.%I.err" \
+                -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,POST_MODE=tier2_scan,CHROMS=$CHROMS,MAF_THRESHOLD=$MAF_THRESHOLD,MAF_THRESHOLD_INTERACTION=$MAF_THRESHOLD_INTERACTION,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
                 "bash ${SCRIPTS_DIR}/53b_run_post.sh")
-            jid=$(echo "$J" | job_id); TIER2_JOBS+=("$jid")
-            echo "  stage 5: tier2 ${MOD} x ${EXP} job $jid"
+            scan_jid=$(echo "$J" | job_id)
+            echo "  stage 5: tier2 scan ${MOD} x ${EXP} array $scan_jid"
+
+            J=$(bsub -q "$QUEUE" -n 2 -M 32G -R "rusage[mem=32G]" -W 4:00 \
+                -J "gxe_t2_merge_${MOD}_${EXP}" -w "done($scan_jid)" \
+                -o "${LOG_DIR}/gxe_t2_merge_${MOD}_${EXP}.%J.out" \
+                -e "${LOG_DIR}/gxe_t2_merge_${MOD}_${EXP}.%J.err" \
+                -env "CONFIG=$CONFIG,SCRIPTS_DIR=$SCRIPTS_DIR,OUTPUT_BASE=$OUTPUT_BASE,QTL_DIR=$QTL_DIR,RESULTS_DIR=$RESULTS_DIR,GXE_DIR=$GXE_DIR,ANCESTRIES=$ANCESTRIES,MODALITY=$MOD,EXPOSURE=$EXP,POST_MODE=tier2_merge,CHROMS=$CHROMS,TIER2_MERGE_CHROMS=$TIER2_MERGE_CHROMS,MAF_THRESHOLD=$MAF_THRESHOLD,MAF_THRESHOLD_INTERACTION=$MAF_THRESHOLD_INTERACTION,FORCE=$FORCE,CONDA_EXE=$CONDA_EXE,CONDA_ENV=$CONDA_ENV" \
+                "bash ${SCRIPTS_DIR}/53b_run_post.sh")
+            merge_jid=$(echo "$J" | job_id); TIER2_JOBS+=("$merge_jid")
+            echo "  stage 5: tier2 merge ${MOD} x ${EXP} job $merge_jid"
         done
     done
 fi
