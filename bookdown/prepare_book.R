@@ -531,6 +531,134 @@ stage_resources <- function(x, raw_md_dir, source_dir, chapter_id) {
   strsplit(text, "\n", fixed = TRUE)[[1]]
 }
 
+markdown_table_metric <- function(lines, label) {
+  if (!length(lines)) return(NA_character_)
+  for (line in lines) {
+    if (!grepl("^\\s*\\|", line, perl = TRUE)) next
+    cells <- strsplit(line, "|", fixed = TRUE)[[1]]
+    if (length(cells) < 3L) next
+    cells <- trimws(cells)
+    cells <- cells[nzchar(cells)]
+    if (length(cells) < 2L) next
+    lhs <- gsub("\\\\", "", cells[1])
+    lhs <- gsub("[*_`]", "", lhs)
+    if (!identical(trimws(lhs), label)) next
+    val <- gsub("[^0-9]", "", cells[2])
+    if (nzchar(val)) return(val)
+  }
+  NA_character_
+}
+
+clean_native_html_markdown <- function(lines) {
+  if (!length(lines)) return(lines)
+
+  # Pandoc preserves section-number spans and layout divs from html_document.
+  # Remove those wrappers so the imported material behaves like an ordinary
+  # bookdown chapter rather than nested standalone-HTML scaffolding.
+  lines <- gsub(
+    '<span class="header-section-number">[^<]*</span>\\s*',
+    "",
+    lines,
+    perl = TRUE
+  )
+  lines <- lines[!grepl("^\\s*</?div(?:\\s+[^>]*)?>\\s*$", lines, perl = TRUE)]
+
+  # The book supplies its own chapter title.  Start at the report's first
+  # scientific section, dropping the standalone HTML title/subtitle/author/date
+  # and TOC container that precede it.
+  overview <- grep("^#\\s+Overview\\s*$", lines, perl = TRUE)
+  if (length(overview)) lines <- lines[overview[1]:length(lines)]
+
+  lines
+}
+
+native_markdown_from_rendered_html <- function(html_path, chapter_id) {
+  if (!file.exists(html_path)) stop("Rendered report fallback not found: ", html_path)
+
+  rel_root <- file.path("html_fallback", chapter_id)
+  rel_media <- file.path(rel_root, "media")
+  abs_root <- file.path(stage_dir, rel_root)
+  out_path <- file.path(abs_root, "report.md")
+  media_dir <- file.path(abs_root, "media")
+  dir.create(media_dir, recursive = TRUE, showWarnings = FALSE)
+
+  # Use absolute paths for both Pandoc outputs. rmarkdown::pandoc_convert()
+  # may execute Pandoc with a working directory different from the caller's,
+  # so relative output/extract-media paths are not portable across rmarkdown
+  # and Pandoc versions.
+  out_arg <- gsub("\\\\", "/", out_path)
+  media_arg <- gsub("\\\\", "/", media_dir)
+  rmarkdown::pandoc_convert(
+    input = normalizePath(html_path, mustWork = TRUE),
+    from = "html",
+    to = "gfm",
+    output = out_arg,
+    options = c(
+      paste0("--extract-media=", media_arg),
+      "--wrap=none"
+    )
+  )
+
+  if (!file.exists(out_path)) {
+    stop(
+      "Pandoc did not create HTML fallback Markdown at the requested absolute path: ",
+      out_path
+    )
+  }
+
+  lines <- readLines(out_path, warn = FALSE, encoding = "UTF-8")
+
+  # Absolute --extract-media paths cause Pandoc to emit absolute image refs.
+  # Convert them back to .staging-relative refs so stage_resources() can copy
+  # them into book_assets/ and the final book contains only portable paths.
+  rel_media_arg <- gsub("\\\\", "/", rel_media)
+  lines <- gsub(media_arg, rel_media_arg, lines, fixed = TRUE)
+
+  clean_native_html_markdown(lines)
+}
+
+finemap_render_is_incomplete <- function(lines) {
+  text <- gsub("\\s+", " ", paste(lines, collapse = "\n"), perl = TRUE)
+  missing_markers <- c(
+    "Enrichment table not found; run 34_pip_annotation_enrichment.py.",
+    "Gene-set enrichment cache not found; run run_finemap_enrichment.R."
+  )
+  expected_rendered_figures <- c(
+    "Distribution of joint PIPs across all fine-mapped variants",
+    "Per-ancestry posterior effect weights for credible-set variants",
+    "Joint PIP by position for the six loci with the highest lead-variant PIP",
+    "Annotation enrichment of high-PIP variants"
+  )
+
+  any(vapply(missing_markers, grepl, logical(1), x = text, fixed = TRUE)) ||
+    any(!vapply(expected_rendered_figures, grepl, logical(1), x = text, fixed = TRUE))
+}
+
+matching_finemap_html_body <- function(rmd_body, html_path) {
+  html_body <- native_markdown_from_rendered_html(html_path, "fine-mapping")
+  metrics <- c("Loci attempted", "Loci fine-mapped", "Credible sets total")
+  rmd_vals <- vapply(metrics, function(x) markdown_table_metric(rmd_body, x), character(1))
+  html_vals <- vapply(metrics, function(x) markdown_table_metric(html_body, x), character(1))
+
+  bad <- is.na(rmd_vals) | is.na(html_vals) | rmd_vals != html_vals
+  if (any(bad)) {
+    detail <- paste0(
+      metrics,
+      ": Rmd=", ifelse(is.na(rmd_vals), "NA", rmd_vals),
+      ", HTML=", ifelse(is.na(html_vals), "NA", html_vals),
+      collapse = "; "
+    )
+    stop(
+      "The fine-mapping Rmd cannot regenerate all figures from the local raw inputs, ",
+      "and reports/report_finemap.html does not match the currently rendered result summary.\n",
+      detail,
+      "\nRefusing to mix figures from a different result freeze."
+    )
+  }
+
+  html_body
+}
+
 chapter_filename <- function(part_order, chapter_order, id) {
   idx <- (as.integer(part_order) - 1L) * 100L + as.integer(chapter_order)
   sprintf("zbook_%03d_%s.Rmd", idx, id)
@@ -595,6 +723,28 @@ for (i in seq_len(nrow(manifest))) {
     )
     raw_path <- normalizePath(rendered, mustWork = TRUE)
     body <- readLines(raw_path, warn = FALSE, encoding = "UTF-8")
+    body_resource_dir <- dirname(raw_path)
+
+    # Fine-mapping variant-level PIPs and annotation caches are intentionally
+    # not always retained in the compact local report freeze.  When that makes
+    # a fresh Rmd-to-Markdown pass incomplete, recover the already-rendered
+    # scientific report as *native Markdown* (with its embedded figures
+    # extracted to ordinary image files).  This is not an iframe/HTML embed.
+    # The overview metrics must match the fresh Rmd render before reuse so an
+    # older result freeze can never be mixed into the current chapter.
+    if (identical(row$id, "fine-mapping") && finemap_render_is_incomplete(body)) {
+      finemap_html <- file.path(reports_dir, "report_finemap.html")
+      if (!file.exists(finemap_html)) {
+        stop(
+          "Fine-mapping chapter is incomplete because variant-level/cache inputs are missing, ",
+          "and reports/report_finemap.html is unavailable as a matching rendered fallback.\n",
+          "Expected either the fine-mapping sidecar inputs or the rendered report."
+        )
+      }
+      body <- matching_finemap_html_body(body, finemap_html)
+      body_resource_dir <- stage_dir
+      message("  fine-mapping: recovered matching rendered figures as native book assets")
+    }
 
     # The second bookdown pass must never receive executable inline R from a
     # report: its setup chunks have already been evaluated and removed by the
@@ -618,7 +768,7 @@ for (i in seq_len(nrow(manifest))) {
     body <- sanitize_reader_content(body)
     assert_standalone_content(body, row$source)
     body <- demote_headings(body)
-    body <- stage_resources(body, dirname(raw_path), reports_dir, row$id)
+    body <- stage_resources(body, body_resource_dir, reports_dir, row$id)
   } else if (tolower(row$kind) == "md") {
     body <- readLines(src, warn = FALSE, encoding = "UTF-8")
     body <- strip_front_matter(body)
