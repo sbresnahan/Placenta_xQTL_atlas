@@ -1,0 +1,2660 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+<head>
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>9 Cell-type attribution | Placenta xQTL Atlas</title>
+  <meta name="description" content="Integrated documentation and results for the Placenta xQTL Atlas." />
+  <meta name="generator" content="bookdown 0.46 and GitBook 2.6.7" />
+
+  <meta property="og:title" content="9 Cell-type attribution | Placenta xQTL Atlas" />
+  <meta property="og:type" content="book" />
+  
+  <meta property="og:description" content="Integrated documentation and results for the Placenta xQTL Atlas." />
+  <meta name="github-repo" content="sbresnahan/Placenta_xQTL_atlas" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="9 Cell-type attribution | Placenta xQTL Atlas" />
+  
+  <meta name="twitter:description" content="Integrated documentation and results for the Placenta xQTL Atlas." />
+  
+
+<meta name="author" content="Bhattacharya Lab" />
+
+
+<meta name="date" content="2026-10-12" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  
+  
+<link rel="prev" href="twas-literature.html"/>
+<link rel="next" href="gxe-ppbmi.html"/>
+<script src="libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.6/dist/fuse.min.js"></script>
+<link href="libs/gitbook-2.6.7/css/style.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-table.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-bookdown.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-highlight.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-search.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-fontsettings.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-clipboard.css" rel="stylesheet" />
+
+
+
+
+
+
+
+
+<link href="libs/anchor-sections-1.1.0/anchor-sections.css" rel="stylesheet" />
+<link href="libs/anchor-sections-1.1.0/anchor-sections-hash.css" rel="stylesheet" />
+<script src="libs/anchor-sections-1.1.0/anchor-sections.js"></script>
+
+
+<style type="text/css">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { color: #008000; } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { color: #008000; font-weight: bold; } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+</style>
+
+<style type="text/css">
+  
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+</style>
+
+<link rel="stylesheet" href="style.css" type="text/css" />
+</head>
+
+<body>
+
+
+
+  <div class="book without-animation with-summary font-size-2 font-family-1" data-basepath=".">
+
+    <div class="book-summary">
+      <nav role="navigation">
+
+<ul class="summary">
+<li class="book-title"><a href="./">Placenta xQTL Atlas</a></li>
+
+<li class="divider"></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html"><i class="fa fa-check"></i>About this atlas</a>
+<ul>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#reading-order"><i class="fa fa-check"></i>Reading order</a></li>
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html#reproducibility"><i class="fa fa-check"></i>Reproducibility</a></li>
+</ul></li>
+<li class="part"><span><b>I Regulatory architecture</b></span></li>
+<li class="chapter" data-level="1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html"><i class="fa fa-check"></i><b>1</b> Multi-ancestry placental xQTL analysis</a>
+<ul>
+<li class="chapter" data-level="1.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#executive-summary"><i class="fa fa-check"></i><b>1.1</b> Executive summary</a>
+<ul>
+<li class="chapter" data-level="1.1.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#study-cohorts-and-data"><i class="fa fa-check"></i><b>1.1.1</b> Study cohorts and data</a></li>
+<li class="chapter" data-level="1.1.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#genotype-processing-and-imputation"><i class="fa fa-check"></i><b>1.1.2</b> Genotype processing and imputation</a></li>
+<li class="chapter" data-level="1.1.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#ancestry-assignment-and-cross-cohort-genotype-pooling"><i class="fa fa-check"></i><b>1.1.3</b> Ancestry assignment and cross-cohort genotype pooling</a></li>
+<li class="chapter" data-level="1.1.4" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#rna-seq-processing"><i class="fa fa-check"></i><b>1.1.4</b> RNA-seq processing</a></li>
+<li class="chapter" data-level="1.1.5" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#transcriptomic-phenotyping"><i class="fa fa-check"></i><b>1.1.5</b> Transcriptomic phenotyping</a></li>
+<li class="chapter" data-level="1.1.6" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cell-type-deconvolution"><i class="fa fa-check"></i><b>1.1.6</b> Cell-type deconvolution</a></li>
+<li class="chapter" data-level="1.1.7" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#rna-to-dna-sample-linkage"><i class="fa fa-check"></i><b>1.1.7</b> RNA to DNA sample linkage</a></li>
+<li class="chapter" data-level="1.1.8" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#phenotype-pooling-and-normalization"><i class="fa fa-check"></i><b>1.1.8</b> Phenotype pooling and normalization</a></li>
+<li class="chapter" data-level="1.1.9" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#genotype-principal-components-and-sample-quality-control"><i class="fa fa-check"></i><b>1.1.9</b> Genotype principal components and sample quality control</a></li>
+<li class="chapter" data-level="1.1.10" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#covariate-assembly-and-hidden-factor-estimation"><i class="fa fa-check"></i><b>1.1.10</b> Covariate assembly and hidden factor estimation</a></li>
+<li class="chapter" data-level="1.1.11" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cis-xqtl-mapping"><i class="fa fa-check"></i><b>1.1.11</b> cis-xQTL mapping</a></li>
+<li class="chapter" data-level="1.1.12" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cross-ancestry-fine-mapping"><i class="fa fa-check"></i><b>1.1.12</b> Cross-ancestry fine-mapping</a></li>
+<li class="chapter" data-level="1.1.13" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#functional-enrichment-of-fine-mapped-variants"><i class="fa fa-check"></i><b>1.1.13</b> Functional enrichment of fine-mapped variants</a></li>
+<li class="chapter" data-level="1.1.14" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#report-integration-targeted-lookups"><i class="fa fa-check"></i><b>1.1.14</b> Report-integration targeted lookups</a></li>
+<li class="chapter" data-level="1.1.15" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#software-and-computing"><i class="fa fa-check"></i><b>1.1.15</b> Software and computing</a></li>
+</ul></li>
+<li class="chapter" data-level="1.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cohort-and-data-landscape"><i class="fa fa-check"></i><b>1.2</b> Cohort and data landscape</a>
+<ul>
+<li class="chapter" data-level="1.2.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#sample-attrition"><i class="fa fa-check"></i><b>1.2.1</b> Sample attrition</a></li>
+<li class="chapter" data-level="1.2.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cohort-composition-and-genotype-processing"><i class="fa fa-check"></i><b>1.2.2</b> Cohort composition and genotype processing</a></li>
+<li class="chapter" data-level="1.2.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#genotype-pca"><i class="fa fa-check"></i><b>1.2.3</b> Genotype PCA</a></li>
+<li class="chapter" data-level="1.2.4" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#covariate-qc"><i class="fa fa-check"></i><b>1.2.4</b> Covariate QC</a></li>
+<li class="chapter" data-level="1.2.5" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#phenotype-processing-qc"><i class="fa fa-check"></i><b>1.2.5</b> Phenotype processing QC</a></li>
+<li class="chapter" data-level="1.2.6" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#sequencing-qc"><i class="fa fa-check"></i><b>1.2.6</b> Sequencing QC</a></li>
+</ul></li>
+<li class="chapter" data-level="1.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#pipeline-and-calibration"><i class="fa fa-check"></i><b>1.3</b> Pipeline and calibration</a>
+<ul>
+<li class="chapter" data-level="1.3.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#pipeline-recap"><i class="fa fa-check"></i><b>1.3.1</b> Pipeline recap</a></li>
+<li class="chapter" data-level="1.3.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#hcp-count-optimization-module-25b"><i class="fa fa-check"></i><b>1.3.2</b> HCP count optimization (module 25b)</a></li>
+<li class="chapter" data-level="1.3.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#permutation-calibrated-p-value-qq-plots"><i class="fa fa-check"></i><b>1.3.3</b> Permutation-calibrated p-value QQ plots</a></li>
+<li class="chapter" data-level="1.3.4" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#signal-fraction-storey-%CF%801-per-layer"><i class="fa fa-check"></i><b>1.3.4</b> Signal fraction (Storey π1) per layer</a></li>
+<li class="chapter" data-level="1.3.5" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#power-analysis"><i class="fa fa-check"></i><b>1.3.5</b> Power analysis</a></li>
+<li class="chapter" data-level="1.3.6" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#carrier-count-audit-mac-floor-propagation"><i class="fa fa-check"></i><b>1.3.6</b> Carrier-count audit: MAC floor propagation</a></li>
+</ul></li>
+<li class="chapter" data-level="1.4" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#the-landscape-of-placental-xqtl-regulation"><i class="fa fa-check"></i><b>1.4</b> The landscape of placental xQTL regulation</a>
+<ul>
+<li class="chapter" data-level="1.4.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#phenotypes-and-genes-tested-per-modality"><i class="fa fa-check"></i><b>1.4.1</b> Phenotypes and genes tested per modality</a></li>
+<li class="chapter" data-level="1.4.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#discovery-in-the-context-of-published-placenta-eqtl-studies"><i class="fa fa-check"></i><b>1.4.2</b> Discovery in the context of published placenta eQTL studies</a></li>
+<li class="chapter" data-level="1.4.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#xqtl-associations-per-modality-q-value-tiers"><i class="fa fa-check"></i><b>1.4.3</b> xQTL associations per modality — q-value tiers</a></li>
+<li class="chapter" data-level="1.4.4" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#conditionally-independent-signals-per-gene"><i class="fa fa-check"></i><b>1.4.4</b> Conditionally independent signals per gene</a></li>
+<li class="chapter" data-level="1.4.5" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#lead-variant-distance-from-the-tss"><i class="fa fa-check"></i><b>1.4.5</b> Lead-variant distance from the TSS</a></li>
+<li class="chapter" data-level="1.4.6" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cross-modality-overlap-of-xgenes"><i class="fa fa-check"></i><b>1.4.6</b> Cross-modality overlap of xGenes</a></li>
+<li class="chapter" data-level="1.4.7" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#functional-annotation-enrichment-of-lead-variants"><i class="fa fa-check"></i><b>1.4.7</b> Functional annotation enrichment of lead variants</a></li>
+<li class="chapter" data-level="1.4.8" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cross-modality-sharing-of-xqtl-effects"><i class="fa fa-check"></i><b>1.4.8</b> Cross-modality sharing of xQTL effects</a></li>
+<li class="chapter" data-level="1.4.9" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#constraint-of-xgenes"><i class="fa fa-check"></i><b>1.4.9</b> Constraint of xGenes</a></li>
+<li class="chapter" data-level="1.4.10" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#fine-mapped-credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>1.4.10</b> Fine-mapped credible sets versus conditional signals</a></li>
+</ul></li>
+<li class="chapter" data-level="1.5" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cross-ancestry-regulation"><i class="fa fa-check"></i><b>1.5</b> Cross-ancestry regulation</a>
+<ul>
+<li class="chapter" data-level="1.5.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#per-ancestry-discovery-comparison"><i class="fa fa-check"></i><b>1.5.1</b> Per-ancestry discovery comparison</a></li>
+<li class="chapter" data-level="1.5.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#ancestry-specific-versus-shared-egenes"><i class="fa fa-check"></i><b>1.5.2</b> Ancestry-specific versus shared eGenes</a></li>
+<li class="chapter" data-level="1.5.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#cross-ancestry-effect-size-concordance"><i class="fa fa-check"></i><b>1.5.3</b> Cross-ancestry effect-size concordance</a></li>
+<li class="chapter" data-level="1.5.4" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#showcase-loci"><i class="fa fa-check"></i><b>1.5.4</b> Showcase loci</a></li>
+<li class="chapter" data-level="1.5.5" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#sushie-credible-set-summary"><i class="fa fa-check"></i><b>1.5.5</b> SuSHiE credible-set summary</a></li>
+</ul></li>
+<li class="chapter" data-level="1.6" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#discovery-catalog"><i class="fa fa-check"></i><b>1.6</b> Discovery catalog</a>
+<ul>
+<li class="chapter" data-level="1.6.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#fdr-significant-associations"><i class="fa fa-check"></i><b>1.6.1</b> FDR-significant associations</a></li>
+<li class="chapter" data-level="1.6.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#conditionally-independent-secondary-signals"><i class="fa fa-check"></i><b>1.6.2</b> Conditionally independent secondary signals</a></li>
+<li class="chapter" data-level="1.6.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#egene-catalog-fdr-5"><i class="fa fa-check"></i><b>1.6.3</b> eGene catalog (FDR ≤ 5%)</a></li>
+<li class="chapter" data-level="1.6.4" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#top-ranked-genes-per-layer"><i class="fa fa-check"></i><b>1.6.4</b> Top-ranked genes per layer</a></li>
+<li class="chapter" data-level="1.6.5" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#driver-modality-resolution"><i class="fa fa-check"></i><b>1.6.5</b> Driver-modality resolution</a></li>
+</ul></li>
+<li class="chapter" data-level="1.7" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#functional-enrichment"><i class="fa fa-check"></i><b>1.7</b> Functional enrichment</a>
+<ul>
+<li class="chapter" data-level="1.7.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#per-modality-enrichment-of-xqtl-gene-sets"><i class="fa fa-check"></i><b>1.7.1</b> Per-modality enrichment of xQTL gene sets</a></li>
+<li class="chapter" data-level="1.7.2" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#combined-catalog-enrichment-gprofiler"><i class="fa fa-check"></i><b>1.7.2</b> Combined-catalog enrichment (g:Profiler)</a></li>
+<li class="chapter" data-level="1.7.3" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#enrichment-limitations"><i class="fa fa-check"></i><b>1.7.3</b> Enrichment limitations</a></li>
+</ul></li>
+<li class="chapter" data-level="1.8" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#biological-interpretation"><i class="fa fa-check"></i><b>1.8</b> Biological interpretation</a>
+<ul>
+<li class="chapter" data-level="1.8.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#literature-context"><i class="fa fa-check"></i><b>1.8.1</b> Literature context</a></li>
+</ul></li>
+<li class="chapter" data-level="1.9" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#limitations-and-next-steps"><i class="fa fa-check"></i><b>1.9</b> Limitations and next steps</a></li>
+<li class="chapter" data-level="1.10" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#reproducibility-1"><i class="fa fa-check"></i><b>1.10</b> Reproducibility</a>
+<ul>
+<li class="chapter" data-level="1.10.1" data-path="xqtl-mapping.html"><a href="xqtl-mapping.html#session-info"><i class="fa fa-check"></i><b>1.10.1</b> Session info</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="2" data-path="xqtl-literature.html"><a href="xqtl-literature.html"><i class="fa fa-check"></i><b>2</b> Literature context: placental xQTL mapping</a>
+<ul>
+<li class="chapter" data-level="2.0.1" data-path="xqtl-literature.html"><a href="xqtl-literature.html#background-and-scope"><i class="fa fa-check"></i><b>2.0.1</b> 1. Background and scope</a></li>
+<li class="chapter" data-level="2.0.2" data-path="xqtl-literature.html"><a href="xqtl-literature.html#what-changed-from-the-2026-10-05-review"><i class="fa fa-check"></i><b>2.0.2</b> 2. What changed from the 2026-10-05 review</a></li>
+<li class="chapter" data-level="2.0.3" data-path="xqtl-literature.html"><a href="xqtl-literature.html#methods"><i class="fa fa-check"></i><b>2.0.3</b> 3. Methods</a></li>
+<li class="chapter" data-level="2.0.4" data-path="xqtl-literature.html"><a href="xqtl-literature.html#overview-of-the-current-top-hits"><i class="fa fa-check"></i><b>2.0.4</b> 4. Overview of the current top hits</a></li>
+<li class="chapter" data-level="2.0.5" data-path="xqtl-literature.html"><a href="xqtl-literature.html#modality-by-modality-results-and-literature-snapshots"><i class="fa fa-check"></i><b>2.0.5</b> 5. Modality-by-modality results and literature snapshots</a></li>
+<li class="chapter" data-level="2.0.6" data-path="xqtl-literature.html"><a href="xqtl-literature.html#synthesis"><i class="fa fa-check"></i><b>2.0.6</b> 6. Synthesis</a></li>
+<li class="chapter" data-level="2.0.7" data-path="xqtl-literature.html"><a href="xqtl-literature.html#limitations"><i class="fa fa-check"></i><b>2.0.7</b> 7. Limitations</a></li>
+<li class="chapter" data-level="2.0.8" data-path="xqtl-literature.html"><a href="xqtl-literature.html#recommended-follow-up-from-the-literature-review"><i class="fa fa-check"></i><b>2.0.8</b> 8. Recommended follow-up from the literature review</a></li>
+<li class="chapter" data-level="2.0.9" data-path="xqtl-literature.html"><a href="xqtl-literature.html#evidence-table-additions-in-this-revision"><i class="fa fa-check"></i><b>2.0.9</b> 9. Evidence-table additions in this revision</a></li>
+<li class="chapter" data-level="2.0.10" data-path="xqtl-literature.html"><a href="xqtl-literature.html#companion-files"><i class="fa fa-check"></i><b>2.0.10</b> 10. Companion files</a></li>
+</ul></li>
+<li class="chapter" data-level="3" data-path="fine-mapping.html"><a href="fine-mapping.html"><i class="fa fa-check"></i><b>3</b> Cross-ancestry fine-mapping</a>
+<ul>
+<li class="chapter" data-level="3.1" data-path="fine-mapping.html"><a href="fine-mapping.html#overview"><i class="fa fa-check"></i><b>3.1</b> Overview</a></li>
+<li class="chapter" data-level="3.2" data-path="fine-mapping.html"><a href="fine-mapping.html#pip-diagnostics"><i class="fa fa-check"></i><b>3.2</b> PIP diagnostics</a></li>
+<li class="chapter" data-level="3.3" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets"><i class="fa fa-check"></i><b>3.3</b> Credible sets</a>
+<ul>
+<li class="chapter" data-level="3.3.1" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>3.3.1</b> Credible sets versus conditional signals</a></li>
+</ul></li>
+<li class="chapter" data-level="3.4" data-path="fine-mapping.html"><a href="fine-mapping.html#cross-ancestry-concordance"><i class="fa fa-check"></i><b>3.4</b> Cross-ancestry concordance</a></li>
+<li class="chapter" data-level="3.5" data-path="fine-mapping.html"><a href="fine-mapping.html#top-loci"><i class="fa fa-check"></i><b>3.5</b> Top loci</a></li>
+<li class="chapter" data-level="3.6" data-path="fine-mapping.html"><a href="fine-mapping.html#functional-annotation-enrichment-of-high-pip-variants"><i class="fa fa-check"></i><b>3.6</b> Functional-annotation enrichment of high-PIP variants</a></li>
+<li class="chapter" data-level="3.7" data-path="fine-mapping.html"><a href="fine-mapping.html#gene-set-enrichment-of-high-confidence-fine-mapped-genes"><i class="fa fa-check"></i><b>3.7</b> Gene-set enrichment of high-confidence fine-mapped genes</a></li>
+<li class="chapter" data-level="3.8" data-path="fine-mapping.html"><a href="fine-mapping.html#run-diagnostics"><i class="fa fa-check"></i><b>3.8</b> Run diagnostics</a></li>
+<li class="chapter" data-level="3.9" data-path="fine-mapping.html"><a href="fine-mapping.html#methods-summary"><i class="fa fa-check"></i><b>3.9</b> Methods summary</a></li>
+<li class="chapter" data-level="3.10" data-path="fine-mapping.html"><a href="fine-mapping.html#session-info-1"><i class="fa fa-check"></i><b>3.10</b> Session info</a></li>
+</ul></li>
+<li class="chapter" data-level="4" data-path="finemap-literature.html"><a href="finemap-literature.html"><i class="fa fa-check"></i><b>4</b> Literature context: fine-mapped loci</a>
+<ul>
+<li class="chapter" data-level="4.0.1" data-path="finemap-literature.html"><a href="finemap-literature.html#background-and-scope-1"><i class="fa fa-check"></i><b>4.0.1</b> 1. Background and scope</a></li>
+<li class="chapter" data-level="4.0.2" data-path="finemap-literature.html"><a href="finemap-literature.html#methods-and-result-reconciliation"><i class="fa fa-check"></i><b>4.0.2</b> 2. Methods and result reconciliation</a></li>
+<li class="chapter" data-level="4.0.3" data-path="finemap-literature.html"><a href="finemap-literature.html#cross-cutting-patterns"><i class="fa fa-check"></i><b>4.0.3</b> 3. Cross-cutting patterns</a></li>
+<li class="chapter" data-level="4.0.4" data-path="finemap-literature.html"><a href="finemap-literature.html#gene-snapshots"><i class="fa fa-check"></i><b>4.0.4</b> 4. Gene snapshots</a></li>
+<li class="chapter" data-level="4.0.5" data-path="finemap-literature.html"><a href="finemap-literature.html#what-changed-from-the-previous-fine-mapping-literature-review"><i class="fa fa-check"></i><b>4.0.5</b> 5. What changed from the previous fine-mapping literature review</a></li>
+<li class="chapter" data-level="4.0.6" data-path="finemap-literature.html"><a href="finemap-literature.html#synthesis-1"><i class="fa fa-check"></i><b>4.0.6</b> 6. Synthesis</a></li>
+<li class="chapter" data-level="4.0.7" data-path="finemap-literature.html"><a href="finemap-literature.html#limitations-1"><i class="fa fa-check"></i><b>4.0.7</b> 7. Limitations</a></li>
+<li class="chapter" data-level="4.0.8" data-path="finemap-literature.html"><a href="finemap-literature.html#companion-files-1"><i class="fa fa-check"></i><b>4.0.8</b> 8. Companion files</a></li>
+<li class="chapter" data-level="4.0.9" data-path="finemap-literature.html"><a href="finemap-literature.html#new-literaturereference-addendum"><i class="fa fa-check"></i><b>4.0.9</b> 9. New literature/reference addendum</a></li>
+</ul></li>
+<li class="part"><span><b>II GWAS integration</b></span></li>
+<li class="chapter" data-level="5" data-path="colocalization.html"><a href="colocalization.html"><i class="fa fa-check"></i><b>5</b> GWAS colocalization</a>
+<ul>
+<li class="chapter" data-level="5.1" data-path="colocalization.html"><a href="colocalization.html#executive-summary-1"><i class="fa fa-check"></i><b>5.1</b> Executive summary</a></li>
+<li class="chapter" data-level="5.2" data-path="colocalization.html"><a href="colocalization.html#methods-1"><i class="fa fa-check"></i><b>5.2</b> Methods</a>
+<ul>
+<li class="chapter" data-level="5.2.1" data-path="colocalization.html"><a href="colocalization.html#what-susie-coloc-asks"><i class="fa fa-check"></i><b>5.2.1</b> What SuSiE-coloc asks</a></li>
+<li class="chapter" data-level="5.2.2" data-path="colocalization.html"><a href="colocalization.html#what-colocboost-adds"><i class="fa fa-check"></i><b>5.2.2</b> What colocBoost adds</a></li>
+<li class="chapter" data-level="5.2.3" data-path="colocalization.html"><a href="colocalization.html#why-headline-counts-use-coloc_best.tsv.gz"><i class="fa fa-check"></i><b>5.2.3</b> Why headline counts use <code>coloc_best.tsv.gz</code></a></li>
+<li class="chapter" data-level="5.2.4" data-path="colocalization.html"><a href="colocalization.html#gene-and-trait-annotation"><i class="fa fa-check"></i><b>5.2.4</b> Gene and trait annotation</a></li>
+</ul></li>
+<li class="chapter" data-level="5.3" data-path="colocalization.html"><a href="colocalization.html#input-landscape-and-diagnostic-funnel"><i class="fa fa-check"></i><b>5.3</b> Input landscape and diagnostic funnel</a>
+<ul>
+<li class="chapter" data-level="5.3.1" data-path="colocalization.html"><a href="colocalization.html#diagnostic-outcomes"><i class="fa fa-check"></i><b>5.3.1</b> Diagnostic outcomes</a></li>
+</ul></li>
+<li class="chapter" data-level="5.4" data-path="colocalization.html"><a href="colocalization.html#colocalization-landscape"><i class="fa fa-check"></i><b>5.4</b> Colocalization landscape</a>
+<ul>
+<li class="chapter" data-level="5.4.1" data-path="colocalization.html"><a href="colocalization.html#calls-by-molecular-modality"><i class="fa fa-check"></i><b>5.4.1</b> Calls by molecular modality</a></li>
+<li class="chapter" data-level="5.4.2" data-path="colocalization.html"><a href="colocalization.html#posterior-strength"><i class="fa fa-check"></i><b>5.4.2</b> Posterior strength</a></li>
+</ul></li>
+<li class="chapter" data-level="5.5" data-path="colocalization.html"><a href="colocalization.html#multi-trait-colocalization-with-colocboost"><i class="fa fa-check"></i><b>5.5</b> Multi-trait colocalization with colocBoost</a>
+<ul>
+<li class="chapter" data-level="5.5.1" data-path="colocalization.html"><a href="colocalization.html#multi-gwas-developmental-hotspots"><i class="fa fa-check"></i><b>5.5.1</b> Multi-GWAS developmental hotspots</a></li>
+<li class="chapter" data-level="5.5.2" data-path="colocalization.html"><a href="colocalization.html#concordance-with-pairwise-susie-coloc"><i class="fa fa-check"></i><b>5.5.2</b> Concordance with pairwise SuSiE-coloc</a></li>
+</ul></li>
+<li class="chapter" data-level="5.6" data-path="colocalization.html"><a href="colocalization.html#gwas-trait-landscape"><i class="fa fa-check"></i><b>5.6</b> GWAS trait landscape</a>
+<ul>
+<li class="chapter" data-level="5.6.1" data-path="colocalization.html"><a href="colocalization.html#calls-by-trait"><i class="fa fa-check"></i><b>5.6.1</b> Calls by trait</a></li>
+</ul></li>
+<li class="chapter" data-level="5.7" data-path="colocalization.html"><a href="colocalization.html#birth-weight-and-early-growth-colocalization"><i class="fa fa-check"></i><b>5.7</b> Birth-weight and early-growth colocalization</a></li>
+<li class="chapter" data-level="5.8" data-path="colocalization.html"><a href="colocalization.html#childhood-anthropometry"><i class="fa fa-check"></i><b>5.8</b> Childhood anthropometry</a></li>
+<li class="chapter" data-level="5.9" data-path="colocalization.html"><a href="colocalization.html#gestational-duration"><i class="fa fa-check"></i><b>5.9</b> Gestational duration</a></li>
+<li class="chapter" data-level="5.10" data-path="colocalization.html"><a href="colocalization.html#recurrent-genes-and-regulatory-hotspots"><i class="fa fa-check"></i><b>5.10</b> Recurrent genes and regulatory hotspots</a></li>
+<li class="chapter" data-level="5.11" data-path="colocalization.html"><a href="colocalization.html#h3-versus-h4-shared-versus-distinct-causal-signals"><i class="fa fa-check"></i><b>5.11</b> H3 versus H4: shared versus distinct causal signals</a></li>
+<li class="chapter" data-level="5.12" data-path="colocalization.html"><a href="colocalization.html#cross-ancestry-characterization"><i class="fa fa-check"></i><b>5.12</b> Cross-ancestry characterization</a></li>
+<li class="chapter" data-level="5.13" data-path="colocalization.html"><a href="colocalization.html#strongest-call-catalog"><i class="fa fa-check"></i><b>5.13</b> Strongest-call catalog</a></li>
+<li class="chapter" data-level="5.14" data-path="colocalization.html"><a href="colocalization.html#literature-context-1"><i class="fa fa-check"></i><b>5.14</b> Literature context</a></li>
+<li class="chapter" data-level="5.15" data-path="colocalization.html"><a href="colocalization.html#interpretation-and-limitations"><i class="fa fa-check"></i><b>5.15</b> Interpretation and limitations</a></li>
+<li class="chapter" data-level="5.16" data-path="colocalization.html"><a href="colocalization.html#reproducibility-2"><i class="fa fa-check"></i><b>5.16</b> Reproducibility</a></li>
+</ul></li>
+<li class="chapter" data-level="6" data-path="coloc-literature.html"><a href="coloc-literature.html"><i class="fa fa-check"></i><b>6</b> Literature context: colocalization findings</a>
+<ul>
+<li class="chapter" data-level="6.0.1" data-path="coloc-literature.html"><a href="coloc-literature.html#scope-and-interpretation"><i class="fa fa-check"></i><b>6.0.1</b> 1. Scope and interpretation</a></li>
+<li class="chapter" data-level="6.0.2" data-path="coloc-literature.html"><a href="coloc-literature.html#overview-of-the-result-landscape"><i class="fa fa-check"></i><b>6.0.2</b> 2. Overview of the result landscape</a></li>
+<li class="chapter" data-level="6.0.3" data-path="coloc-literature.html"><a href="coloc-literature.html#what-colocboost-adds-to-the-pairwise-catalog"><i class="fa fa-check"></i><b>6.0.3</b> 2.1 What colocBoost adds to the pairwise catalog</a></li>
+<li class="chapter" data-level="6.0.4" data-path="coloc-literature.html"><a href="coloc-literature.html#the-chr17p13-birth-weight-hotspot-elp5-cldn7-and-ctdnep1"><i class="fa fa-check"></i><b>6.0.4</b> 3. The chr17p13 birth-weight hotspot: ELP5, CLDN7 and CTDNEP1</a></li>
+<li class="chapter" data-level="6.0.5" data-path="coloc-literature.html"><a href="coloc-literature.html#wsb1-five-molecular-routes-to-fetal-birth-weight"><i class="fa fa-check"></i><b>6.0.5</b> 4. WSB1: five molecular routes to fetal birth weight</a></li>
+<li class="chapter" data-level="6.0.6" data-path="coloc-literature.html"><a href="coloc-literature.html#plce1-as1-a-cross-trait-developmental-growth-locus"><i class="fa fa-check"></i><b>6.0.6</b> 5. PLCE1-AS1: a cross-trait developmental-growth locus</a></li>
+<li class="chapter" data-level="6.0.7" data-path="coloc-literature.html"><a href="coloc-literature.html#dense-single-trait-regulatory-hotspots"><i class="fa fa-check"></i><b>6.0.7</b> 6. Dense single-trait regulatory hotspots</a></li>
+<li class="chapter" data-level="6.0.8" data-path="coloc-literature.html"><a href="coloc-literature.html#rna-editing-colocalizations-with-childhood-body-size"><i class="fa fa-check"></i><b>6.0.8</b> 7. RNA-editing colocalizations with childhood body size</a></li>
+<li class="chapter" data-level="6.0.9" data-path="coloc-literature.html"><a href="coloc-literature.html#the-igf2-overlapping-composite-stability-phenotype"><i class="fa fa-check"></i><b>6.0.9</b> 8. The IGF2-overlapping composite stability phenotype</a></li>
+<li class="chapter" data-level="6.0.10" data-path="coloc-literature.html"><a href="coloc-literature.html#slc6a2-and-neonatal-jecs-bmi"><i class="fa fa-check"></i><b>6.0.10</b> 9. SLC6A2 and neonatal JECS BMI</a></li>
+<li class="chapter" data-level="6.0.11" data-path="coloc-literature.html"><a href="coloc-literature.html#gestational-duration-one-borderline-signal"><i class="fa fa-check"></i><b>6.0.11</b> 10. Gestational duration: one borderline signal</a></li>
+<li class="chapter" data-level="6.0.12" data-path="coloc-literature.html"><a href="coloc-literature.html#new-colocboost-prioritized-loci"><i class="fa fa-check"></i><b>6.0.12</b> 10.1 New colocBoost-prioritized loci</a></li>
+<li class="chapter" data-level="6.0.13" data-path="coloc-literature.html"><a href="coloc-literature.html#cross-cutting-interpretation"><i class="fa fa-check"></i><b>6.0.13</b> 11. Cross-cutting interpretation</a></li>
+<li class="chapter" data-level="6.0.14" data-path="coloc-literature.html"><a href="coloc-literature.html#limitations-2"><i class="fa fa-check"></i><b>6.0.14</b> 12. Limitations</a></li>
+<li class="chapter" data-level="6.0.15" data-path="coloc-literature.html"><a href="coloc-literature.html#synthesis-2"><i class="fa fa-check"></i><b>6.0.15</b> 13. Synthesis</a></li>
+<li class="chapter" data-level="6.0.16" data-path="coloc-literature.html"><a href="coloc-literature.html#companion-files-2"><i class="fa fa-check"></i><b>6.0.16</b> 14. Companion files</a></li>
+<li class="chapter" data-level="6.0.17" data-path="coloc-literature.html"><a href="coloc-literature.html#revised-references-for-colocboost-additions"><i class="fa fa-check"></i><b>6.0.17</b> Revised references for colocBoost additions</a></li>
+</ul></li>
+<li class="chapter" data-level="7" data-path="twas.html"><a href="twas.html"><i class="fa fa-check"></i><b>7</b> Transcriptome-wide association study</a>
+<ul>
+<li class="chapter" data-level="7.1" data-path="twas.html"><a href="twas.html#executive-summary-2"><i class="fa fa-check"></i><b>7.1</b> Executive summary</a></li>
+<li class="chapter" data-level="7.2" data-path="twas.html"><a href="twas.html#methods-2"><i class="fa fa-check"></i><b>7.2</b> Methods</a>
+<ul>
+<li class="chapter" data-level="7.2.1" data-path="twas.html"><a href="twas.html#fusion-model-level-tests"><i class="fa fa-check"></i><b>7.2.1</b> FUSION model-level tests</a></li>
+<li class="chapter" data-level="7.2.2" data-path="twas.html"><a href="twas.html#gene-level-acat-aggregation"><i class="fa fa-check"></i><b>7.2.2</b> Gene-level ACAT aggregation</a></li>
+<li class="chapter" data-level="7.2.3" data-path="twas.html"><a href="twas.html#prediction-weight-sets"><i class="fa fa-check"></i><b>7.2.3</b> Prediction weight sets</a></li>
+</ul></li>
+<li class="chapter" data-level="7.3" data-path="twas.html"><a href="twas.html#input-landscape-and-qc"><i class="fa fa-check"></i><b>7.3</b> Input landscape and QC</a>
+<ul>
+<li class="chapter" data-level="7.3.1" data-path="twas.html"><a href="twas.html#testing-coverage"><i class="fa fa-check"></i><b>7.3.1</b> Testing coverage</a></li>
+<li class="chapter" data-level="7.3.2" data-path="twas.html"><a href="twas.html#missing-and-numerically-underflowed-results"><i class="fa fa-check"></i><b>7.3.2</b> Missing and numerically underflowed results</a></li>
+</ul></li>
+<li class="chapter" data-level="7.4" data-path="twas.html"><a href="twas.html#prediction-model-characteristics"><i class="fa fa-check"></i><b>7.4</b> Prediction-model characteristics</a></li>
+<li class="chapter" data-level="7.5" data-path="twas.html"><a href="twas.html#gene-level-twas-landscape"><i class="fa fa-check"></i><b>7.5</b> Gene-level TWAS landscape</a>
+<ul>
+<li class="chapter" data-level="7.5.1" data-path="twas.html"><a href="twas.html#discoveries-by-trait-and-weight-set"><i class="fa fa-check"></i><b>7.5.1</b> Discoveries by trait and weight set</a></li>
+<li class="chapter" data-level="7.5.2" data-path="twas.html"><a href="twas.html#recurrent-genes-across-developmental-traits"><i class="fa fa-check"></i><b>7.5.2</b> Recurrent genes across developmental traits</a></li>
+</ul></li>
+<li class="chapter" data-level="7.6" data-path="twas.html"><a href="twas.html#gene-versus-isoform-signal"><i class="fa fa-check"></i><b>7.6</b> Gene versus isoform signal</a></li>
+<li class="chapter" data-level="7.7" data-path="twas.html"><a href="twas.html#cross-weight-set-concordance"><i class="fa fa-check"></i><b>7.7</b> Cross-weight-set concordance</a></li>
+<li class="chapter" data-level="7.8" data-path="twas.html"><a href="twas.html#integration-with-colocalization"><i class="fa fa-check"></i><b>7.8</b> Integration with colocalization</a></li>
+<li class="chapter" data-level="7.9" data-path="twas.html"><a href="twas.html#birth-weight-and-placental-function-candidates"><i class="fa fa-check"></i><b>7.9</b> Birth-weight and placental-function candidates</a></li>
+<li class="chapter" data-level="7.10" data-path="twas.html"><a href="twas.html#childhood-anthropometry-and-recurrent-metabolic-genes"><i class="fa fa-check"></i><b>7.10</b> Childhood anthropometry and recurrent metabolic genes</a></li>
+<li class="chapter" data-level="7.11" data-path="twas.html"><a href="twas.html#literature-context-2"><i class="fa fa-check"></i><b>7.11</b> Literature context</a></li>
+<li class="chapter" data-level="7.12" data-path="twas.html"><a href="twas.html#interpretation-and-limitations-1"><i class="fa fa-check"></i><b>7.12</b> Interpretation and limitations</a></li>
+<li class="chapter" data-level="7.13" data-path="twas.html"><a href="twas.html#reproducibility-3"><i class="fa fa-check"></i><b>7.13</b> Reproducibility</a></li>
+</ul></li>
+<li class="chapter" data-level="8" data-path="twas-literature.html"><a href="twas-literature.html"><i class="fa fa-check"></i><b>8</b> Literature context: TWAS findings</a>
+<ul>
+<li class="chapter" data-level="8.0.1" data-path="twas-literature.html"><a href="twas-literature.html#scope-and-interpretation-1"><i class="fa fa-check"></i><b>8.0.1</b> 1. Scope and interpretation</a></li>
+<li class="chapter" data-level="8.0.2" data-path="twas-literature.html"><a href="twas-literature.html#overall-architecture-of-the-current-twas"><i class="fa fa-check"></i><b>8.0.2</b> 2. Overall architecture of the current TWAS</a></li>
+<li class="chapter" data-level="8.0.3" data-path="twas-literature.html"><a href="twas-literature.html#recurrent-body-weight-genes-provide-biological-calibration"><i class="fa fa-check"></i><b>8.0.3</b> 3. Recurrent body-weight genes provide biological calibration</a></li>
+<li class="chapter" data-level="8.0.4" data-path="twas-literature.html"><a href="twas-literature.html#placenta-specific-precedent-cldn7-and-the-17p13-growth-locus"><i class="fa fa-check"></i><b>8.0.4</b> 4. Placenta-specific precedent: CLDN7 and the 17p13 growth locus</a></li>
+<li class="chapter" data-level="8.0.5" data-path="twas-literature.html"><a href="twas-literature.html#ctdnep1-convergence-with-prior-placental-multi-omics"><i class="fa fa-check"></i><b>8.0.5</b> 5. CTDNEP1: convergence with prior placental multi-omics</a></li>
+<li class="chapter" data-level="8.0.6" data-path="twas-literature.html"><a href="twas-literature.html#slc38a1-connects-genetic-association-to-placental-nutrient-transport"><i class="fa fa-check"></i><b>8.0.6</b> 6. SLC38A1 connects genetic association to placental nutrient transport</a></li>
+<li class="chapter" data-level="8.0.7" data-path="twas-literature.html"><a href="twas-literature.html#fap-a-novel-growth-association-with-decidual-remodeling-context"><i class="fa fa-check"></i><b>8.0.7</b> 7. FAP: a novel growth association with decidual-remodeling context</a></li>
+<li class="chapter" data-level="8.0.8" data-path="twas-literature.html"><a href="twas-literature.html#plce1-as1-and-sh3yl1-recurrent-developmental-growth-loci-strengthened-by-colocboost"><i class="fa fa-check"></i><b>8.0.8</b> 8. PLCE1-AS1 and SH3YL1: recurrent developmental-growth loci strengthened by colocBoost</a></li>
+<li class="chapter" data-level="8.0.9" data-path="twas-literature.html"><a href="twas-literature.html#c3orf38-strong-statistical-triangulation-with-sparse-prior-biology"><i class="fa fa-check"></i><b>8.0.9</b> 9. C3orf38: strong statistical triangulation with sparse prior biology</a></li>
+<li class="chapter" data-level="8.0.10" data-path="twas-literature.html"><a href="twas-literature.html#fes-illustrates-why-twas-and-colocalization-should-not-be-forced-to-agree"><i class="fa fa-check"></i><b>8.0.10</b> 10. FES illustrates why TWAS and colocalization should not be forced to agree</a></li>
+<li class="chapter" data-level="8.0.11" data-path="twas-literature.html"><a href="twas-literature.html#isoform-aware-twas-is-a-major-added-value-of-this-atlas"><i class="fa fa-check"></i><b>8.0.11</b> 11. Isoform-aware TWAS is a major added value of this atlas</a></li>
+<li class="chapter" data-level="8.0.12" data-path="twas-literature.html"><a href="twas-literature.html#practical-evidence-tiers-for-manuscript-prioritization"><i class="fa fa-check"></i><b>8.0.12</b> 12. Practical evidence tiers for manuscript prioritization</a></li>
+<li class="chapter" data-level="8.0.13" data-path="twas-literature.html"><a href="twas-literature.html#limitations-3"><i class="fa fa-check"></i><b>8.0.13</b> 13. Limitations</a></li>
+<li class="chapter" data-level="8.0.14" data-path="twas-literature.html"><a href="twas-literature.html#synthesis-3"><i class="fa fa-check"></i><b>8.0.14</b> 14. Synthesis</a></li>
+<li class="chapter" data-level="8.0.15" data-path="twas-literature.html"><a href="twas-literature.html#references"><i class="fa fa-check"></i><b>8.0.15</b> References</a></li>
+</ul></li>
+<li class="part"><span><b>III Biological context</b></span></li>
+<li class="chapter" data-level="9" data-path="cell-type.html"><a href="cell-type.html"><i class="fa fa-check"></i><b>9</b> Cell-type attribution</a>
+<ul>
+<li class="chapter" data-level="9.1" data-path="cell-type.html"><a href="cell-type.html#executive-summary-3"><i class="fa fa-check"></i><b>9.1</b> Executive summary</a></li>
+<li class="chapter" data-level="9.2" data-path="cell-type.html"><a href="cell-type.html#inputs-and-provenance"><i class="fa fa-check"></i><b>9.2</b> Inputs and provenance</a></li>
+<li class="chapter" data-level="9.3" data-path="cell-type.html"><a href="cell-type.html#model-fit-quality-control"><i class="fa fa-check"></i><b>9.3</b> Model-fit quality control</a>
+<ul>
+<li class="chapter" data-level="9.3.1" data-path="cell-type.html"><a href="cell-type.html#fit-status"><i class="fa fa-check"></i><b>9.3.1</b> Fit status</a></li>
+<li class="chapter" data-level="9.3.2" data-path="cell-type.html"><a href="cell-type.html#sample-size-and-minor-allele-frequency"><i class="fa fa-check"></i><b>9.3.2</b> Sample size and minor-allele frequency</a></li>
+<li class="chapter" data-level="9.3.3" data-path="cell-type.html"><a href="cell-type.html#follow-up-diagnostics-for-the-easeur-attribution-imbalance"><i class="fa fa-check"></i><b>9.3.3</b> Follow-up diagnostics for the EAS–EUR attribution imbalance</a></li>
+<li class="chapter" data-level="9.3.4" data-path="cell-type.html"><a href="cell-type.html#lead-variant-provenance"><i class="fa fa-check"></i><b>9.3.4</b> Lead-variant provenance</a></li>
+</ul></li>
+<li class="chapter" data-level="9.4" data-path="cell-type.html"><a href="cell-type.html#feature-level-cell-type-assignments"><i class="fa fa-check"></i><b>9.4</b> Feature-level cell-type assignments</a>
+<ul>
+<li class="chapter" data-level="9.4.1" data-path="cell-type.html"><a href="cell-type.html#assignment-rate-by-modality"><i class="fa fa-check"></i><b>9.4.1</b> Assignment rate by modality</a></li>
+<li class="chapter" data-level="9.4.2" data-path="cell-type.html"><a href="cell-type.html#which-cell-types-are-assigned"><i class="fa fa-check"></i><b>9.4.2</b> Which cell types are assigned?</a></li>
+<li class="chapter" data-level="9.4.3" data-path="cell-type.html"><a href="cell-type.html#cell-type-by-modality"><i class="fa fa-check"></i><b>9.4.3</b> Cell type by modality</a></li>
+</ul></li>
+<li class="chapter" data-level="9.5" data-path="cell-type.html"><a href="cell-type.html#strength-of-the-gcell-interaction"><i class="fa fa-check"></i><b>9.5</b> Strength of the G×cell interaction</a>
+<ul>
+<li class="chapter" data-level="9.5.1" data-path="cell-type.html"><a href="cell-type.html#top-feature-level-assignments"><i class="fa fa-check"></i><b>9.5.1</b> Top feature-level assignments</a></li>
+</ul></li>
+<li class="chapter" data-level="9.6" data-path="cell-type.html"><a href="cell-type.html#cell-proportion-context"><i class="fa fa-check"></i><b>9.6</b> Cell-proportion context</a></li>
+<li class="chapter" data-level="9.7" data-path="cell-type.html"><a href="cell-type.html#maternal-contamination-sensitivity-analysis"><i class="fa fa-check"></i><b>9.7</b> Maternal-contamination sensitivity analysis</a></li>
+<li class="chapter" data-level="9.8" data-path="cell-type.html"><a href="cell-type.html#cross-ancestry-comparison"><i class="fa fa-check"></i><b>9.8</b> Cross-ancestry comparison</a></li>
+<li class="chapter" data-level="9.9" data-path="cell-type.html"><a href="cell-type.html#genetic-evidence-prioritized-gene-annotations"><i class="fa fa-check"></i><b>9.9</b> Genetic-evidence-prioritized gene annotations</a>
+<ul>
+<li class="chapter" data-level="9.9.1" data-path="cell-type.html"><a href="cell-type.html#ancestry-matched-cell-type-support"><i class="fa fa-check"></i><b>9.9.1</b> Ancestry-matched cell-type support</a></li>
+<li class="chapter" data-level="9.9.2" data-path="cell-type.html"><a href="cell-type.html#colocboost-cell-type-integration"><i class="fa fa-check"></i><b>9.9.2</b> colocBoost × cell-type integration</a></li>
+<li class="chapter" data-level="9.9.3" data-path="cell-type.html"><a href="cell-type.html#current-prioritized-gene-table"><i class="fa fa-check"></i><b>9.9.3</b> Current prioritized-gene table</a></li>
+</ul></li>
+<li class="chapter" data-level="9.10" data-path="cell-type.html"><a href="cell-type.html#diagnostic-distributions"><i class="fa fa-check"></i><b>9.10</b> Diagnostic distributions</a>
+<ul>
+<li class="chapter" data-level="9.10.1" data-path="cell-type.html"><a href="cell-type.html#nominal-and-fdr-distributions"><i class="fa fa-check"></i><b>9.10.1</b> Nominal and FDR distributions</a></li>
+</ul></li>
+<li class="chapter" data-level="9.11" data-path="cell-type.html"><a href="cell-type.html#recommended-interpretation"><i class="fa fa-check"></i><b>9.11</b> Recommended interpretation</a></li>
+<li class="chapter" data-level="9.12" data-path="cell-type.html"><a href="cell-type.html#column-dictionary"><i class="fa fa-check"></i><b>9.12</b> Column dictionary</a>
+<ul>
+<li class="chapter" data-level="9.12.1" data-path="cell-type.html"><a href="cell-type.html#xqtl_celltype_interactions.tsv.gz"><i class="fa fa-check"></i><b>9.12.1</b> <code>xqtl_celltype_interactions.tsv.gz</code></a></li>
+<li class="chapter" data-level="9.12.2" data-path="cell-type.html"><a href="cell-type.html#xqtl_celltype_annotation.tsv.gz"><i class="fa fa-check"></i><b>9.12.2</b> <code>xqtl_celltype_annotation.tsv.gz</code></a></li>
+</ul></li>
+<li class="chapter" data-level="9.13" data-path="cell-type.html"><a href="cell-type.html#reproducibility-4"><i class="fa fa-check"></i><b>9.13</b> Reproducibility</a></li>
+</ul></li>
+<li class="chapter" data-level="10" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html"><i class="fa fa-check"></i><b>10</b> Genotype × pre-pregnancy BMI interactions</a>
+<ul>
+<li class="chapter" data-level="10.1" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#executive-summary-4"><i class="fa fa-check"></i><b>10.1</b> Executive summary</a></li>
+<li class="chapter" data-level="10.2" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#inputs-and-provenance-1"><i class="fa fa-check"></i><b>10.2</b> Inputs and provenance</a></li>
+<li class="chapter" data-level="10.3" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#analysis-framework"><i class="fa fa-check"></i><b>10.3</b> Analysis framework</a></li>
+<li class="chapter" data-level="10.4" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#pipeline-completion"><i class="fa fa-check"></i><b>10.4</b> Pipeline completion</a></li>
+<li class="chapter" data-level="10.5" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#tier-1-ancestry-specific-discovery"><i class="fa fa-check"></i><b>10.5</b> Tier 1: ancestry-specific discovery</a>
+<ul>
+<li class="chapter" data-level="10.5.1" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#yield-by-ancestry-and-modality"><i class="fa fa-check"></i><b>10.5.1</b> Yield by ancestry and modality</a></li>
+<li class="chapter" data-level="10.5.2" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#interaction-effect-distribution"><i class="fa fa-check"></i><b>10.5.2</b> Interaction-effect distribution</a></li>
+<li class="chapter" data-level="10.5.3" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#strongest-tier-1-signals"><i class="fa fa-check"></i><b>10.5.3</b> Strongest Tier-1 signals</a></li>
+<li class="chapter" data-level="10.5.4" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#recurrent-genes-and-multi-feature-signals"><i class="fa fa-check"></i><b>10.5.4</b> Recurrent genes and multi-feature signals</a></li>
+</ul></li>
+<li class="chapter" data-level="10.6" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#cross-ancestry-tier-1-synthesis"><i class="fa fa-check"></i><b>10.6</b> Cross-ancestry Tier-1 synthesis</a>
+<ul>
+<li class="chapter" data-level="10.6.1" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#scope-of-cross-ancestry-testing"><i class="fa fa-check"></i><b>10.6.1</b> Scope of cross-ancestry testing</a></li>
+<li class="chapter" data-level="10.6.2" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#features-significant-in-both-ancestries"><i class="fa fa-check"></i><b>10.6.2</b> Features significant in both ancestries</a></li>
+<li class="chapter" data-level="10.6.3" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#same-lead-effect-concordance"><i class="fa fa-check"></i><b>10.6.3</b> Same-lead effect concordance</a></li>
+</ul></li>
+<li class="chapter" data-level="10.7" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#tier-2-genetically-prioritized-follow-up"><i class="fa fa-check"></i><b>10.7</b> Tier 2: genetically prioritized follow-up</a>
+<ul>
+<li class="chapter" data-level="10.7.1" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#overall-yield"><i class="fa fa-check"></i><b>10.7.1</b> Overall yield</a></li>
+<li class="chapter" data-level="10.7.2" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#two-ancestry-evidence-hierarchy"><i class="fa fa-check"></i><b>10.7.2</b> Two-ancestry evidence hierarchy</a></li>
+<li class="chapter" data-level="10.7.3" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#strongest-robust-tier-2-features"><i class="fa fa-check"></i><b>10.7.3</b> Strongest robust Tier-2 features</a></li>
+<li class="chapter" data-level="10.7.4" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#recurrent-robust-tier-2-genes"><i class="fa fa-check"></i><b>10.7.4</b> Recurrent robust Tier-2 genes</a></li>
+</ul></li>
+<li class="chapter" data-level="10.8" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#biological-patterns-in-the-ppbmi-interaction-atlas"><i class="fa fa-check"></i><b>10.8</b> Biological patterns in the ppBMI interaction atlas</a>
+<ul>
+<li class="chapter" data-level="10.8.1" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#splicing-is-the-dominant-tier-1-interaction-modality"><i class="fa fa-check"></i><b>10.8.1</b> Splicing is the dominant Tier-1 interaction modality</a></li>
+<li class="chapter" data-level="10.8.2" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#candidate-loci-with-multiple-internal-lines-of-evidence"><i class="fa fa-check"></i><b>10.8.2</b> Candidate loci with multiple internal lines of evidence</a></li>
+</ul></li>
+<li class="chapter" data-level="10.9" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#interpretation-guardrails"><i class="fa fa-check"></i><b>10.9</b> Interpretation guardrails</a></li>
+<li class="chapter" data-level="10.10" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#reusable-output-tables"><i class="fa fa-check"></i><b>10.10</b> Reusable output tables</a></li>
+<li class="chapter" data-level="10.11" data-path="gxe-ppbmi.html"><a href="gxe-ppbmi.html#conclusions"><i class="fa fa-check"></i><b>10.11</b> Conclusions</a></li>
+</ul></li>
+<li class="chapter" data-level="11" data-path="gxe-literature.html"><a href="gxe-literature.html"><i class="fa fa-check"></i><b>11</b> Literature context: G×ppBMI findings</a>
+<ul>
+<li class="chapter" data-level="11.0.1" data-path="gxe-literature.html"><a href="gxe-literature.html#scope"><i class="fa fa-check"></i><b>11.0.1</b> Scope</a></li>
+<li class="chapter" data-level="11.0.2" data-path="gxe-literature.html"><a href="gxe-literature.html#summary-of-the-current-ppbmi-ge-results"><i class="fa fa-check"></i><b>11.0.2</b> Summary of the current ppBMI G×E results</a></li>
+<li class="chapter" data-level="11.0.3" data-path="gxe-literature.html"><a href="gxe-literature.html#maternal-adiposity-measurably-alters-placental-molecular-state"><i class="fa fa-check"></i><b>11.0.3</b> 1. Maternal adiposity measurably alters placental molecular state</a></li>
+<li class="chapter" data-level="11.0.4" data-path="gxe-literature.html"><a href="gxe-literature.html#bmi-dependent-regulatory-effects-are-biologically-established"><i class="fa fa-check"></i><b>11.0.4</b> 2. BMI-dependent regulatory effects are biologically established</a></li>
+<li class="chapter" data-level="11.0.5" data-path="gxe-literature.html"><a href="gxe-literature.html#the-strong-splicing-signal-has-emerging-biological-precedent"><i class="fa fa-check"></i><b>11.0.5</b> 3. The strong splicing signal has emerging biological precedent</a></li>
+<li class="chapter" data-level="11.0.6" data-path="gxe-literature.html"><a href="gxe-literature.html#tier-1-candidate-loci"><i class="fa fa-check"></i><b>11.0.6</b> 4. Tier-1 candidate loci</a></li>
+<li class="chapter" data-level="11.0.7" data-path="gxe-literature.html"><a href="gxe-literature.html#tier-2-candidates-and-how-to-use-them"><i class="fa fa-check"></i><b>11.0.7</b> 5. Tier-2 candidates and how to use them</a></li>
+<li class="chapter" data-level="11.0.8" data-path="gxe-literature.html"><a href="gxe-literature.html#ancestry-heterogeneity-is-a-result-not-merely-a-nuisance"><i class="fa fa-check"></i><b>11.0.8</b> 6. Ancestry heterogeneity is a result, not merely a nuisance</a></li>
+<li class="chapter" data-level="11.0.9" data-path="gxe-literature.html"><a href="gxe-literature.html#integrated-biological-interpretation"><i class="fa fa-check"></i><b>11.0.9</b> 7. Integrated biological interpretation</a></li>
+<li class="chapter" data-level="11.0.10" data-path="gxe-literature.html"><a href="gxe-literature.html#recommended-next-analyses"><i class="fa fa-check"></i><b>11.0.10</b> 8. Recommended next analyses</a></li>
+<li class="chapter" data-level="11.0.11" data-path="gxe-literature.html"><a href="gxe-literature.html#conclusions-1"><i class="fa fa-check"></i><b>11.0.11</b> Conclusions</a></li>
+<li class="chapter" data-level="11.0.12" data-path="gxe-literature.html"><a href="gxe-literature.html#references-1"><i class="fa fa-check"></i><b>11.0.12</b> References</a></li>
+</ul></li>
+<li class="part"><span><b>IV Integrated synthesis</b></span></li>
+<li class="chapter" data-level="12" data-path="integration.html"><a href="integration.html"><i class="fa fa-check"></i><b>12</b> Integrated locus prioritization</a>
+<ul>
+<li class="chapter" data-level="12.1" data-path="integration.html"><a href="integration.html#executive-summary-5"><i class="fa fa-check"></i><b>12.1</b> Executive summary</a></li>
+<li class="chapter" data-level="12.2" data-path="integration.html"><a href="integration.html#inputs-and-integration-rules"><i class="fa fa-check"></i><b>12.2</b> 1. Inputs and integration rules</a>
+<ul>
+<li class="chapter" data-level="12.2.1" data-path="integration.html"><a href="integration.html#core-versus-supporting-evidence"><i class="fa fa-check"></i><b>12.2.1</b> 1.1 Core versus supporting evidence</a></li>
+</ul></li>
+<li class="chapter" data-level="12.3" data-path="integration.html"><a href="integration.html#evidence-landscape"><i class="fa fa-check"></i><b>12.3</b> 2. Evidence landscape</a>
+<ul>
+<li class="chapter" data-level="12.3.1" data-path="integration.html"><a href="integration.html#priority-tiers"><i class="fa fa-check"></i><b>12.3.1</b> 2.1 Priority tiers</a></li>
+</ul></li>
+<li class="chapter" data-level="12.4" data-path="integration.html"><a href="integration.html#multi-line-of-evidence-gene-prioritization"><i class="fa fa-check"></i><b>12.4</b> 3. Multi-line-of-evidence gene prioritization</a>
+<ul>
+<li class="chapter" data-level="12.4.1" data-path="integration.html"><a href="integration.html#evidence-matrix"><i class="fa fa-check"></i><b>12.4.1</b> 3.1 Evidence matrix</a></li>
+<li class="chapter" data-level="12.4.2" data-path="integration.html"><a href="integration.html#evidence-breadth-versus-strength"><i class="fa fa-check"></i><b>12.4.2</b> 3.2 Evidence breadth versus strength</a></li>
+</ul></li>
+<li class="chapter" data-level="12.5" data-path="integration.html"><a href="integration.html#approximate-locus-level-prioritization"><i class="fa fa-check"></i><b>12.5</b> 4. Approximate locus-level prioritization</a></li>
+<li class="chapter" data-level="12.6" data-path="integration.html"><a href="integration.html#same-gene-same-trait-convergence"><i class="fa fa-check"></i><b>12.6</b> 5. Same-gene, same-trait convergence</a></li>
+<li class="chapter" data-level="12.7" data-path="integration.html"><a href="integration.html#ppbmi-ge-overlay"><i class="fa fa-check"></i><b>12.7</b> 6. ppBMI G×E overlay</a></li>
+<li class="chapter" data-level="12.8" data-path="integration.html"><a href="integration.html#cell-type-context-of-multi-line-loci"><i class="fa fa-check"></i><b>12.8</b> 7. Cell-type context of multi-line loci</a></li>
+<li class="chapter" data-level="12.9" data-path="integration.html"><a href="integration.html#interpretation-priorities"><i class="fa fa-check"></i><b>12.9</b> 8. Interpretation priorities</a></li>
+<li class="chapter" data-level="12.10" data-path="integration.html"><a href="integration.html#guardrails-and-limitations"><i class="fa fa-check"></i><b>12.10</b> 9. Guardrails and limitations</a></li>
+<li class="chapter" data-level="12.11" data-path="integration.html"><a href="integration.html#reusable-outputs"><i class="fa fa-check"></i><b>12.11</b> 10. Reusable outputs</a></li>
+<li class="chapter" data-level="12.12" data-path="integration.html"><a href="integration.html#reproducibility-5"><i class="fa fa-check"></i><b>12.12</b> 11. Reproducibility</a></li>
+</ul></li>
+<li class="divider"></li>
+<li><a href="https://github.com/sbresnahan/Placenta_xQTL_atlas" target="blank">Repository</a></li>
+
+</ul>
+
+      </nav>
+    </div>
+
+    <div class="book-body">
+      <div class="body-inner">
+        <div class="book-header" role="navigation">
+          <h1>
+            <i class="fa fa-circle-o-notch fa-spin"></i><a href="./">Placenta xQTL Atlas</a>
+          </h1>
+        </div>
+
+        <div class="page-wrapper" tabindex="-1" role="main">
+          <div class="page-inner">
+
+            <section class="normal" id="section-">
+<div id="cell-type" class="section level1 hasAnchor" number="9">
+<h1><span class="header-section-number">9</span> Cell-type attribution<a href="cell-type.html#cell-type" class="anchor-section" aria-label="Anchor link to header"></a></h1>
+<p class="source-note">
+Book chapter rebuilt locally from <code>reports/report_celltype_annotations_with_diagnostics.Rmd</code>.
+</p>
+<div id="executive-summary-3" class="section level2 hasAnchor" number="9.1">
+<h2><span class="header-section-number">9.1</span> Executive summary<a href="cell-type.html#executive-summary-3" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>This report summarizes the deconvolution-based <strong>cell-type attribution
+of significant placental xQTLs</strong>. The attribution model tests whether
+the effect of an ancestry-specific lead cis-xQTL varies with estimated
+placental cell-type abundance:</p>
+<p><em>Y</em> = <em>β</em><sub>0</sub> + <em>β</em><sub><em>G</em></sub><em>G</em> + <em>β</em><sub><em>C</em></sub><em>C</em> + <em>β</em><sub><em>G</em> × <em>C</em></sub>(<em>G</em> × <em>C</em>) + *Z**γ<em> + </em>ϵ*,</p>
+<p>where <em>Y</em> is the normalized molecular phenotype, <em>G</em> is the Module-05
+lead cis-xQTL dosage, <em>C</em> is the transformed cell-type proportion, and
+<em>Z</em> contains the optimized xQTL covariates with the target cell-type
+covariate removed. The cell-type attribution statistic is
+<em>β</em><sub><em>G</em> × <em>C</em></sub>. Primary cell types are assigned only when the
+best cell-type interaction passes the configured feature-attribution
+threshold (0.05).</p>
+<p>The supplied results contain <strong>56,812 genotype × cell-type tests</strong>
+spanning <strong>8,116 significant xQTL features</strong>. Using the current
+aggregate evidence files, <strong>0 unique genes are prioritized by
+significant TWAS, a positive SuSiE-coloc call, and/or a mixed xQTL–GWAS
+colocBoost CoS</strong>. Across all ancestry-feature combinations, <strong>1,522
+features (18.8%) received a significant primary-cell-type assignment</strong>.
+The gene-level integration below is rebuilt directly from the
+feature-level source table at knit time, so it remains synchronized when
+coloc/TWAS aggregation changes.</p>
+<table>
+<colgroup>
+<col width="12%" />
+<col width="31%" />
+<col width="21%" />
+<col width="20%" />
+<col width="14%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="right">significant_xQTL_features</th>
+<th align="right">assigned_features</th>
+<th align="left">assignment_rate</th>
+<th align="right">modalities</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="right">3606</td>
+<td align="right">1480</td>
+<td align="left">41.0%</td>
+<td align="right">9</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="right">4510</td>
+<td align="right">42</td>
+<td align="left">0.9%</td>
+<td align="right">9</td>
+</tr>
+</tbody>
+</table>
+<p>Feature-level cell-type attribution summary by ancestry</p>
+<p><strong>Follow-up diagnostic summary.</strong> EUR’s N≈136 is the full analysis
+cohort, not hidden sample loss. EAS assigns 41.0% of significant xQTL
+features at full N, and still assigns a median 16.1% after repeated
+downsampling to N=136, versus 0.9% in EUR. Median residualized G×cell
+interaction information is 7.1× higher in EAS. Robust HC3 inference
+further reduces the number of supported assignments, so ancestry
+differences in attribution yield should not be interpreted as ancestry
+differences in biology.</p>
+<p><strong>Interpretation note.</strong> An assignment means that the lead xQTL’s
+estimated genetic effect changes with a deconvolved cell proportion. It
+is an attribution from bulk-tissue interaction modeling, not direct
+measurement of an xQTL within purified or single cells. Assignment rates
+also depend strongly on sample size, cell-proportion variability,
+covariate rank, and multiple-testing burden; differences between
+ancestries should therefore not be interpreted as differences in the
+biological prevalence of cell-type-specific regulation without further
+analysis.</p>
+</div>
+<div id="inputs-and-provenance" class="section level2 hasAnchor" number="9.2">
+<h2><span class="header-section-number">9.2</span> Inputs and provenance<a href="cell-type.html#inputs-and-provenance" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<table>
+<colgroup>
+<col width="22%" />
+<col width="66%" />
+<col width="5%" />
+<col width="5%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">table</th>
+<th align="left">path</th>
+<th align="right">rows</th>
+<th align="right">columns</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">All G×C interaction fits</td>
+<td align="left">/Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle/xqtl_celltype_interactions.tsv.gz</td>
+<td align="right">56812</td>
+<td align="right">35</td>
+</tr>
+<tr class="even">
+<td align="left">Feature-level assignments</td>
+<td align="left">/Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle/xqtl_celltype_annotation.tsv.gz</td>
+<td align="right">8116</td>
+<td align="right">14</td>
+</tr>
+<tr class="odd">
+<td align="left">Archived gene-level compatibility table</td>
+<td align="left">/Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle/gene_celltype_annotation.tsv</td>
+<td align="right">1301</td>
+<td align="right">19</td>
+</tr>
+<tr class="even">
+<td align="left">SuSiE-coloc aggregate</td>
+<td align="left">not found</td>
+<td align="right">NA</td>
+<td align="right">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">colocBoost clusters</td>
+<td align="left">not found</td>
+<td align="right">NA</td>
+<td align="right">NA</td>
+</tr>
+<tr class="even">
+<td align="left">Gene-level TWAS aggregate</td>
+<td align="left">not found</td>
+<td align="right">NA</td>
+<td align="right">NA</td>
+</tr>
+<tr class="odd">
+<td align="left">Stage-50 diagnostic bundle</td>
+<td align="left">/Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle/celltype_diagnostics_bundle.zip</td>
+<td align="right">NA</td>
+<td align="right">NA</td>
+</tr>
+</tbody>
+</table>
+<p>Input tables used by this report</p>
+<p>The detailed interaction table is the statistical source of truth. The
+feature-level table selects the best tested cell type per ancestry ×
+modality × phenotype and gates <code>primary_cell_type</code> on FDR.
+<code>gene_celltype_annotation.tsv</code> is retained as a compatibility artifact,
+but the report now rebuilds the current prioritized-gene layer from the
+SuSiE-coloc, colocBoost, and TWAS aggregates and derives each gene’s
+cell-type annotation directly from <code>xqtl_celltype_annotation.tsv.gz</code>.</p>
+<table>
+<colgroup>
+<col width="26%" />
+<col width="30%" />
+<col width="43%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="right">current_prioritized_genes</th>
+<th align="right">archived_gene_annotation_rows</th>
+<th align="right">prioritized_genes_missing_from_archived_table</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="right">0</td>
+<td align="right">1301</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<p>Coverage of the archived gene-level table relative to the current
+evidence union</p>
+</div>
+<div id="model-fit-quality-control" class="section level2 hasAnchor" number="9.3">
+<h2><span class="header-section-number">9.3</span> Model-fit quality control<a href="cell-type.html#model-fit-quality-control" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="fit-status" class="section level3 hasAnchor" number="9.3.1">
+<h3><span class="header-section-number">9.3.1</span> Fit status<a href="cell-type.html#fit-status" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">status</th>
+<th align="right">n_tests</th>
+<th align="left">fraction</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">ok</td>
+<td align="right">21868</td>
+<td align="left">86.6%</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">rank_deficient</td>
+<td align="right">3374</td>
+<td align="left">13.4%</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">ok</td>
+<td align="right">31570</td>
+<td align="left">100.0%</td>
+</tr>
+</tbody>
+</table>
+<p>G×C model status by ancestry</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/status-plot-1.png" /></p>
+<p>Rank-deficient models are retained in the detailed table for
+auditability but do not contribute a valid G×C p-value/FDR assignment. A
+high rank-deficiency fraction within a specific ancestry/modality should
+be investigated before interpreting cell-type assignment rates.</p>
+</div>
+<div id="sample-size-and-minor-allele-frequency" class="section level3 hasAnchor" number="9.3.2">
+<h3><span class="header-section-number">9.3.2</span> Sample size and minor-allele frequency<a href="cell-type.html#sample-size-and-minor-allele-frequency" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<colgroup>
+<col width="8%" />
+<col width="15%" />
+<col width="7%" />
+<col width="10%" />
+<col width="8%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="10%" />
+<col width="12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">modality</th>
+<th align="right">n_tests</th>
+<th align="right">n_features</th>
+<th align="right">median_n</th>
+<th align="right">q25_n</th>
+<th align="right">q75_n</th>
+<th align="right">min_n</th>
+<th align="right">max_n</th>
+<th align="right">median_maf</th>
+<th align="right">median_se_GxC</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">RNA_editing</td>
+<td align="right">154</td>
+<td align="right">22</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.307</td>
+<td align="right">3.187</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">alt_TSS</td>
+<td align="right">1148</td>
+<td align="right">164</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.302</td>
+<td align="right">3.661</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">alt_polyA</td>
+<td align="right">2156</td>
+<td align="right">308</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.317</td>
+<td align="right">2.505</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">expression</td>
+<td align="right">6909</td>
+<td align="right">987</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.290</td>
+<td align="right">1.265</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">intron_retention</td>
+<td align="right">343</td>
+<td align="right">49</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.267</td>
+<td align="right">2.699</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="right">8036</td>
+<td align="right">1148</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.296</td>
+<td align="right">2.346</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">isoforms</td>
+<td align="right">2219</td>
+<td align="right">317</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.299</td>
+<td align="right">2.815</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">splicing</td>
+<td align="right">35</td>
+<td align="right">5</td>
+<td align="right">280</td>
+<td align="right">280</td>
+<td align="right">280</td>
+<td align="right">280</td>
+<td align="right">280</td>
+<td align="right">0.069</td>
+<td align="right">1.851</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">stability</td>
+<td align="right">868</td>
+<td align="right">124</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">281</td>
+<td align="right">0.293</td>
+<td align="right">2.681</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">RNA_editing</td>
+<td align="right">1722</td>
+<td align="right">246</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.338</td>
+<td align="right">7.592</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">alt_TSS</td>
+<td align="right">630</td>
+<td align="right">90</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.280</td>
+<td align="right">6.392</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">alt_polyA</td>
+<td align="right">3213</td>
+<td align="right">459</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.257</td>
+<td align="right">5.996</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">expression</td>
+<td align="right">10696</td>
+<td align="right">1528</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.260</td>
+<td align="right">2.643</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">intron_retention</td>
+<td align="right">714</td>
+<td align="right">102</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.268</td>
+<td align="right">7.133</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">isoform_expression</td>
+<td align="right">11221</td>
+<td align="right">1603</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.272</td>
+<td align="right">3.416</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">isoforms</td>
+<td align="right">1757</td>
+<td align="right">251</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.278</td>
+<td align="right">6.745</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="right">196</td>
+<td align="right">28</td>
+<td align="right">135</td>
+<td align="right">135</td>
+<td align="right">135</td>
+<td align="right">135</td>
+<td align="right">135</td>
+<td align="right">0.063</td>
+<td align="right">6.193</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">stability</td>
+<td align="right">1421</td>
+<td align="right">203</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">136</td>
+<td align="right">0.301</td>
+<td align="right">6.626</td>
+</tr>
+</tbody>
+</table>
+<p>Complete-model sample size, MAF, and interaction SE by ancestry and
+modality</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/sample-size-plot-1.png" /></p>
+</div>
+<div id="follow-up-diagnostics-for-the-easeur-attribution-imbalance" class="section level3 hasAnchor" number="9.3.3">
+<h3><span class="header-section-number">9.3.3</span> Follow-up diagnostics for the EAS–EUR attribution imbalance<a href="cell-type.html#follow-up-diagnostics-for-the-easeur-attribution-imbalance" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>Stage 50 was run specifically to determine whether the low EUR
+attribution yield reflects hidden sample loss, sample-size-dependent
+interaction power, lack of genotype × cell-composition support, or
+unstable classical OLS inference. The results below are intentionally
+restricted to the most informative diagnostics.</p>
+<table>
+<colgroup>
+<col width="5%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="12%" />
+<col width="7%" />
+<col width="10%" />
+<col width="14%" />
+<col width="19%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="right">genotype_n</th>
+<th align="right">n_features</th>
+<th align="right">n_assigned</th>
+<th align="left">classical_assignment_rate</th>
+<th align="right">hc3_assigned</th>
+<th align="left">hc3_assignment_rate</th>
+<th align="right">median_interaction_information</th>
+<th align="right">median_min_minor_carriers_per_cell_tertile</th>
+<th align="right">median_max_leverage</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="right">281</td>
+<td align="right">3606</td>
+<td align="right">1480</td>
+<td align="left">41.0%</td>
+<td align="right">670</td>
+<td align="left">18.58%</td>
+<td align="right">0.0567</td>
+<td align="right">39</td>
+<td align="right">0.9853</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="right">136</td>
+<td align="right">4510</td>
+<td align="right">42</td>
+<td align="left">0.9%</td>
+<td align="right">2</td>
+<td align="left">0.04%</td>
+<td align="right">0.0080</td>
+<td align="right">15</td>
+<td align="right">0.8255</td>
+</tr>
+</tbody>
+</table>
+<p>Key ancestry-level diagnostics for cell-type attribution</p>
+<p>There is no evidence that EUR was inadvertently reduced to 136 samples:
+genotype, phenotype, covariate, and deconvolution inputs all contain 136
+EUR samples for essentially every modality (splicing has 135 complete
+samples). Thus <strong>N≈136 is the EUR cohort size itself</strong>, not pipeline
+attrition.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">analysis</th>
+<th align="right">n</th>
+<th align="left">assignment_rate</th>
+<th align="left">range</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS full cohort</td>
+<td align="right">281</td>
+<td align="left">41.0%</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">EAS downsampled to N=136</td>
+<td align="right">136</td>
+<td align="left">16.1%</td>
+<td align="left">12.7%–18.6%</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR full cohort</td>
+<td align="right">136</td>
+<td align="left">0.9%</td>
+<td align="left">NA</td>
+</tr>
+</tbody>
+</table>
+<p>Effect of sample size on feature-level attribution (10 EAS downsampling
+replicates)</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/downsample-plot-1.png" /></p>
+<p>At the same N=136, downsampled EAS retains a median assignment rate far
+above EUR. Sample size therefore accounts for substantial loss of
+interaction power, but <strong>does not by itself explain the EUR result</strong>.
+The supplied diagnostics bundle contains 10 completed downsampling
+replicates, so the displayed range is descriptive rather than a precise
+confidence interval.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">cell_type</th>
+<th align="right">EAS_to_EUR_ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Fibroblast_Stromal</td>
+<td align="right">49.9</td>
+</tr>
+<tr class="even">
+<td align="left">EVT</td>
+<td align="right">27.1</td>
+</tr>
+<tr class="odd">
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">18.7</td>
+</tr>
+<tr class="even">
+<td align="left">Hofbauer</td>
+<td align="right">18.1</td>
+</tr>
+<tr class="odd">
+<td align="left">Fetal_Immune</td>
+<td align="right">10.5</td>
+</tr>
+<tr class="even">
+<td align="left">Endothelial</td>
+<td align="right">6.2</td>
+</tr>
+<tr class="odd">
+<td align="left">Cytotrophoblast</td>
+<td align="right">4.1</td>
+</tr>
+</tbody>
+</table>
+<p>Median residualized G×cell interaction-information ratio by cell type</p>
+<p>Median residualized G×cell interaction information is <strong>7.1× higher in
+EAS</strong>, despite the sample-size ratio being only <strong>2.07×</strong>. The median
+minimum number of minor-allele carriers represented across
+low/middle/high cell-fraction tertiles is <strong>39 in EAS versus 15 in
+EUR</strong>. The largest information deficits occur for fibroblast/stromal,
+EVT, syncytiotrophoblast, and Hofbauer contexts. This indicates that EUR
+has substantially less usable variation in the interaction regressor,
+beyond its smaller N.</p>
+<p>Finally, HC3 heteroskedasticity/leverage-robust inference is materially
+more conservative than the production classical OLS standard errors.
+Using HC3 q-values while retaining all production-significant features
+as the denominator, the supported assignment rate falls from <strong>41.0% to
+18.6% in EAS</strong>, and from <strong>0.9% to 0.04% in EUR</strong>. The apparently strong
+EUR splicing exception also disappears under HC3. These diagnostics
+favor an interpretation of <strong>limited EUR interaction information plus
+sensitivity of classical OLS inference to leverage/heteroskedasticity</strong>,
+rather than evidence that cell-type-specific regulatory effects are
+biologically absent in EUR.</p>
+</div>
+<div id="lead-variant-provenance" class="section level3 hasAnchor" number="9.3.4">
+<h3><span class="header-section-number">9.3.4</span> Lead-variant provenance<a href="cell-type.html#lead-variant-provenance" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">lead_source</th>
+<th align="right">n_features</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">module05_discovery</td>
+<td align="right">3606</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">module05_discovery</td>
+<td align="right">4510</td>
+</tr>
+</tbody>
+</table>
+<p>Source of lead variants tested for cell-type interaction</p>
+<p>Ideally all tested variants come from the exact ancestry-specific
+Module-05 discovery lead table. Any fallback source should be reviewed
+because it can change the interpretation of the attribution test.</p>
+</div>
+</div>
+<div id="feature-level-cell-type-assignments" class="section level2 hasAnchor" number="9.4">
+<h2><span class="header-section-number">9.4</span> Feature-level cell-type assignments<a href="cell-type.html#feature-level-cell-type-assignments" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="assignment-rate-by-modality" class="section level3 hasAnchor" number="9.4.1">
+<h3><span class="header-section-number">9.4.1</span> Assignment rate by modality<a href="cell-type.html#assignment-rate-by-modality" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<colgroup>
+<col width="14%" />
+<col width="28%" />
+<col width="17%" />
+<col width="24%" />
+<col width="14%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">modality</th>
+<th align="right">n_features</th>
+<th align="left">assignment_rate</th>
+<th align="right">assigned</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">RNA_editing</td>
+<td align="right">30</td>
+<td align="left">63.3%</td>
+<td align="right">19</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">alt_TSS</td>
+<td align="right">184</td>
+<td align="left">52.7%</td>
+<td align="right">97</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">alt_polyA</td>
+<td align="right">371</td>
+<td align="left">58.0%</td>
+<td align="right">215</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">expression</td>
+<td align="right">1123</td>
+<td align="left">36.0%</td>
+<td align="right">404</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">intron_retention</td>
+<td align="right">56</td>
+<td align="left">25.0%</td>
+<td align="right">14</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="right">1333</td>
+<td align="left">39.5%</td>
+<td align="right">526</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">isoforms</td>
+<td align="right">364</td>
+<td align="left">36.3%</td>
+<td align="right">132</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">splicing</td>
+<td align="right">5</td>
+<td align="left">100.0%</td>
+<td align="right">5</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">stability</td>
+<td align="right">140</td>
+<td align="left">48.6%</td>
+<td align="right">68</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">RNA_editing</td>
+<td align="right">246</td>
+<td align="left">0.8%</td>
+<td align="right">2</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">alt_TSS</td>
+<td align="right">90</td>
+<td align="left">1.1%</td>
+<td align="right">1</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">alt_polyA</td>
+<td align="right">459</td>
+<td align="left">2.8%</td>
+<td align="right">13</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">expression</td>
+<td align="right">1528</td>
+<td align="left">0.1%</td>
+<td align="right">1</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">intron_retention</td>
+<td align="right">102</td>
+<td align="left">0.0%</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">isoform_expression</td>
+<td align="right">1603</td>
+<td align="left">0.2%</td>
+<td align="right">3</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">isoforms</td>
+<td align="right">251</td>
+<td align="left">0.0%</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="right">28</td>
+<td align="left">78.6%</td>
+<td align="right">22</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">stability</td>
+<td align="right">203</td>
+<td align="left">0.0%</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<p>Cell-type assignment rate among significant xQTL features</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/modality-assignment-plot-1.png" /></p>
+</div>
+<div id="which-cell-types-are-assigned" class="section level3 hasAnchor" number="9.4.2">
+<h3><span class="header-section-number">9.4.2</span> Which cell types are assigned?<a href="cell-type.html#which-cell-types-are-assigned" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<colgroup>
+<col width="14%" />
+<col width="30%" />
+<col width="17%" />
+<col width="36%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">primary_cell_type</th>
+<th align="right">n_features</th>
+<th align="left">fraction_of_assignments</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">767</td>
+<td align="left">51.8%</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">Fibroblast_Stromal</td>
+<td align="right">281</td>
+<td align="left">19.0%</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Hofbauer</td>
+<td align="right">199</td>
+<td align="left">13.4%</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">115</td>
+<td align="left">7.8%</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">44</td>
+<td align="left">3.0%</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">EVT</td>
+<td align="right">40</td>
+<td align="left">2.7%</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Endothelial</td>
+<td align="right">34</td>
+<td align="left">2.3%</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Hofbauer</td>
+<td align="right">10</td>
+<td align="left">23.8%</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">9</td>
+<td align="left">21.4%</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">9</td>
+<td align="left">21.4%</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">Endothelial</td>
+<td align="right">6</td>
+<td align="left">14.3%</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Fibroblast_Stromal</td>
+<td align="right">4</td>
+<td align="left">9.5%</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">EVT</td>
+<td align="right">2</td>
+<td align="left">4.8%</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">2</td>
+<td align="left">4.8%</td>
+</tr>
+</tbody>
+</table>
+<p>Primary cell types among significantly assigned xQTL features</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/assigned-celltypes-plot-1.png" /></p>
+</div>
+<div id="cell-type-by-modality" class="section level3 hasAnchor" number="9.4.3">
+<h3><span class="header-section-number">9.4.3</span> Cell type by modality<a href="cell-type.html#cell-type-by-modality" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/celltype-modality-heatmap-1.png" /></p>
+</div>
+</div>
+<div id="strength-of-the-gcell-interaction" class="section level2 hasAnchor" number="9.5">
+<h2><span class="header-section-number">9.5</span> Strength of the G×cell interaction<a href="cell-type.html#strength-of-the-gcell-interaction" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>The raw <code>beta_GxC</code> is expressed per unit of the transformed
+cell-proportion variable. For cross-cell-type interpretation,
+<code>beta_GxC_iqr</code> is often more intuitive: it is the change in genetic
+effect across the observed interquartile range of that transformed cell
+proportion.</p>
+<table>
+<colgroup>
+<col width="10%" />
+<col width="21%" />
+<col width="20%" />
+<col width="21%" />
+<col width="25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">cell_type</th>
+<th align="right">significant_tests</th>
+<th align="right">median_abs_beta_GxC</th>
+<th align="right">median_abs_beta_GxC_iqr</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">97</td>
+<td align="right">9.9507</td>
+<td align="right">0.0899</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">EVT</td>
+<td align="right">64</td>
+<td align="right">11.8713</td>
+<td align="right">0.0559</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Endothelial</td>
+<td align="right">83</td>
+<td align="right">8.1928</td>
+<td align="right">0.1411</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">1086</td>
+<td align="right">5.7966</td>
+<td align="right">0.3225</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Fibroblast_Stromal</td>
+<td align="right">839</td>
+<td align="right">2.9141</td>
+<td align="right">0.2275</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">Hofbauer</td>
+<td align="right">698</td>
+<td align="right">15.7955</td>
+<td align="right">0.3219</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">742</td>
+<td align="right">1.9436</td>
+<td align="right">0.2763</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">19</td>
+<td align="right">22.0639</td>
+<td align="right">0.3702</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">EVT</td>
+<td align="right">11</td>
+<td align="right">88.7854</td>
+<td align="right">0.1113</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Endothelial</td>
+<td align="right">18</td>
+<td align="right">23.6326</td>
+<td align="right">0.4833</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">20</td>
+<td align="right">8.6106</td>
+<td align="right">0.2056</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Fibroblast_Stromal</td>
+<td align="right">14</td>
+<td align="right">15.1481</td>
+<td align="right">0.3240</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">Hofbauer</td>
+<td align="right">13</td>
+<td align="right">60.5092</td>
+<td align="right">0.3847</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">11</td>
+<td align="right">6.5808</td>
+<td align="right">0.3452</td>
+</tr>
+</tbody>
+</table>
+<p>Effect-size summary for FDR-significant G×C tests</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/effect-iqr-plot-1.png" /></p>
+<div id="top-feature-level-assignments" class="section level3 hasAnchor" number="9.5.1">
+<h3><span class="header-section-number">9.5.1</span> Top feature-level assignments<a href="cell-type.html#top-feature-level-assignments" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<colgroup>
+<col width="5%" />
+<col width="7%" />
+<col width="21%" />
+<col width="7%" />
+<col width="7%" />
+<col width="7%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="11%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">modality</th>
+<th align="left">phenotype_id</th>
+<th align="left">variant_id</th>
+<th align="left">primary_cell_type</th>
+<th align="right">primary_beta_GxC</th>
+<th align="right">primary_se_GxC</th>
+<th align="right">primary_p_GxC</th>
+<th align="right">primary_q_GxC</th>
+<th align="right">maternal_sensitivity_beta_GxC</th>
+<th align="right">maternal_sensitivity_p_GxC</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000198015.14__ENST00000552938.1</td>
+<td align="left">12:93510753:A:G</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">38.0640</td>
+<td align="right">3.3087</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">38.0685</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000100744.15__ENST00000554182.5</td>
+<td align="left">14:96331387:G:A</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-27.4447</td>
+<td align="right">2.7968</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-26.4649</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000160221.18__ENST00000480786.1</td>
+<td align="left">21:44053922:TTGA:T</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">19.8304</td>
+<td align="right">2.0615</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">19.6781</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">expression</td>
+<td align="left">ENSG00000293427.1</td>
+<td align="left">22:20768959:C:T</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-8.2490</td>
+<td align="right">0.8965</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-8.2333</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="left">ENSG00000053371.13_<em>chr1_19286372_19288496_clu_208</em>-</td>
+<td align="left">1:19592177:G:A</td>
+<td align="left">Hofbauer</td>
+<td align="right">-112.2825</td>
+<td align="right">10.4313</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-112.2825</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000118804.9__ENST00000237642.7</td>
+<td align="left">4:76281659:A:G</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-12.9996</td>
+<td align="right">1.4838</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-12.9080</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">expression</td>
+<td align="left">ENSG00000099974.8</td>
+<td align="left">22:23915150:G:A</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-14.4303</td>
+<td align="right">1.6416</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-14.4431</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">alt_polyA</td>
+<td align="left">ENSG00000112936.21__grp_1_downstream_ENST00000696441.1</td>
+<td align="left">5:40968956:T:A</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">10.7283</td>
+<td align="right">1.2783</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">10.6920</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">alt_polyA</td>
+<td align="left">ENSG00000164587.13__grp_2_downstream_ENST00000401695.8</td>
+<td align="left">5:150449187:G:C</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-7.7577</td>
+<td align="right">0.9245</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-7.7677</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">alt_polyA</td>
+<td align="left">ENSG00000112936.21__grp_2_downstream_ENST00000696441.1</td>
+<td align="left">5:40968956:T:A</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">10.6420</td>
+<td align="right">1.2694</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">10.6421</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">alt_polyA</td>
+<td align="left">ENSG00000112936.21__grp_1_downstream_ENST00000696333.1</td>
+<td align="left">5:40966574:T:C</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-10.0971</td>
+<td align="right">1.2509</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-10.0638</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">expression</td>
+<td align="left">ENSG00000118804.9</td>
+<td align="left">4:76281659:A:G</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-11.4336</td>
+<td align="right">1.4048</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-11.4074</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000293427.1__ENST00000477296.5</td>
+<td align="left">22:20768959:C:T</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-8.5078</td>
+<td align="right">1.0553</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-8.4990</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">stability</td>
+<td align="left">ENSG00000167004.14</td>
+<td align="left">15:43721311:G:C</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">11.7685</td>
+<td align="right">1.5084</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">11.6566</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="left">ENSG00000167522.17_<em>chr16_89305344_89307615_clu_8136</em>-</td>
+<td align="left">16:89794094:A:G</td>
+<td align="left">Hofbauer</td>
+<td align="right">-119.1607</td>
+<td align="right">13.6876</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-119.1607</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="left">ENSG00000130208.10_<em>chr19_44916325_44931000_clu_11828</em>+</td>
+<td align="left">19:44433568:C:T</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">49.3375</td>
+<td align="right">5.7396</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">49.3375</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="left">ENSG00000291128.1_<em>chr19_44916325_44931000_clu_11828</em>+</td>
+<td align="left">19:44433568:C:T</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">49.3375</td>
+<td align="right">5.7396</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">49.3375</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="left">ENSG00000134905.17_<em>chr13_110643980_110644065_clu_5962</em>-</td>
+<td align="left">13:110206034:AAC:A</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-6.1886</td>
+<td align="right">0.7816</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-6.1886</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000164307.13__ENST00000296754.7</td>
+<td align="left">5:96776379:T:G</td>
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">-7.6603</td>
+<td align="right">1.0320</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-7.6330</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000163947.12__ENST00000495373.5</td>
+<td align="left">3:56731219:A:T</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">13.0110</td>
+<td align="right">1.7772</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">12.9739</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">splicing</td>
+<td align="left">ENSG00000263002.8_<em>chr19_44141733_44142171_clu_11815</em>+</td>
+<td align="left">19:44433568:C:T</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">37.2656</td>
+<td align="right">4.8656</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">37.2656</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">stability</td>
+<td align="left">ENSG00000110080.20</td>
+<td align="left">11:126403491:G:A</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-9.1962</td>
+<td align="right">1.3008</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-9.1620</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">expression</td>
+<td align="left">ENSG00000198466.12</td>
+<td align="left">19:57865116:A:C</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">6.2985</td>
+<td align="right">0.8937</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">6.3756</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">isoform_expression</td>
+<td align="left">ENSG00000198466.12__ENST00000484707.1</td>
+<td align="left">19:57862267:C:G</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">7.8193</td>
+<td align="right">1.1191</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">7.8363</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">alt_TSS</td>
+<td align="left">ENSG00000164308.17__grp_2_upstream_HPLRT_039d234c78d</td>
+<td align="left">5:96919113:G:A</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">-10.1009</td>
+<td align="right">1.4079</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">-10.0818</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<p>Top 25 feature-level cell-type assignments by FDR</p>
+</div>
+</div>
+<div id="cell-proportion-context" class="section level2 hasAnchor" number="9.6">
+<h2><span class="header-section-number">9.6</span> Cell-proportion context<a href="cell-type.html#cell-proportion-context" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>The detailed table stores raw cell-proportion quartiles for each tested
+target. Because these values repeat across many features, the table
+below collapses to one row per ancestry × cell type.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="left">cell_type</th>
+<th align="right">q25</th>
+<th align="right">q50</th>
+<th align="right">q75</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">0.0058</td>
+<td align="right">0.0102</td>
+<td align="right">0.0149</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">EVT</td>
+<td align="right">0.0000</td>
+<td align="right">0.0000</td>
+<td align="right">0.0047</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Endothelial</td>
+<td align="right">0.0067</td>
+<td align="right">0.0145</td>
+<td align="right">0.0239</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">0.0083</td>
+<td align="right">0.0366</td>
+<td align="right">0.0640</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Fibroblast_Stromal</td>
+<td align="right">0.0227</td>
+<td align="right">0.0564</td>
+<td align="right">0.1010</td>
+</tr>
+<tr class="even">
+<td align="left">EAS</td>
+<td align="left">Hofbauer</td>
+<td align="right">0.0000</td>
+<td align="right">0.0109</td>
+<td align="right">0.0204</td>
+</tr>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">0.7503</td>
+<td align="right">0.8455</td>
+<td align="right">0.9362</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Cytotrophoblast</td>
+<td align="right">0.0180</td>
+<td align="right">0.0240</td>
+<td align="right">0.0347</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">EVT</td>
+<td align="right">0.0000</td>
+<td align="right">0.0000</td>
+<td align="right">0.0013</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Endothelial</td>
+<td align="right">0.0000</td>
+<td align="right">0.0097</td>
+<td align="right">0.0204</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">Fetal_Immune</td>
+<td align="right">0.0129</td>
+<td align="right">0.0234</td>
+<td align="right">0.0366</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Fibroblast_Stromal</td>
+<td align="right">0.0083</td>
+<td align="right">0.0163</td>
+<td align="right">0.0296</td>
+</tr>
+<tr class="odd">
+<td align="left">EUR</td>
+<td align="left">Hofbauer</td>
+<td align="right">0.0000</td>
+<td align="right">0.0005</td>
+<td align="right">0.0064</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="left">Syncytiotrophoblast</td>
+<td align="right">0.8777</td>
+<td align="right">0.9141</td>
+<td align="right">0.9480</td>
+</tr>
+</tbody>
+</table>
+<p>Raw deconvolved cell-proportion quartiles</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/cell-proportion-plot-1.png" /></p>
+</div>
+<div id="maternal-contamination-sensitivity-analysis" class="section level2 hasAnchor" number="9.7">
+<h2><span class="header-section-number">9.7</span> Maternal-contamination sensitivity analysis<a href="cell-type.html#maternal-contamination-sensitivity-analysis" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>For each G×C test, the model was refit after excluding samples above the
+configured maternal-fraction threshold in the Module-06 analysis. The
+principal questions are whether the interaction effect retains its
+direction and whether strong primary assignments remain supported after
+exclusion.</p>
+<table>
+<colgroup>
+<col width="8%" />
+<col width="12%" />
+<col width="18%" />
+<col width="12%" />
+<col width="27%" />
+<col width="21%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="right">primary_tests</th>
+<th align="left">same_direction_fraction</th>
+<th align="right">same_direction</th>
+<th align="left">sensitivity_p_lt_threshold_fraction</th>
+<th align="right">sensitivity_p_lt_threshold</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="right">3124</td>
+<td align="left">100.0%</td>
+<td align="right">3123</td>
+<td align="left">70.2%</td>
+<td align="right">2193</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="right">4510</td>
+<td align="left">100.0%</td>
+<td align="right">4510</td>
+<td align="left">29.5%</td>
+<td align="right">1330</td>
+</tr>
+</tbody>
+</table>
+<p>Maternal-contamination sensitivity of the best cell-type test for each
+feature</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/maternal-scatter-1.png" /></p>
+</div>
+<div id="cross-ancestry-comparison" class="section level2 hasAnchor" number="9.8">
+<h2><span class="header-section-number">9.8</span> Cross-ancestry comparison<a href="cell-type.html#cross-ancestry-comparison" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>Because the xQTL discovery and lead variants are ancestry-specific, the
+same molecular phenotype can be represented by different lead variants
+across ancestries. Cross-ancestry comparisons below therefore describe
+<strong>attribution concordance</strong>, not a formal meta-analysis of a shared G×C
+effect.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">metric</th>
+<th align="right">n</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Features tested in both ancestries</td>
+<td align="right">1129</td>
+</tr>
+<tr class="even">
+<td align="left">Same ancestry-specific lead variant</td>
+<td align="right">82</td>
+</tr>
+<tr class="odd">
+<td align="left">Same best cell type</td>
+<td align="right">161</td>
+</tr>
+<tr class="even">
+<td align="left">Assigned in both ancestries</td>
+<td align="right">1</td>
+</tr>
+<tr class="odd">
+<td align="left">Same primary cell type among all overlapping features</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<p>Cross-ancestry feature-level attribution concordance</p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/cross-best-celltype-1.png" /></p>
+</div>
+<div id="genetic-evidence-prioritized-gene-annotations" class="section level2 hasAnchor" number="9.9">
+<h2><span class="header-section-number">9.9</span> Genetic-evidence-prioritized gene annotations<a href="cell-type.html#genetic-evidence-prioritized-gene-annotations" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>The gene-level layer now uses the <strong>current union of three independent
+downstream evidence sources</strong>: (1) positive SuSiE-coloc calls, (2)
+colocBoost CoS events that contain at least one molecular xQTL outcome
+and at least one GWAS outcome, and (3) gene-level TWAS results with ACAT
+q &lt; 0.05. The cell-type annotation itself is not recomputed
+statistically: for each prioritized gene and ancestry, the report
+selects the strongest available feature-level G×cell result from
+<code>xqtl_celltype_annotation.tsv.gz</code>.</p>
+<p>This distinction is important. A gene can be prioritized by one evidence
+source or ancestry while its strongest cell-type interaction occurs in
+another ancestry. <strong>An ancestry-matched cell-type assignment is
+presented as contextual support only when the genetic-evidence ancestry
+and the G×cell ancestry match.</strong> Pooled TWAS evidence is therefore not
+treated as ancestry-specific cell-type support.</p>
+<table style="width:99%;">
+<colgroup>
+<col width="30%" />
+<col width="26%" />
+<col width="42%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">evidence</th>
+<th align="right">prioritized_genes</th>
+<th align="right">evidence_gene_ancestry_pairs</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Any current evidence</td>
+<td align="right">0</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<p>Genes represented by the current downstream evidence sources</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">susie_coloc</th>
+<th align="left">colocboost</th>
+<th align="left">twas</th>
+<th align="right">n_genes</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<p>Overlap of SuSiE-coloc, colocBoost, and significant TWAS gene
+prioritization</p>
+<div id="ancestry-matched-cell-type-support" class="section level3 hasAnchor" number="9.9.1">
+<h3><span class="header-section-number">9.9.1</span> Ancestry-matched cell-type support<a href="cell-type.html#ancestry-matched-cell-type-support" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<colgroup>
+<col width="8%" />
+<col width="8%" />
+<col width="13%" />
+<col width="21%" />
+<col width="24%" />
+<col width="24%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">evidence</th>
+<th align="left">ancestry</th>
+<th align="right">evidence_genes</th>
+<th align="right">genes_with_celltype_record</th>
+<th align="right">genes_with_primary_assignment</th>
+<th align="left">assignment_rate_among_records</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<p>Ancestry-matched G×cell attribution among evidence-prioritized genes</p>
+</div>
+<div id="colocboost-cell-type-integration" class="section level3 hasAnchor" number="9.9.2">
+<h3><span class="header-section-number">9.9.2</span> colocBoost × cell-type integration<a href="cell-type.html#colocboost-cell-type-integration" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>colocBoost is summarized separately because a CoS can connect several
+molecular outcomes and several GWAS traits. <code>purity</code>, <code>cos_npc</code>, and
+<code>min_npc_outcome</code> are retained as colocBoost diagnostics; they are
+<strong>not</strong> treated as SuSiE-coloc PP4 values. The table below shows each
+mixed xQTL–GWAS CoS at the gene level and attaches only the cell-type
+result from the same ancestry.</p>
+<pre><code>## No mixed xQTL–GWAS colocBoost events were available in the supplied aggregate.</code></pre>
+</div>
+<div id="current-prioritized-gene-table" class="section level3 hasAnchor" number="9.9.3">
+<h3><span class="header-section-number">9.9.3</span> Current prioritized-gene table<a href="cell-type.html#current-prioritized-gene-table" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table style="width:99%;">
+<colgroup>
+<col width="12%" />
+<col width="23%" />
+<col width="23%" />
+<col width="20%" />
+<col width="20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">ancestry</th>
+<th align="right">prioritized_genes</th>
+<th align="right">genes_with_record</th>
+<th align="right">assigned_genes</th>
+<th align="left">assignment_rate</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EAS</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">NA</td>
+</tr>
+<tr class="even">
+<td align="left">EUR</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">NA</td>
+</tr>
+</tbody>
+</table>
+<p>Cell-type assignments among the current evidence-prioritized gene union</p>
+<table style="width:99%;">
+<colgroup>
+<col width="3%" />
+<col width="9%" />
+<col width="10%" />
+<col width="11%" />
+<col width="9%" />
+<col width="7%" />
+<col width="9%" />
+<col width="11%" />
+<col width="9%" />
+<col width="7%" />
+<col width="9%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">gene</th>
+<th align="left">evidence_sources</th>
+<th align="left">evidence_ancestries</th>
+<th align="left">primary_cell_type_EAS</th>
+<th align="right">primary_q_GxC_EAS</th>
+<th align="left">modality_EAS</th>
+<th align="left">phenotype_id_EAS</th>
+<th align="left">primary_cell_type_EUR</th>
+<th align="right">primary_q_GxC_EUR</th>
+<th align="left">modality_EUR</th>
+<th align="left">phenotype_id_EUR</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<p>Top 25 current evidence-prioritized genes ordered by strongest available
+G×cell FDR</p>
+</div>
+</div>
+<div id="diagnostic-distributions" class="section level2 hasAnchor" number="9.10">
+<h2><span class="header-section-number">9.10</span> Diagnostic distributions<a href="cell-type.html#diagnostic-distributions" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="nominal-and-fdr-distributions" class="section level3 hasAnchor" number="9.10.1">
+<h3><span class="header-section-number">9.10.1</span> Nominal and FDR distributions<a href="cell-type.html#nominal-and-fdr-distributions" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/pvalue-distribution-1.png" /></p>
+<p><img src=".staging/raw_cell-type_files/figure-markdown_github/qvalue-distribution-1.png" /></p>
+</div>
+</div>
+<div id="recommended-interpretation" class="section level2 hasAnchor" number="9.11">
+<h2><span class="header-section-number">9.11</span> Recommended interpretation<a href="cell-type.html#recommended-interpretation" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>The most defensible use of these results is to treat cell type as an
+<strong>attribution layer on top of an already significant xQTL</strong>, rather than
+as an independent genome-wide discovery analysis. In particular:</p>
+<ol style="list-style-type: decimal">
+<li><code>xqtl_celltype_interactions.tsv.gz</code> should be used for statistical
+details, sensitivity analyses, and plots of genetic effect as a
+function of cell composition.</li>
+<li><code>xqtl_celltype_annotation.tsv.gz</code> is appropriate for a one-label
+summary of each significant xQTL feature, but <code>unassigned</code> should be
+retained rather than forcing every xQTL to a cell type.</li>
+<li>Gene-level cell-type interpretation should be generated from the
+<strong>current union of downstream evidence</strong> rather than assuming
+<code>gene_celltype_annotation.tsv</code> is synchronized after every
+aggregation rerun. The report therefore rebuilds the
+prioritized-gene layer from SuSiE-coloc, mixed xQTL–GWAS colocBoost
+events, and significant gene-level TWAS, then maps those genes back
+to the feature-level attribution source table.</li>
+<li>Cell-type evidence should be ancestry matched. An EAS G×cell
+assignment is useful biological context for a EUR-only colocBoost or
+SuSiE-coloc gene, but it should not be described as ancestry-matched
+support for that EUR event. Likewise, pooled TWAS does not by itself
+specify an ancestry for the G×cell annotation.</li>
+<li>The source modality and phenotype should always be retained because
+different molecular features of the same gene can have different
+cell-type interactions.</li>
+<li>The Stage-50 diagnostics show that EUR’s low attribution yield is
+not caused by hidden sample loss. EAS downsampling to N=136 reduces
+attribution substantially but still leaves a much higher assignment
+rate than observed in EUR; EUR also has markedly less residualized
+G×cell interaction information and weaker minor-allele support
+across the cell-composition range. The ancestry contrast should
+therefore be interpreted primarily as a power/information
+difference, not as evidence that cell-type-specific regulation is
+biologically rarer in EUR.</li>
+<li>HC3 robust inference is substantially more conservative than
+classical OLS in these data, especially for the apparent splicing
+signals. Classical assignments remain the production output
+summarized elsewhere in this report, but HC3 results should be
+treated as an important robustness qualifier.</li>
+<li>Maternal-contamination sensitivity results provide an important
+check that an apparent fetal-cell attribution is not primarily
+driven by variation in maternal contribution to bulk placental
+tissue.</li>
+</ol>
+</div>
+<div id="column-dictionary" class="section level2 hasAnchor" number="9.12">
+<h2><span class="header-section-number">9.12</span> Column dictionary<a href="cell-type.html#column-dictionary" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="xqtl_celltype_interactions.tsv.gz" class="section level3 hasAnchor" number="9.12.1">
+<h3><span class="header-section-number">9.12.1</span> <code>xqtl_celltype_interactions.tsv.gz</code><a href="cell-type.html#xqtl_celltype_interactions.tsv.gz" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<colgroup>
+<col width="31%" />
+<col width="68%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">column</th>
+<th align="left">description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">ancestry / modality / phenotype_id</td>
+<td align="left">xQTL stratum and molecular feature</td>
+</tr>
+<tr class="even">
+<td align="left">variant_id</td>
+<td align="left">Ancestry-specific Module-05 lead cis-xQTL variant</td>
+</tr>
+<tr class="odd">
+<td align="left">lead_pval_nominal</td>
+<td align="left">Nominal cis-xQTL p-value for the selected lead variant</td>
+</tr>
+<tr class="even">
+<td align="left">lead_source</td>
+<td align="left">Provenance of the selected lead variant</td>
+</tr>
+<tr class="odd">
+<td align="left">cell_type</td>
+<td align="left">Deconvolved fetal cell type tested as the interaction context</td>
+</tr>
+<tr class="even">
+<td align="left">cell_prop_raw_q25/q50/q75</td>
+<td align="left">Raw deconvolved cell-proportion quartiles</td>
+</tr>
+<tr class="odd">
+<td align="left">status</td>
+<td align="left">Model completion/QC status</td>
+</tr>
+<tr class="even">
+<td align="left">n</td>
+<td align="left">Complete samples used by the model</td>
+</tr>
+<tr class="odd">
+<td align="left">af / maf</td>
+<td align="left">Allele frequency and minor-allele frequency in analyzed samples</td>
+</tr>
+<tr class="even">
+<td align="left">beta_G</td>
+<td align="left">Genotype main-effect coefficient at mean-centered cell proportion</td>
+</tr>
+<tr class="odd">
+<td align="left">beta_C</td>
+<td align="left">Cell-proportion main-effect coefficient</td>
+</tr>
+<tr class="even">
+<td align="left">beta_GxC / se_GxC / p_GxC</td>
+<td align="left">Genotype × cell-proportion interaction estimate, SE, and nominal p-value</td>
+</tr>
+<tr class="odd">
+<td align="left">q_GxC</td>
+<td align="left">BH FDR for G×C tests within ancestry × modality</td>
+</tr>
+<tr class="even">
+<td align="left">cell_transformed_*</td>
+<td align="left">Quartiles/IQR of the transformed cell-proportion variable</td>
+</tr>
+<tr class="odd">
+<td align="left">beta_GxC_iqr</td>
+<td align="left">Change in genetic effect across one observed transformed-cell IQR</td>
+</tr>
+<tr class="even">
+<td align="left">beta_G_at_cell_q25/q50/q75</td>
+<td align="left">Estimated genetic slope at cell-proportion quartiles</td>
+</tr>
+<tr class="odd">
+<td align="left">maternal_sensitivity_*</td>
+<td align="left">Refit statistics after excluding samples above the maternal-fraction threshold</td>
+</tr>
+</tbody>
+</table>
+<p>Detailed interaction-table columns</p>
+</div>
+<div id="xqtl_celltype_annotation.tsv.gz" class="section level3 hasAnchor" number="9.12.2">
+<h3><span class="header-section-number">9.12.2</span> <code>xqtl_celltype_annotation.tsv.gz</code><a href="cell-type.html#xqtl_celltype_annotation.tsv.gz" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<table>
+<colgroup>
+<col width="29%" />
+<col width="70%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">column</th>
+<th align="left">description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">best_cell_type</td>
+<td align="left">Cell type with the strongest valid G×C evidence for the feature</td>
+</tr>
+<tr class="even">
+<td align="left">primary_cell_type</td>
+<td align="left">best_cell_type if its G×C FDR passes the assignment threshold; otherwise unassigned</td>
+</tr>
+<tr class="odd">
+<td align="left">primary_beta_GxC / primary_se_GxC</td>
+<td align="left">Interaction estimate and SE for the best cell type</td>
+</tr>
+<tr class="even">
+<td align="left">primary_p_GxC / primary_q_GxC</td>
+<td align="left">Nominal p-value and ancestry × modality BH FDR for the best cell type</td>
+</tr>
+<tr class="odd">
+<td align="left">n_celltypes_tested</td>
+<td align="left">Number of valid fetal-cell interaction tests for the feature</td>
+</tr>
+<tr class="even">
+<td align="left">maternal_sensitivity_*</td>
+<td align="left">Sensitivity estimate and p-value for the selected best cell type</td>
+</tr>
+</tbody>
+</table>
+<p>Feature-assignment table columns</p>
+</div>
+</div>
+<div id="reproducibility-4" class="section level2 hasAnchor" number="9.13">
+<h2><span class="header-section-number">9.13</span> Reproducibility<a href="cell-type.html#reproducibility-4" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>This report is descriptive: it reads the completed Module-06 attribution
+outputs and does not refit genotype × cell-type models.</p>
+<pre><code>## Rendered: 2026-10-12 10:16:07
+
+## results_dir: /Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle
+
+## diagnostics_bundle: /Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle/celltype_diagnostics_bundle.zip
+
+## coloc_best: not found
+
+## colocboost_clusters: not found
+
+## twas_gene_results: not found
+
+## celltype_q: 0.05
+
+## R version 4.4.1 (2024-06-14)
+## Platform: aarch64-apple-darwin20
+## Running under: macOS 26.7.1
+## 
+## Matrix products: default
+## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRblas.0.dylib 
+## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
+## 
+## locale:
+## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+## 
+## time zone: America/Chicago
+## tzcode source: internal
+## 
+## attached base packages:
+## [1] stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+##  [1] knitr_1.51        forcats_1.0.1     scales_1.4.0      ggprism_1.0.7    
+##  [5] data.table_1.16.2 patchwork_1.3.2   ggplot2_4.0.2     stringr_1.6.0    
+##  [9] tibble_3.3.1      purrr_1.2.1       readr_2.2.0       tidyr_1.3.2      
+## [13] dplyr_1.2.0      
+## 
+## loaded via a namespace (and not attached):
+##   [1] RColorBrewer_1.1-3      jsonlite_2.0.0          shape_1.4.6.1          
+##   [4] magrittr_2.0.4          ggtangle_0.1.1          magick_2.9.1           
+##   [7] farver_2.1.2            rmarkdown_2.30          GlobalOptions_0.1.3    
+##  [10] fs_1.6.7                zlibbioc_1.52.0         ragg_1.5.1             
+##  [13] vctrs_0.7.2             memoise_2.0.1           Cairo_1.7-0            
+##  [16] RCurl_1.98-1.16         ggtree_3.14.0           htmltools_0.5.9        
+##  [19] curl_7.0.0              gridGraphics_0.5-1      htmlwidgets_1.6.4      
+##  [22] plyr_1.8.9              plotly_4.12.0           cachem_1.1.0           
+##  [25] igraph_2.1.1            lifecycle_1.0.5         iterators_1.0.14       
+##  [28] pkgconfig_2.0.3         Matrix_1.7-1            R6_2.6.1               
+##  [31] fastmap_1.2.0           gson_0.1.0              GenomeInfoDbData_1.2.13
+##  [34] clue_0.3-67             digest_0.6.39           aplot_0.2.9            
+##  [37] enrichplot_1.26.6       colorspace_2.1-2        AnnotationDbi_1.68.0   
+##  [40] S4Vectors_0.44.0        textshaping_1.0.5       RSQLite_2.3.7          
+##  [43] org.Hs.eg.db_3.20.0     labeling_0.4.3          httr_1.4.7             
+##  [46] mgcv_1.9-1              compiler_4.4.1          bit64_4.5.2            
+##  [49] withr_3.0.2             doParallel_1.0.17       S7_0.2.1               
+##  [52] BiocParallel_1.40.2     DBI_1.2.3               R.utils_2.13.0         
+##  [55] MASS_7.3-61             rappdirs_0.3.3          rjson_0.2.23           
+##  [58] tools_4.4.1             otel_0.2.0              ape_5.8-1              
+##  [61] R.oo_1.27.1             glue_1.8.0              nlme_3.1-166           
+##  [64] GOSemSim_2.32.0         grid_4.4.1              cluster_2.1.6          
+##  [67] reshape2_1.4.4          fgsea_1.32.4            generics_0.1.4         
+##  [70] gtable_0.3.6            tzdb_0.5.0              R.methodsS3_1.8.2      
+##  [73] hms_1.1.3               XVector_0.46.0          BiocGenerics_0.52.0    
+##  [76] ggrepel_0.9.8           foreach_1.5.2           pillar_1.11.1          
+##  [79] yulab.utils_0.2.4       vroom_1.7.0             circlize_0.4.17        
+##  [82] splines_4.4.1           treeio_1.30.0           lattice_0.22-6         
+##  [85] bit_4.5.0               tidyselect_1.2.1        GO.db_3.20.0           
+##  [88] ComplexHeatmap_2.22.0   Biostrings_2.74.1       bookdown_0.46          
+##  [91] IRanges_2.40.1          stats4_4.4.1            xfun_0.57              
+##  [94] Biobase_2.66.0          matrixStats_1.4.1       stringi_1.8.7          
+##  [97] UCSC.utils_1.2.0        lazyeval_0.2.2          ggfun_0.2.0            
+## [100] yaml_2.3.10             evaluate_1.0.5          codetools_0.2-20       
+## [103] qvalue_2.38.0           ggplotify_0.1.3         cli_3.6.5              
+## [106] systemfonts_1.3.2       dichromat_2.0-0.1       Rcpp_1.1.1             
+## [109] GenomeInfoDb_1.42.3     gprofiler2_0.2.4        png_0.1-8              
+## [112] parallel_4.4.1          blob_1.2.4              clusterProfiler_4.14.6 
+## [115] DOSE_4.0.1              bitops_1.0-9            viridisLite_0.4.3      
+## [118] tidytree_0.4.7          crayon_1.5.3            GetoptLong_1.1.0       
+## [121] rlang_1.1.7             cowplot_1.2.0           fastmatch_1.1-8        
+## [124] KEGGREST_1.45.1</code></pre>
+
+</div>
+</div>
+            </section>
+
+          </div>
+        </div>
+      </div>
+<a href="twas-literature.html" class="navigation navigation-prev " aria-label="Previous page"><i class="fa fa-angle-left"></i></a>
+<a href="gxe-ppbmi.html" class="navigation navigation-next " aria-label="Next page"><i class="fa fa-angle-right"></i></a>
+    </div>
+  </div>
+<script src="libs/gitbook-2.6.7/js/app.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/clipboard.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-search.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-sharing.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-fontsettings.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-bookdown.js"></script>
+<script src="libs/gitbook-2.6.7/js/jquery.highlight.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-clipboard.js"></script>
+<script>
+gitbook.require(["gitbook"], function(gitbook) {
+gitbook.start({
+  "sharing": null,
+  "fontsettings": {
+    "theme": "white",
+    "family": "sans",
+    "size": 2
+  },
+  "edit": null,
+  "history": {
+    "link": null,
+    "text": null
+  },
+  "view": {
+    "link": null,
+    "text": null
+  },
+  "download": null,
+  "search": {
+    "engine": "fuse",
+    "options": null
+  },
+  "toc": {
+    "collapse": "section"
+  }
+});
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    var src = "true";
+    if (src === "" || src === "true") src = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/latest.js?config=TeX-MML-AM_CHTML";
+    if (location.protocol !== "file:")
+      if (/^https?:/.test(src))
+        src = src.replace(/^https?:/, '');
+    script.src = src;
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+</body>
+
+</html>

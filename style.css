@@ -1,0 +1,75 @@
+:root {
+  --atlas-blue: #1f4e79;
+  --atlas-blue-light: #eaf2f8;
+  --atlas-ink: #20262e;
+  --atlas-muted: #66727f;
+  --atlas-border: #d8dee6;
+}
+
+.book .book-summary ul.summary li.book-title > a {
+  color: var(--atlas-blue);
+  font-weight: 700;
+}
+
+.book .book-body .page-wrapper .page-inner {
+  max-width: 1180px;
+}
+
+.book .book-body .page-wrapper .page-inner section.normal {
+  color: var(--atlas-ink);
+  line-height: 1.62;
+}
+
+.book .book-body h1,
+.book .book-body h2,
+.book .book-body h3 {
+  color: var(--atlas-blue);
+}
+
+.book .book-body h1 {
+  border-bottom: 2px solid var(--atlas-border);
+  padding-bottom: 0.25em;
+}
+
+.book .book-body blockquote {
+  border-left: 4px solid var(--atlas-blue);
+  background: var(--atlas-blue-light);
+  color: var(--atlas-ink);
+}
+
+.book .book-body table {
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 1em 0 1.5em 0;
+}
+
+.book .book-body table th,
+.book .book-body table td {
+  white-space: nowrap;
+  padding: 0.42em 0.6em;
+  border-bottom: 1px solid var(--atlas-border);
+}
+
+.book .book-body table th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.book .book-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.book .book-body .source-note {
+  color: var(--atlas-muted);
+  font-size: 0.9em;
+  margin-bottom: 1.3em;
+}
+
+.book .book-body pre {
+  overflow-x: auto;
+}
