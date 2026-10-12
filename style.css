@@ -40,7 +40,10 @@
 .book .book-body table {
   width: 100%;
   display: block;
+  max-height: 32rem;
   overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   border-collapse: collapse;
   margin: 1em 0 1.5em 0;
 }
@@ -64,6 +67,14 @@
   height: auto;
 }
 
+
+@media print {
+  .book .book-body table {
+    display: table;
+    max-height: none;
+    overflow: visible;
+  }
+}
 
 .book .book-body pre {
   overflow-x: auto;
