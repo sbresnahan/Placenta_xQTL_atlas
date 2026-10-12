@@ -19,8 +19,7 @@ manifest_path <- file.path(book_dir, "report_manifest.tsv")
 if (!dir.exists(reports_dir)) {
   stop(
     "Local reports directory not found: ", reports_dir,
-    "\nThe reports directory is intentionally git-ignored. Build the book from the checkout ",
-    "where the reports and report inputs were generated."
+    "\nBuild the book from the local analysis directory where the reports and report inputs were generated."
   )
 }
 if (!file.exists(manifest_path)) stop("Missing report manifest: ", manifest_path)
@@ -42,10 +41,9 @@ missing_cols <- setdiff(required_cols, names(manifest))
 if (length(missing_cols)) stop("Manifest missing columns: ", paste(missing_cols, collapse = ", "))
 manifest <- manifest[order(manifest$part_order, manifest$chapter_order), , drop = FALSE]
 
-# Resolve the current local report archive once, rather than baking a dated
-# archive name into the website builder. This is also used to repair a few
-# historical report defaults that pointed at paths used only during report
-# development (for example data/extras or coloc_aggregated.zip).
+# Resolve the local report input bundle once rather than hard-coding its dated
+# directory name. This also supplies the report-specific input locations needed
+# for a complete standalone build.
 archive_candidates <- list.dirs(reports_dir, recursive = FALSE, full.names = TRUE)
 archive_candidates <- archive_candidates[grepl("^placenta_xqtl_report_inputs_[0-9]+$", basename(archive_candidates))]
 archive_dir <- if (length(archive_candidates)) sort(archive_candidates)[length(archive_candidates)] else NA_character_
@@ -110,8 +108,8 @@ dir.create(file.path(stage_dir, ".intermediates"), recursive = TRUE, showWarning
 dir.create(assets_dir, recursive = TRUE, showWarnings = FALSE)
 
 inline_r_matches <- function(lines) {
-  # knitr inline expressions must stay on one physical line. A few historical
-  # reports wrap immediately after `r, e.g. `r\nn_call_traits`. knitr leaves
+  # knitr inline expressions must stay on one physical line. Some reports
+  # wrap immediately after `r, e.g. `r\nn_call_traits`. knitr leaves
   # those expressions untouched in the first Markdown render, after which the
   # bookdown pass tries to evaluate them without the report setup environment.
   text <- paste(lines, collapse = "\n")
@@ -166,6 +164,211 @@ plain_heading <- function(x) {
   x <- gsub("[`*_]", "", x)
   x <- gsub("[^[:alnum:]]+", " ", tolower(x))
   trimws(x)
+}
+
+heading_level <- function(line) {
+  m <- regexec("^(#{1,6})\\s+(.+)$", line, perl = TRUE)
+  hit <- regmatches(line, m)[[1]]
+  if (!length(hit)) return(NA_integer_)
+  nchar(hit[2])
+}
+
+strip_sections_matching <- function(lines, patterns) {
+  if (!length(lines)) return(lines)
+  keep <- rep(TRUE, length(lines))
+  i <- 1L
+  while (i <= length(lines)) {
+    lvl <- heading_level(lines[i])
+    if (is.na(lvl)) {
+      i <- i + 1L
+      next
+    }
+    h <- plain_heading(lines[i])
+    matched <- any(vapply(patterns, function(p) grepl(p, h, perl = TRUE), logical(1)))
+    if (!matched) {
+      i <- i + 1L
+      next
+    }
+    j <- i + 1L
+    while (j <= length(lines)) {
+      next_lvl <- heading_level(lines[j])
+      if (!is.na(next_lvl) && next_lvl <= lvl) break
+      j <- j + 1L
+    }
+    keep[i:(j - 1L)] <- FALSE
+    i <- j
+  }
+  lines[keep]
+}
+
+neutralize_editorial_labels <- function(lines) {
+  if (!length(lines)) return(lines)
+  out <- lines
+
+  for (i in seq_along(out)) {
+    raw <- out[i]
+    t <- trimws(raw)
+    label <- t
+    label <- sub("^#{1,6}\\s*", "", label)
+    label <- gsub("^<h[1-6][^>]*>|</h[1-6]>$", "", label, ignore.case = TRUE, perl = TRUE)
+    label <- gsub("^(?:\\*\\*|__)(.*?)(?:\\*\\*|__)$", "\\1", label, perl = TRUE)
+    key <- plain_heading(label)
+
+    is_addendum <- grepl("^revision addendum(?: |$)", key, perl = TRUE) ||
+      grepl("^evidence table additions.*revision", key, perl = TRUE)
+    if (!is_addendum) next
+
+    # Preserve the original heading level/markup when possible, but replace
+    # editorial revision language with a scientific, time-independent label.
+    if (grepl("^\\s{0,3}#{1,6}\\s+", raw, perl = TRUE)) {
+      prefix <- sub("^((?:\\s{0,3}#{1,6})\\s+).*$", "\\1", raw, perl = TRUE)
+      out[i] <- paste0(prefix, "Additional evidence")
+    } else if (grepl("^\\s*<h[1-6](?:\\s[^>]*)?>", raw, ignore.case = TRUE, perl = TRUE)) {
+      level <- sub("^\\s*<h([1-6]).*$", "\\1", raw, ignore.case = TRUE, perl = TRUE)
+      out[i] <- sprintf("<h%s>Additional evidence</h%s>", level, level)
+    } else if (i < length(out) && grepl("^\\s{0,3}(?:=+|-+)\\s*$", out[i + 1L], perl = TRUE)) {
+      out[i] <- "Additional evidence"
+    } else {
+      out[i] <- "## Additional evidence"
+    }
+  }
+
+  out
+}
+
+strip_list_item_matching <- function(lines, pattern) {
+  if (!length(lines)) return(lines)
+  out <- character()
+  i <- 1L
+  while (i <= length(lines)) {
+    if (grepl("^\\s*(?:[-*+]\\s+|[0-9]+[.)]\\s+)", lines[i], perl = TRUE) &&
+        grepl(pattern, lines[i], ignore.case = TRUE, perl = TRUE)) {
+      i <- i + 1L
+      while (i <= length(lines) &&
+             !grepl("^\\s*(?:[-*+]\\s+|[0-9]+[.)]\\s+)", lines[i], perl = TRUE) &&
+             !grepl("^#{1,6}\\s+", lines[i])) {
+        i <- i + 1L
+      }
+      next
+    }
+    out <- c(out, lines[i])
+    i <- i + 1L
+  }
+  out
+}
+
+sanitize_reader_content <- function(lines) {
+  if (!length(lines)) return(lines)
+
+  # Preserve substantive evidence that may have been appended under an
+  # editorial revision label, but rename that label so the book presents the
+  # evidence as part of the standalone analysis. Pure change-log sections are
+  # removed entirely. Scientific references to earlier studies are kept.
+  lines <- neutralize_editorial_labels(lines)
+  lines <- strip_sections_matching(
+    lines,
+    c(
+      "revision history",
+      "version history",
+      "update history",
+      "change log",
+      "what changed"
+    )
+  )
+
+  # Remove obsolete workflow-status/source-control material from otherwise
+  # scientific sections. These statements describe report development rather
+  # than the analyses represented in this book.
+  lines <- strip_list_item_matching(lines, "fine-mapping is in progress|colocali[sz]ation is future work")
+  lines <- strip_list_item_matching(lines, "pipeline scripts:.*repository")
+  lines <- strip_list_item_matching(lines, "report code:")
+
+  lines <- lines[!(grepl("^\\s*[-*+]\\s+", lines, perl = TRUE) &
+                     grepl("github\\.com/sbresnahan/Placenta_xQTL_atlas", lines, ignore.case = TRUE))]
+  lines <- lines[!grepl("^The analysis implementation is documented in the current repository:?\\s*$", lines, ignore.case = TRUE)]
+  lines <- lines[!grepl("companion document.*literature_.*\\.md", lines, ignore.case = TRUE)]
+  lines <- lines[!grepl("^`literature_.*\\.md`", lines, ignore.case = TRUE)]
+
+  text <- paste(lines, collapse = "\n")
+
+  # Neutralize editorial wording while preserving the substantive scientific
+  # statements around it.
+  # Fallback for an addendum label embedded in prose rather than represented
+  # as a heading. The scientific content around the label is retained.
+  text <- gsub("\\brevision addendum\\b", "additional evidence", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("The updated pattern is more nuanced than the prior review\\.\\s*", "", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("The previous rare-variant narrative should be retired\\.\\s*", "", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("This section is the largest substantive revision\\.\\s*", "", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("Legacy numeric citation indices are retained where possible[^.]*\\.\\s*", "", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("(?ms)^The literature review.*?companion document.*?(?=\n\n)", "", text, perl = TRUE)
+  text <- gsub("The complete analysis codebase[^.]*github\\.com/sbresnahan/Placenta_xQTL_atlas\\.?\\s*", "", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("<?https?://github\\.com/sbresnahan/Placenta_xQTL_atlas[^ >)]*>?", "", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("github\\.com/sbresnahan/Placenta_xQTL_atlas", "", text, ignore.case = TRUE, perl = TRUE)
+
+  replacements <- c(
+    "revised literature review" = "literature review",
+    "previous review" = "literature review",
+    "prior review" = "literature review",
+    "legacy review" = "literature review",
+    "revised results" = "results",
+    "updated results" = "results",
+    "current results" = "results",
+    "revised tables" = "tables",
+    "updated atlas" = "atlas",
+    "updated hit list" = "hit list",
+    "previous statement" = "statement",
+    "targeted update search" = "targeted literature search",
+    "targeted update searches" = "targeted literature searches",
+    "update searches" = "literature searches",
+    "literature snapshots" = "literature context",
+    "existing snapshots" = "existing literature sources",
+    "current repository" = "analysis implementation",
+    "repository deliberately labels" = "analysis labels",
+    "current evidence union" = "evidence union",
+    "current evidence-prioritized" = "evidence-prioritized",
+    "current prioritized-gene layer" = "prioritized-gene layer",
+    "archived gene-level table" = "gene-level table",
+    "archived pairwise reports" = "pairwise reports",
+    "the report now rebuilds" = "the report rebuilds",
+    "this revision" = "this review"
+  )
+  for (old in names(replacements)) {
+    text <- gsub(old, replacements[[old]], text, ignore.case = TRUE, perl = TRUE)
+  }
+  text <- gsub("\\brevised\\s+", "", text, ignore.case = TRUE, perl = TRUE)
+  text <- gsub("\\bupdated\\s+", "", text, ignore.case = TRUE, perl = TRUE)
+
+  # A successful standalone build should contain no project/version-control
+  # framing in its reader-facing chapter sources.
+  out <- strsplit(text, "\n", fixed = TRUE)[[1]]
+  out
+}
+
+assert_standalone_content <- function(lines, source_name) {
+  text <- paste(lines, collapse = "\n")
+  forbidden <- c(
+    "github.com/sbresnahan/Placenta_xQTL_atlas",
+    "Book chapter rebuilt locally from",
+    "current repository",
+    "this repository",
+    "repository deliberately",
+    "revision addendum",
+    "previous review",
+    "prior review",
+    "legacy review",
+    "this revision",
+    "fine-mapping is in progress",
+    "colocalization is future work"
+  )
+  hits <- forbidden[vapply(forbidden, function(x) grepl(x, text, ignore.case = TRUE, fixed = TRUE), logical(1))]
+  if (length(hits)) {
+    stop(
+      "Standalone-content check failed for ", source_name,
+      ": ", paste(hits, collapse = ", "),
+      "\nRemove editorial/version-history wording from the reader-facing chapter."
+    )
+  }
+  invisible(TRUE)
 }
 
 maybe_drop_title <- function(x, candidates = character(), drop_first_h1 = FALSE) {
@@ -361,7 +564,7 @@ for (i in seq_len(nrow(manifest))) {
     render_params <- param_overrides[[row$id]]
     if (is.null(render_params)) render_params <- list()
 
-    # Normalize malformed historical inline-R wrapping in a temporary source
+    # Normalize malformed inline-R wrapping in a temporary source
     # beside the original report. Keeping the temporary input in reports/
     # preserves source-relative behavior without modifying the ignored report.
     render_src <- src
@@ -412,6 +615,8 @@ for (i in seq_len(nrow(manifest))) {
     body <- strip_front_matter(body)
     body <- maybe_drop_title(body, c(front_matter_title(src), row$title), drop_first_h1 = FALSE)
     body <- strip_style_blocks(body)
+    body <- sanitize_reader_content(body)
+    assert_standalone_content(body, row$source)
     body <- demote_headings(body)
     body <- stage_resources(body, dirname(raw_path), reports_dir, row$id)
   } else if (tolower(row$kind) == "md") {
@@ -419,20 +624,16 @@ for (i in seq_len(nrow(manifest))) {
     body <- strip_front_matter(body)
     body <- maybe_drop_title(body, row$title, drop_first_h1 = TRUE)
     body <- strip_style_blocks(body)
+    body <- sanitize_reader_content(body)
+    assert_standalone_content(body, row$source)
     body <- demote_headings(body)
     body <- stage_resources(body, reports_dir, reports_dir, row$id)
   } else {
     stop("Unsupported manifest kind '", row$kind, "' for ", row$source)
   }
 
-  source_note <- sprintf(
-    '<p class="source-note">Book chapter rebuilt locally from <code>reports/%s</code>.</p>',
-    row$source
-  )
   chapter <- c(
     sprintf("# %s {#%s}", row$title, row$id),
-    "",
-    source_note,
     "",
     body,
     ""
