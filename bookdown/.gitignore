@@ -1,0 +1,8 @@
+.staging/
+_book/
+_bookdown_files/
+book_assets/
+zbook_*.Rmd
+_main.Rmd
+*.utf8.md
+*.knit.md

@@ -1,0 +1,13 @@
+part_order	chapter_order	part_title	source	kind	title	id
+1	10	Regulatory architecture	report_placenta_xqtl.Rmd	rmd	Multi-ancestry placental xQTL analysis	xqtl-mapping
+1	20	Regulatory architecture	literature_xqtl_mapping_revised_20261010.md	md	Literature context: placental xQTL mapping	xqtl-literature
+1	30	Regulatory architecture	report_finemap.Rmd	rmd	Cross-ancestry fine-mapping	fine-mapping
+1	40	Regulatory architecture	literature_finemap_revised_20261010.md	md	Literature context: fine-mapped loci	finemap-literature
+2	10	GWAS integration	report_colocalization.Rmd	rmd	GWAS colocalization	colocalization
+2	20	GWAS integration	literature_colocalization.md	md	Literature context: colocalization findings	coloc-literature
+2	30	GWAS integration	report_twas.Rmd	rmd	Transcriptome-wide association study	twas
+2	40	GWAS integration	literature_twas.md	md	Literature context: TWAS findings	twas-literature
+3	10	Biological context	report_celltype_annotations_with_diagnostics.Rmd	rmd	Cell-type attribution	cell-type
+3	20	Biological context	report_gxe_ppBMI.Rmd	rmd	Genotype × pre-pregnancy BMI interactions	gxe-ppbmi
+3	30	Biological context	literature_gxe_ppBMI.md	md	Literature context: G×ppBMI findings	gxe-literature
+4	10	Integrated synthesis	report_integration.Rmd	rmd	Integrated locus prioritization	integration

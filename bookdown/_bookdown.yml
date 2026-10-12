@@ -1,0 +1,25 @@
+book_filename: "placenta-xqtl-atlas"
+output_dir: "_book"
+delete_merged_file: true
+new_session: true
+language:
+  ui:
+    chapter_name: ""
+rmd_files:
+  - index.Rmd
+  - zbook_part_01.Rmd
+  - zbook_010_xqtl-mapping.Rmd
+  - zbook_020_xqtl-literature.Rmd
+  - zbook_030_fine-mapping.Rmd
+  - zbook_040_finemap-literature.Rmd
+  - zbook_part_02.Rmd
+  - zbook_110_colocalization.Rmd
+  - zbook_120_coloc-literature.Rmd
+  - zbook_130_twas.Rmd
+  - zbook_140_twas-literature.Rmd
+  - zbook_part_03.Rmd
+  - zbook_210_cell-type.Rmd
+  - zbook_220_gxe-ppbmi.Rmd
+  - zbook_230_gxe-literature.Rmd
+  - zbook_part_04.Rmd
+  - zbook_310_integration.Rmd
