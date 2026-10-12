@@ -241,17 +241,11 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <ul>
 <li class="chapter" data-level="3.1" data-path="fine-mapping.html"><a href="fine-mapping.html#overview"><i class="fa fa-check"></i><b>3.1</b> Overview</a></li>
 <li class="chapter" data-level="3.2" data-path="fine-mapping.html"><a href="fine-mapping.html#pip-diagnostics"><i class="fa fa-check"></i><b>3.2</b> PIP diagnostics</a></li>
-<li class="chapter" data-level="3.3" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets"><i class="fa fa-check"></i><b>3.3</b> Credible sets</a>
-<ul>
-<li class="chapter" data-level="3.3.1" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>3.3.1</b> Credible sets versus conditional signals</a></li>
-</ul></li>
+<li class="chapter" data-level="3.3" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets"><i class="fa fa-check"></i><b>3.3</b> Credible sets</a></li>
 <li class="chapter" data-level="3.4" data-path="fine-mapping.html"><a href="fine-mapping.html#cross-ancestry-concordance"><i class="fa fa-check"></i><b>3.4</b> Cross-ancestry concordance</a></li>
 <li class="chapter" data-level="3.5" data-path="fine-mapping.html"><a href="fine-mapping.html#top-loci"><i class="fa fa-check"></i><b>3.5</b> Top loci</a></li>
-<li class="chapter" data-level="3.6" data-path="fine-mapping.html"><a href="fine-mapping.html#functional-annotation-enrichment-of-high-pip-variants"><i class="fa fa-check"></i><b>3.6</b> Functional-annotation enrichment of high-PIP variants</a></li>
-<li class="chapter" data-level="3.7" data-path="fine-mapping.html"><a href="fine-mapping.html#gene-set-enrichment-of-high-confidence-fine-mapped-genes"><i class="fa fa-check"></i><b>3.7</b> Gene-set enrichment of high-confidence fine-mapped genes</a></li>
-<li class="chapter" data-level="3.8" data-path="fine-mapping.html"><a href="fine-mapping.html#run-diagnostics"><i class="fa fa-check"></i><b>3.8</b> Run diagnostics</a></li>
-<li class="chapter" data-level="3.9" data-path="fine-mapping.html"><a href="fine-mapping.html#methods-summary"><i class="fa fa-check"></i><b>3.9</b> Methods summary</a></li>
-<li class="chapter" data-level="3.10" data-path="fine-mapping.html"><a href="fine-mapping.html#session-info-1"><i class="fa fa-check"></i><b>3.10</b> Session info</a></li>
+<li class="chapter" data-level="3.6" data-path="fine-mapping.html"><a href="fine-mapping.html#functional-annotation-enrichment"><i class="fa fa-check"></i><b>3.6</b> Functional-annotation enrichment</a></li>
+<li class="chapter" data-level="3.7" data-path="fine-mapping.html"><a href="fine-mapping.html#run-diagnostics"><i class="fa fa-check"></i><b>3.7</b> Run diagnostics</a></li>
 </ul></li>
 <li class="chapter" data-level="4" data-path="finemap-literature.html"><a href="finemap-literature.html"><i class="fa fa-check"></i><b>4</b> Literature context: fine-mapped loci</a>
 <ul>
@@ -511,445 +505,76 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <h1><span class="header-section-number">3</span> Cross-ancestry fine-mapping<a href="fine-mapping.html#fine-mapping" class="anchor-section" aria-label="Anchor link to header"></a></h1>
 <div id="overview" class="section level2 hasAnchor" number="3.1">
 <h2><span class="header-section-number">3.1</span> Overview<a href="fine-mapping.html#overview" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<p>SuSHiE jointly fine-maps each significant xQTL locus across ancestry
-strata, leveraging ancestry-specific LD to refine 95% credible sets and
-estimate cross-ancestry effect correlations. This report summarizes run
-diagnostics, credible-set properties, cross-ancestry concordance, top
-loci, and two complementary enrichment analyses: functional-annotation
-enrichment of high-PIP variants, and gene-set enrichment of
-high-confidence fine-mapped genes. A literature review of the top
-fine-mapped genes lives in the companion document</p>
+<p>SuSHiE jointly fine-maps each significant xQTL locus across ancestry strata, leveraging ancestry-specific LD to refine 95% credible sets and estimate cross-ancestry effect correlations. This report summarizes run diagnostics, credible-set properties, cross-ancestry concordance, and functional annotation enrichment of high-PIP variants.</p>
 <table>
 <thead>
 <tr class="header">
 <th align="left">Metric</th>
-<th align="left">Value</th>
+<th align="right">Value</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td align="left">Loci attempted</td>
-<td align="left">5,529</td>
+<td align="right">5529</td>
 </tr>
 <tr class="even">
 <td align="left">Loci fine-mapped</td>
-<td align="left">5,269</td>
+<td align="right">5269</td>
 </tr>
 <tr class="odd">
 <td align="left">Converged (min-tolerance)</td>
-<td align="left">5,275</td>
+<td align="right">5275</td>
 </tr>
 <tr class="even">
 <td align="left">Loci with &gt;=1 credible set</td>
-<td align="left">4,290</td>
+<td align="right">4290</td>
 </tr>
 <tr class="odd">
 <td align="left">Credible sets total</td>
-<td align="left">6,347</td>
+<td align="right">6347</td>
 </tr>
 <tr class="even">
-<td align="left">Single-variant credible sets</td>
-<td align="left">2,330</td>
-</tr>
-<tr class="odd">
-<td align="left">Loci fine-mapped in both ancestries</td>
-<td align="left">4,508</td>
+<td align="left">Variants fine-mapped (unique locus-variant rows)</td>
+<td align="right">3382937</td>
 </tr>
 </tbody>
 </table>
 </div>
 <div id="pip-diagnostics" class="section level2 hasAnchor" number="3.2">
 <h2><span class="header-section-number">3.2</span> PIP diagnostics<a href="fine-mapping.html#pip-diagnostics" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<figure>
-<img
-src=".staging/raw_fine-mapping_files/figure-markdown_github/fig_maxpip-1.png"
-alt="Maximum joint PIP per locus." />
-<figcaption aria-hidden="true">
-Maximum joint PIP per locus.
-</figcaption>
-</figure>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/a9179aed5ff6423b0f13b5f51b3753b568b3a641.png" width="1200" alt="Maximum joint PIP per locus." /></p>
+<p>Maximum joint PIP per locus.</p>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/08a6db7c67cbd19dc2f7729d6eff41b8d4825ca2.png" width="1200" alt="Distribution of joint PIPs across all fine-mapped variants (log scale)." /></p>
+<p>Distribution of joint PIPs across all fine-mapped variants (log scale).</p>
 </div>
 <div id="credible-sets" class="section level2 hasAnchor" number="3.3">
 <h2><span class="header-section-number">3.3</span> Credible sets<a href="fine-mapping.html#credible-sets" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<figure>
-<img
-src=".staging/raw_fine-mapping_files/figure-markdown_github/fig_cssize-1.png"
-alt="Credible-set size distribution (number of variants per 95% CS)." />
-<figcaption aria-hidden="true">
-Credible-set size distribution (number of
-variants per 95% CS).
-</figcaption>
-</figure>
-<figure>
-<img
-src=".staging/raw_fine-mapping_files/figure-markdown_github/fig_csperlocus-1.png"
-alt="Credible sets per locus." />
-<figcaption aria-hidden="true">
-Credible sets per locus.
-</figcaption>
-</figure>
-<figure>
-<img
-src=".staging/raw_fine-mapping_files/figure-markdown_github/fig_csleadpip-1.png"
-alt="Lead-variant PIP per credible set. The bimodal distribution separates confidently resolved signals (lead PIP near 1) from loci where the causal variant remains uncertain." />
-<figcaption aria-hidden="true">
-Lead-variant PIP per credible set. The
-bimodal distribution separates confidently resolved signals (lead PIP
-near 1) from loci where the causal variant remains
-uncertain.
-</figcaption>
-</figure>
-<div id="credible-sets-versus-conditional-signals" class="section level3 hasAnchor" number="3.3.1">
-<h3><span class="header-section-number">3.3.1</span> Credible sets versus conditional signals<a href="fine-mapping.html#credible-sets-versus-conditional-signals" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<p><em>DevBrain Fig. 1I analog: the number of SuSHiE credible sets per locus
-versus the number of conditionally independent signals at the same
-phenotype (maximum rank across ancestries in the stepwise scans).</em></p>
-<p><img src=".staging/raw_fine-mapping_files/figure-markdown_github/fig-cs-vs-conditional-1.png" /></p>
-<p>4,288 of 4,290 fine-mapped loci with credible sets matched a
-stepwise-conditional scan; the credible-set count tracks the
-conditional-signal count (Spearman rho = 0.24), cross-validating the two
-independence estimates.</p>
-</div>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/70b89648f7d81ea5980845492e4fdedbfe91117f.png" width="1200" alt="Credible-set size distribution (number of variants per 95% CS)." /></p>
+<p>Credible-set size distribution (number of variants per 95% CS).</p>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/f9d7968dc06605186381f156449b8e7b5851a8b0.png" width="1200" alt="Credible sets per locus." /></p>
+<p>Credible sets per locus.</p>
 </div>
 <div id="cross-ancestry-concordance" class="section level2 hasAnchor" number="3.4">
 <h2><span class="header-section-number">3.4</span> Cross-ancestry concordance<a href="fine-mapping.html#cross-ancestry-concordance" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<figure>
-<img
-src=".staging/raw_fine-mapping_files/figure-markdown_github/fig_rho-1.png"
-alt="Cross-ancestry effect correlation (rho) per credible set. Values near 1 indicate shared causal effects; low/negative values indicate ancestry-specific effects." />
-<figcaption aria-hidden="true">
-Cross-ancestry effect correlation (rho)
-per credible set. Values near 1 indicate shared causal effects;
-low/negative values indicate ancestry-specific effects.
-</figcaption>
-</figure>
-<p>The cross-ancestry effect-correlation distribution (n = 5,355 credible
-sets fine-mapped in both ancestries) centers at 1.00, quantifying how
-shared the causal effects are between strata.</p>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/02b2361f5ebc1764bb8f3a11ff0e99b2586a1c66.png" width="1200" alt="Cross-ancestry effect correlation (rho) per credible set. Values near 1 indicate shared causal effects; low/negative values indicate ancestry-specific effects." /></p>
+<p>Cross-ancestry effect correlation (rho) per credible set. Values near 1 indicate shared causal effects; low/negative values indicate ancestry-specific effects.</p>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/8f1c0f4c321e6a8a5cc4b2c1ce6cadbb447679f1.png" width="1200" alt="Per-ancestry posterior effect weights for credible-set variants. Concordant effects lie along the diagonal." /></p>
+<p>Per-ancestry posterior effect weights for credible-set variants. Concordant effects lie along the diagonal.</p>
 </div>
 <div id="top-loci" class="section level2 hasAnchor" number="3.5">
 <h2><span class="header-section-number">3.5</span> Top loci<a href="fine-mapping.html#top-loci" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<table>
-<colgroup>
-<col width="13%" />
-<col width="9%" />
-<col width="45%" />
-<col width="10%" />
-<col width="5%" />
-<col width="9%" />
-<col width="5%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">modality</th>
-<th align="left">gene_symbol</th>
-<th align="left">phenotype_id</th>
-<th align="right">best_lead_pip</th>
-<th align="right">n_cs</th>
-<th align="right">min_cs_size</th>
-<th align="right">n_mod</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">RNA_editing</td>
-<td align="left">WSB1</td>
-<td align="left">ENSG00000109046.15__chr17_27313055</td>
-<td align="right">1</td>
-<td align="right">2</td>
-<td align="right">1</td>
-<td align="right">6</td>
-</tr>
-<tr class="even">
-<td align="left">intron_retention</td>
-<td align="left">WSB1</td>
-<td align="left">ENSG00000109046.15_<em>IR_ENSG00000109046_chr17_27294436_27297186</em>+_35681</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">6</td>
-</tr>
-<tr class="odd">
-<td align="left">alt_TSS</td>
-<td align="left">SCARB2</td>
-<td align="left">ENSG00000138760.11__grp_2_upstream_ENST00000638295.1</td>
-<td align="right">1</td>
-<td align="right">3</td>
-<td align="right">1</td>
-<td align="right">5</td>
-</tr>
-<tr class="even">
-<td align="left">RNA_editing</td>
-<td align="left">PGAP6</td>
-<td align="left">ENSG00000129925.11__chr16_377516</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">RNA_editing</td>
-<td align="left">CTSB</td>
-<td align="left">ENSG00000164733.23__chr8_11845033</td>
-<td align="right">1</td>
-<td align="right">3</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">alt_TSS</td>
-<td align="left">MYL12B</td>
-<td align="left">ENSG00000118680.14__grp_1_upstream_ENST00000237500.10</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">alt_TSS</td>
-<td align="left">MYL12B</td>
-<td align="left">ENSG00000118680.14__grp_1_upstream_ENST00000400175.9</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">alt_TSS</td>
-<td align="left">CYP19A1</td>
-<td align="left">ENSG00000137869.16__grp_1_upstream_ENST00000559646.1</td>
-<td align="right">1</td>
-<td align="right">3</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">alt_polyA</td>
-<td align="left">PSCA</td>
-<td align="left">ENSG00000167653.5__grp_1_downstream_ENST00000513264.1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">alt_polyA</td>
-<td align="left">PSCA</td>
-<td align="left">ENSG00000167653.5__grp_2_downstream_ENST00000301258.5</td>
-<td align="right">1</td>
-<td align="right">4</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">alt_polyA</td>
-<td align="left">PSCA</td>
-<td align="left">ENSG00000167653.5__grp_2_downstream_ENST00000513264.1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">alt_polyA</td>
-<td align="left">ELP5</td>
-<td align="left">ENSG00000170291.16__grp_1_downstream_ENST00000574255.6</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">alt_polyA</td>
-<td align="left">ELP5</td>
-<td align="left">ENSG00000170291.16__grp_1_downstream_ENST00000574841.2</td>
-<td align="right">1</td>
-<td align="right">2</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">alt_polyA</td>
-<td align="left">ELP5</td>
-<td align="left">ENSG00000170291.16__grp_2_downstream_ENST00000574255.6</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">expression</td>
-<td align="left">GBP3</td>
-<td align="left">ENSG00000117226.12</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">expression</td>
-<td align="left">GSTM3</td>
-<td align="left">ENSG00000134202.12</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">expression</td>
-<td align="left">GPNMB</td>
-<td align="left">ENSG00000136235.17</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">expression</td>
-<td align="left">PSCA</td>
-<td align="left">ENSG00000167653.5</td>
-<td align="right">1</td>
-<td align="right">3</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">isoform_expression</td>
-<td align="left">ERICH1</td>
-<td align="left">ENSG00000104714.14__ENST00000523053.1</td>
-<td align="right">1</td>
-<td align="right">2</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">isoform_expression</td>
-<td align="left">GBP3</td>
-<td align="left">ENSG00000117226.12__ENST00000370481.9</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">isoform_expression</td>
-<td align="left">MYL12B</td>
-<td align="left">ENSG00000118680.14__ENST00000400175.9</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">isoform_expression</td>
-<td align="left">ENOSF1</td>
-<td align="left">ENSG00000132199.20__ENST00000647584.2</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">isoform_expression</td>
-<td align="left">GSTM3</td>
-<td align="left">ENSG00000134202.12__HPLRT_ee030f104e3</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">isoform_expression</td>
-<td align="left">GPNMB</td>
-<td align="left">ENSG00000136235.17__ENST00000258733.9</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">isoform_expression</td>
-<td align="left">GPNMB</td>
-<td align="left">ENSG00000136235.17__ENST00000381990.6</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">isoform_expression</td>
-<td align="left">GPNMB</td>
-<td align="left">ENSG00000136235.17__ENST00000409458.3</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">isoform_expression</td>
-<td align="left">NAPRT</td>
-<td align="left">ENSG00000147813.16__HPLRT_d0e44f368b1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">isoform_expression</td>
-<td align="left">PSCA</td>
-<td align="left">ENSG00000167653.5__ENST00000301258.5</td>
-<td align="right">1</td>
-<td align="right">3</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="odd">
-<td align="left">isoform_expression</td>
-<td align="left">ELP5</td>
-<td align="left">ENSG00000170291.16__ENST00000574255.6</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-<tr class="even">
-<td align="left">isoforms</td>
-<td align="left">MYL12B</td>
-<td align="left">ENSG00000118680.14__ENST00000237500.10</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">1</td>
-<td align="right">4</td>
-</tr>
-</tbody>
-</table>
-<p>Top 30 fine-mapped loci (best credible-set lead PIP, ties broken by
-smallest credible set, then cross-modality recurrence of the gene; full
-table in tables_finemap/finemap_top_loci.tsv).</p>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/1266b810c0089a10d9507cb9a9e52232c5e50bda.png" width="1200" alt="Joint PIP by position for the six loci with the highest lead-variant PIP. Points in a credible set are colored by CS index." /></p>
+<p>Joint PIP by position for the six loci with the highest lead-variant PIP. Points in a credible set are colored by CS index.</p>
 </div>
-<div id="functional-annotation-enrichment-of-high-pip-variants" class="section level2 hasAnchor" number="3.6">
-<h2><span class="header-section-number">3.6</span> Functional-annotation enrichment of high-PIP variants<a href="fine-mapping.html#functional-annotation-enrichment-of-high-pip-variants" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<p>High-PIP variants (PIP &gt;= 0.9) tested for enrichment against fastVEP
-consequence classes, ENCODE SCREEN cCRE classes, and placenta
-open-chromatin peaks; background = all other fine-mapped variants. Odds
-ratios and 95% CIs are recomputed from the 2x2 cell counts; FDR is
-Benjamini-Hochberg across classes.</p>
-<pre><code>## Enrichment table not found; run 34_pip_annotation_enrichment.py.</code></pre>
+<div id="functional-annotation-enrichment" class="section level2 hasAnchor" number="3.6">
+<h2><span class="header-section-number">3.6</span> Functional-annotation enrichment<a href="fine-mapping.html#functional-annotation-enrichment" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>High-PIP variants (PIP &gt;= 0.9) tested for enrichment against fastVEP consequence classes, ENCODE SCREEN cCRE classes, and placenta open-chromatin peaks; background = all other fine-mapped variants. Odds ratios and 95% CIs are recomputed from the 2x2 cell counts; FDR is Benjamini-Hochberg across classes.</p>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/2b7aca491ee8aecf53ef9c6ec6461d1f468bf3ae.png" width="1200" alt="Annotation enrichment of high-PIP variants (Fisher exact odds ratio, 95% CI)." /></p>
+<p>Annotation enrichment of high-PIP variants (Fisher exact odds ratio, 95% CI).</p>
 </div>
-<div id="gene-set-enrichment-of-high-confidence-fine-mapped-genes" class="section level2 hasAnchor" number="3.7">
-<h2><span class="header-section-number">3.7</span> Gene-set enrichment of high-confidence fine-mapped genes<a href="fine-mapping.html#gene-set-enrichment-of-high-confidence-fine-mapped-genes" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<p><em>Per-modality over-representation analysis of genes whose best credible
-set resolves to a high-confidence causal variant (lead PIP &gt;= 0.9),
-against GO (BP/MF/CC), KEGG, MSigDB Hallmark, and the curated
-pregnancy/placenta collection. Primary background: all fine-mapped genes
-of the same modality (tests what distinguishes confidently resolved loci
-among significant ones); sensitivity background: the HPLRv2 reference
-universe. BH FDR within each modality x database x background. Computed
-by <code>run_finemap_enrichment.R</code>; results read from cache.</em></p>
-<pre><code>## Gene-set enrichment cache not found; run run_finemap_enrichment.R.</code></pre>
-</div>
-<div id="run-diagnostics" class="section level2 hasAnchor" number="3.8">
-<h2><span class="header-section-number">3.8</span> Run diagnostics<a href="fine-mapping.html#run-diagnostics" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="run-diagnostics" class="section level2 hasAnchor" number="3.7">
+<h2><span class="header-section-number">3.7</span> Run diagnostics<a href="fine-mapping.html#run-diagnostics" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <table>
 <thead>
 <tr class="header">
@@ -972,98 +597,7 @@ by <code>run_finemap_enrichment.R</code>; results read from cache.</em></p>
 </tr>
 </tbody>
 </table>
-<p><img src=".staging/raw_fine-mapping_files/figure-markdown_github/diagnostics-1.png" /></p>
-</div>
-<div id="methods-summary" class="section level2 hasAnchor" number="3.9">
-<h2><span class="header-section-number">3.9</span> Methods summary<a href="fine-mapping.html#methods-summary" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<ul>
-<li><strong>Fine-mapping</strong>: SuSHiE joint cross-ancestry fine-mapping of the
-FDR-significant phenotype-level discovery set (ungrouped layer +
-expression primary scan), per-locus 95% credible sets with purity
-pruning, and cross-ancestry effect correlations (pipeline scripts
-31-33).</li>
-<li><strong>Variant-annotation enrichment</strong>: high-PIP variants (PIP &gt;= 0.9) vs
-all other fine-mapped variants; fastVEP consequence classes, ENCODE
-SCREEN cCRE classes, placenta open-chromatin peaks; Fisher exact +
-PIP-weighted enrichment, BH FDR (script 34).</li>
-<li><strong>Gene-set enrichment</strong>: per modality, genes with best-CS lead PIP &gt;=
-0.9 vs (a) all fine-mapped genes of the modality and (b) the HPLRv2
-reference; clusterProfiler <code>enrichGO</code>/<code>enrichKEGG</code>/<code>enricher</code>
-(Hallmark via msigdbr; curated pregnancy/placenta collection identical
-to the xQTL-mapping report); BH FDR within modality x database x
-background (<code>run_finemap_enrichment.R</code>).</li>
-<li><strong>Companion literature review</strong>: <code>literature_finemap.md</code> reviews the
-top fine-mapped genes against the published literature
-(pregnancy/birth outcomes, intragenomic conflict, placental biology).</li>
-</ul>
-</div>
-<div id="session-info-1" class="section level2 hasAnchor" number="3.10">
-<h2><span class="header-section-number">3.10</span> Session info<a href="fine-mapping.html#session-info-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<pre><code>## R version 4.4.1 (2024-06-14)
-## Platform: aarch64-apple-darwin20
-## Running under: macOS 26.7.1
-## 
-## Matrix products: default
-## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRblas.0.dylib 
-## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
-## 
-## locale:
-## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
-## 
-## time zone: America/Chicago
-## tzcode source: internal
-## 
-## attached base packages:
-## [1] stats     graphics  grDevices utils     datasets  methods   base     
-## 
-## other attached packages:
-##  [1] scales_1.4.0      ggprism_1.0.7     data.table_1.16.2 patchwork_1.3.2  
-##  [5] ggplot2_4.0.2     stringr_1.6.0     tibble_3.3.1      purrr_1.2.1      
-##  [9] readr_2.2.0       tidyr_1.3.2       dplyr_1.2.0      
-## 
-## loaded via a namespace (and not attached):
-##   [1] RColorBrewer_1.1-3      jsonlite_2.0.0          shape_1.4.6.1          
-##   [4] magrittr_2.0.4          ggtangle_0.1.1          magick_2.9.1           
-##   [7] farver_2.1.2            rmarkdown_2.30          GlobalOptions_0.1.3    
-##  [10] fs_1.6.7                zlibbioc_1.52.0         ragg_1.5.1             
-##  [13] vctrs_0.7.2             memoise_2.0.1           Cairo_1.7-0            
-##  [16] RCurl_1.98-1.16         ggtree_3.14.0           htmltools_0.5.9        
-##  [19] forcats_1.0.1           curl_7.0.0              gridGraphics_0.5-1     
-##  [22] htmlwidgets_1.6.4       plyr_1.8.9              plotly_4.12.0          
-##  [25] cachem_1.1.0            igraph_2.1.1            lifecycle_1.0.5        
-##  [28] iterators_1.0.14        pkgconfig_2.0.3         Matrix_1.7-1           
-##  [31] R6_2.6.1                fastmap_1.2.0           gson_0.1.0             
-##  [34] GenomeInfoDbData_1.2.13 clue_0.3-67             digest_0.6.39          
-##  [37] aplot_0.2.9             enrichplot_1.26.6       colorspace_2.1-2       
-##  [40] AnnotationDbi_1.68.0    S4Vectors_0.44.0        textshaping_1.0.5      
-##  [43] RSQLite_2.3.7           org.Hs.eg.db_3.20.0     labeling_0.4.3         
-##  [46] httr_1.4.7              mgcv_1.9-1              compiler_4.4.1         
-##  [49] bit64_4.5.2             withr_3.0.2             doParallel_1.0.17      
-##  [52] S7_0.2.1                BiocParallel_1.40.2     DBI_1.2.3              
-##  [55] R.utils_2.13.0          MASS_7.3-61             rappdirs_0.3.3         
-##  [58] rjson_0.2.23            tools_4.4.1             otel_0.2.0             
-##  [61] ape_5.8-1               R.oo_1.27.1             glue_1.8.0             
-##  [64] nlme_3.1-166            GOSemSim_2.32.0         grid_4.4.1             
-##  [67] cluster_2.1.6           reshape2_1.4.4          fgsea_1.32.4           
-##  [70] generics_0.1.4          gtable_0.3.6            tzdb_0.5.0             
-##  [73] R.methodsS3_1.8.2       hms_1.1.3               XVector_0.46.0         
-##  [76] BiocGenerics_0.52.0     ggrepel_0.9.8           foreach_1.5.2          
-##  [79] pillar_1.11.1           yulab.utils_0.2.4       vroom_1.7.0            
-##  [82] circlize_0.4.17         splines_4.4.1           treeio_1.30.0          
-##  [85] lattice_0.22-6          bit_4.5.0               tidyselect_1.2.1       
-##  [88] GO.db_3.20.0            ComplexHeatmap_2.22.0   Biostrings_2.74.1      
-##  [91] knitr_1.51              bookdown_0.46           IRanges_2.40.1         
-##  [94] stats4_4.4.1            xfun_0.57               Biobase_2.66.0         
-##  [97] matrixStats_1.4.1       stringi_1.8.7           UCSC.utils_1.2.0       
-## [100] lazyeval_0.2.2          ggfun_0.2.0             yaml_2.3.10            
-## [103] evaluate_1.0.5          codetools_0.2-20        qvalue_2.38.0          
-## [106] ggplotify_0.1.3         cli_3.6.5               systemfonts_1.3.2      
-## [109] dichromat_2.0-0.1       Rcpp_1.1.1              GenomeInfoDb_1.42.3    
-## [112] gprofiler2_0.2.4        png_0.1-8               parallel_4.4.1         
-## [115] blob_1.2.4              clusterProfiler_4.14.6  DOSE_4.0.1             
-## [118] bitops_1.0-9            viridisLite_0.4.3       tidytree_0.4.7         
-## [121] crayon_1.5.3            GetoptLong_1.1.0        rlang_1.1.7            
-## [124] cowplot_1.2.0           fastmatch_1.1-8         KEGGREST_1.45.1</code></pre>
+<p><img src="book_assets/fine-mapping/generated/html_fallback/fine-mapping/media/761ea82d1dcf0ddfffe63d7c989e1f079fc0352b.png" width="1200" /></p>
 
 </div>
 </div>

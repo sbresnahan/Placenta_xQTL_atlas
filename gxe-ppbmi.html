@@ -241,17 +241,11 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <ul>
 <li class="chapter" data-level="3.1" data-path="fine-mapping.html"><a href="fine-mapping.html#overview"><i class="fa fa-check"></i><b>3.1</b> Overview</a></li>
 <li class="chapter" data-level="3.2" data-path="fine-mapping.html"><a href="fine-mapping.html#pip-diagnostics"><i class="fa fa-check"></i><b>3.2</b> PIP diagnostics</a></li>
-<li class="chapter" data-level="3.3" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets"><i class="fa fa-check"></i><b>3.3</b> Credible sets</a>
-<ul>
-<li class="chapter" data-level="3.3.1" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets-versus-conditional-signals"><i class="fa fa-check"></i><b>3.3.1</b> Credible sets versus conditional signals</a></li>
-</ul></li>
+<li class="chapter" data-level="3.3" data-path="fine-mapping.html"><a href="fine-mapping.html#credible-sets"><i class="fa fa-check"></i><b>3.3</b> Credible sets</a></li>
 <li class="chapter" data-level="3.4" data-path="fine-mapping.html"><a href="fine-mapping.html#cross-ancestry-concordance"><i class="fa fa-check"></i><b>3.4</b> Cross-ancestry concordance</a></li>
 <li class="chapter" data-level="3.5" data-path="fine-mapping.html"><a href="fine-mapping.html#top-loci"><i class="fa fa-check"></i><b>3.5</b> Top loci</a></li>
-<li class="chapter" data-level="3.6" data-path="fine-mapping.html"><a href="fine-mapping.html#functional-annotation-enrichment-of-high-pip-variants"><i class="fa fa-check"></i><b>3.6</b> Functional-annotation enrichment of high-PIP variants</a></li>
-<li class="chapter" data-level="3.7" data-path="fine-mapping.html"><a href="fine-mapping.html#gene-set-enrichment-of-high-confidence-fine-mapped-genes"><i class="fa fa-check"></i><b>3.7</b> Gene-set enrichment of high-confidence fine-mapped genes</a></li>
-<li class="chapter" data-level="3.8" data-path="fine-mapping.html"><a href="fine-mapping.html#run-diagnostics"><i class="fa fa-check"></i><b>3.8</b> Run diagnostics</a></li>
-<li class="chapter" data-level="3.9" data-path="fine-mapping.html"><a href="fine-mapping.html#methods-summary"><i class="fa fa-check"></i><b>3.9</b> Methods summary</a></li>
-<li class="chapter" data-level="3.10" data-path="fine-mapping.html"><a href="fine-mapping.html#session-info-1"><i class="fa fa-check"></i><b>3.10</b> Session info</a></li>
+<li class="chapter" data-level="3.6" data-path="fine-mapping.html"><a href="fine-mapping.html#functional-annotation-enrichment"><i class="fa fa-check"></i><b>3.6</b> Functional-annotation enrichment</a></li>
+<li class="chapter" data-level="3.7" data-path="fine-mapping.html"><a href="fine-mapping.html#run-diagnostics"><i class="fa fa-check"></i><b>3.7</b> Run diagnostics</a></li>
 </ul></li>
 <li class="chapter" data-level="4" data-path="finemap-literature.html"><a href="finemap-literature.html"><i class="fa fa-check"></i><b>4</b> Literature context: fine-mapped loci</a>
 <ul>
@@ -539,14 +533,14 @@ and <code>P_het &gt;= r params$heterogeneity_p</code> retains <strong>664 featur
 </div>
 <div id="inputs-and-provenance-1" class="section level2 hasAnchor" number="10.2">
 <h2><span class="header-section-number">10.2</span> Inputs and provenance<a href="gxe-ppbmi.html#inputs-and-provenance-1" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="gxe-ppbmi.html#cb11-1" tabindex="-1"></a>input_table <span class="ot">&lt;-</span> <span class="fu">data.table</span>(</span>
-<span id="cb11-2"><a href="gxe-ppbmi.html#cb11-2" tabindex="-1"></a>  <span class="at">object =</span> <span class="fu">names</span>(paths),</span>
-<span id="cb11-3"><a href="gxe-ppbmi.html#cb11-3" tabindex="-1"></a>  <span class="at">path =</span> <span class="fu">unname</span>(paths),</span>
-<span id="cb11-4"><a href="gxe-ppbmi.html#cb11-4" tabindex="-1"></a>  <span class="at">rows =</span> <span class="fu">c</span>(<span class="fu">nrow</span>(tier1_all),</span>
-<span id="cb11-5"><a href="gxe-ppbmi.html#cb11-5" tabindex="-1"></a>           <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.na</span>(paths[<span class="st">&quot;tier1_significant&quot;</span>])) <span class="fu">nrow</span>(<span class="fu">read_tab</span>(paths[<span class="st">&quot;tier1_significant&quot;</span>])) <span class="cf">else</span> <span class="cn">NA_integer_</span>,</span>
-<span id="cb11-6"><a href="gxe-ppbmi.html#cb11-6" tabindex="-1"></a>           <span class="fu">nrow</span>(tier1_meta_all), <span class="fu">nrow</span>(tier2_all), <span class="fu">nrow</span>(summary_all), <span class="fu">nrow</span>(status_all))</span>
-<span id="cb11-7"><a href="gxe-ppbmi.html#cb11-7" tabindex="-1"></a>)</span>
-<span id="cb11-8"><a href="gxe-ppbmi.html#cb11-8" tabindex="-1"></a><span class="fu">kable</span>(input_table, <span class="at">caption =</span> <span class="st">&quot;G×E aggregate inputs used by this report.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="gxe-ppbmi.html#cb8-1" tabindex="-1"></a>input_table <span class="ot">&lt;-</span> <span class="fu">data.table</span>(</span>
+<span id="cb8-2"><a href="gxe-ppbmi.html#cb8-2" tabindex="-1"></a>  <span class="at">object =</span> <span class="fu">names</span>(paths),</span>
+<span id="cb8-3"><a href="gxe-ppbmi.html#cb8-3" tabindex="-1"></a>  <span class="at">path =</span> <span class="fu">unname</span>(paths),</span>
+<span id="cb8-4"><a href="gxe-ppbmi.html#cb8-4" tabindex="-1"></a>  <span class="at">rows =</span> <span class="fu">c</span>(<span class="fu">nrow</span>(tier1_all),</span>
+<span id="cb8-5"><a href="gxe-ppbmi.html#cb8-5" tabindex="-1"></a>           <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.na</span>(paths[<span class="st">&quot;tier1_significant&quot;</span>])) <span class="fu">nrow</span>(<span class="fu">read_tab</span>(paths[<span class="st">&quot;tier1_significant&quot;</span>])) <span class="cf">else</span> <span class="cn">NA_integer_</span>,</span>
+<span id="cb8-6"><a href="gxe-ppbmi.html#cb8-6" tabindex="-1"></a>           <span class="fu">nrow</span>(tier1_meta_all), <span class="fu">nrow</span>(tier2_all), <span class="fu">nrow</span>(summary_all), <span class="fu">nrow</span>(status_all))</span>
+<span id="cb8-7"><a href="gxe-ppbmi.html#cb8-7" tabindex="-1"></a>)</span>
+<span id="cb8-8"><a href="gxe-ppbmi.html#cb8-8" tabindex="-1"></a><span class="fu">kable</span>(input_table, <span class="at">caption =</span> <span class="st">&quot;G×E aggregate inputs used by this report.&quot;</span>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="16%" />
@@ -630,10 +624,10 @@ correction across the prioritized set.</p>
 </div>
 <div id="pipeline-completion" class="section level2 hasAnchor" number="10.4">
 <h2><span class="header-section-number">10.4</span> Pipeline completion<a href="gxe-ppbmi.html#pipeline-completion" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="gxe-ppbmi.html#cb12-1" tabindex="-1"></a>status_display <span class="ot">&lt;-</span> <span class="fu">copy</span>(run_status)</span>
-<span id="cb12-2"><a href="gxe-ppbmi.html#cb12-2" tabindex="-1"></a>status_display <span class="ot">&lt;-</span> status_display[<span class="fu">order</span>(<span class="fu">factor</span>(component, <span class="fu">c</span>(<span class="st">&quot;tier1&quot;</span>,<span class="st">&quot;tier1_meta&quot;</span>,<span class="st">&quot;tier2&quot;</span>)),</span>
-<span id="cb12-3"><a href="gxe-ppbmi.html#cb12-3" tabindex="-1"></a>                                       ancestry, modality)]</span>
-<span id="cb12-4"><a href="gxe-ppbmi.html#cb12-4" tabindex="-1"></a><span class="fu">kable</span>(status_display, <span class="at">caption =</span> <span class="st">&quot;Module-07 ppBMI run status.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="gxe-ppbmi.html#cb9-1" tabindex="-1"></a>status_display <span class="ot">&lt;-</span> <span class="fu">copy</span>(run_status)</span>
+<span id="cb9-2"><a href="gxe-ppbmi.html#cb9-2" tabindex="-1"></a>status_display <span class="ot">&lt;-</span> status_display[<span class="fu">order</span>(<span class="fu">factor</span>(component, <span class="fu">c</span>(<span class="st">&quot;tier1&quot;</span>,<span class="st">&quot;tier1_meta&quot;</span>,<span class="st">&quot;tier2&quot;</span>)),</span>
+<span id="cb9-3"><a href="gxe-ppbmi.html#cb9-3" tabindex="-1"></a>                                       ancestry, modality)]</span>
+<span id="cb9-4"><a href="gxe-ppbmi.html#cb9-4" tabindex="-1"></a><span class="fu">kable</span>(status_display, <span class="at">caption =</span> <span class="st">&quot;Module-07 ppBMI run status.&quot;</span>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="15%" />
@@ -983,29 +977,29 @@ correction across the prioritized set.</p>
 </tbody>
 </table>
 <p>Module-07 ppBMI run status.</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="gxe-ppbmi.html#cb13-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">any</span>(run_status<span class="sc">$</span>status <span class="sc">!=</span> <span class="st">&quot;DONE&quot;</span>)) {</span>
-<span id="cb13-2"><a href="gxe-ppbmi.html#cb13-2" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="st">&quot;At least one ppBMI component is not marked DONE.&quot;</span>)</span>
-<span id="cb13-3"><a href="gxe-ppbmi.html#cb13-3" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="gxe-ppbmi.html#cb10-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">any</span>(run_status<span class="sc">$</span>status <span class="sc">!=</span> <span class="st">&quot;DONE&quot;</span>)) {</span>
+<span id="cb10-2"><a href="gxe-ppbmi.html#cb10-2" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="st">&quot;At least one ppBMI component is not marked DONE.&quot;</span>)</span>
+<span id="cb10-3"><a href="gxe-ppbmi.html#cb10-3" tabindex="-1"></a>}</span></code></pre></div>
 </div>
 <div id="tier-1-ancestry-specific-discovery" class="section level2 hasAnchor" number="10.5">
 <h2><span class="header-section-number">10.5</span> Tier 1: ancestry-specific discovery<a href="gxe-ppbmi.html#tier-1-ancestry-specific-discovery" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="yield-by-ancestry-and-modality" class="section level3 hasAnchor" number="10.5.1">
 <h3><span class="header-section-number">10.5.1</span> Yield by ancestry and modality<a href="gxe-ppbmi.html#yield-by-ancestry-and-modality" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="gxe-ppbmi.html#cb14-1" tabindex="-1"></a>tier1_yield <span class="ot">&lt;-</span> tier1[, .(</span>
-<span id="cb14-2"><a href="gxe-ppbmi.html#cb14-2" tabindex="-1"></a>  <span class="at">n_tested =</span> .N,</span>
-<span id="cb14-3"><a href="gxe-ppbmi.html#cb14-3" tabindex="-1"></a>  <span class="at">n_sig =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(qval) <span class="sc">&amp;</span> qval <span class="sc">&lt;=</span> params<span class="sc">$</span>tier1_q),</span>
-<span id="cb14-4"><a href="gxe-ppbmi.html#cb14-4" tabindex="-1"></a>  <span class="at">min_q =</span> <span class="fu">suppressWarnings</span>(<span class="fu">min</span>(qval, <span class="at">na.rm =</span> <span class="cn">TRUE</span>))</span>
-<span id="cb14-5"><a href="gxe-ppbmi.html#cb14-5" tabindex="-1"></a>), by <span class="ot">=</span> .(ancestry, modality)]</span>
-<span id="cb14-6"><a href="gxe-ppbmi.html#cb14-6" tabindex="-1"></a>tier1_yield[<span class="sc">!</span><span class="fu">is.finite</span>(min_q), min_q <span class="sc">:=</span> <span class="cn">NA_real_</span>]</span>
-<span id="cb14-7"><a href="gxe-ppbmi.html#cb14-7" tabindex="-1"></a>tier1_yield[, sig_rate <span class="sc">:=</span> n_sig <span class="sc">/</span> n_tested]</span>
-<span id="cb14-8"><a href="gxe-ppbmi.html#cb14-8" tabindex="-1"></a><span class="fu">setorder</span>(tier1_yield, ancestry, <span class="sc">-</span>n_sig)</span>
-<span id="cb14-9"><a href="gxe-ppbmi.html#cb14-9" tabindex="-1"></a></span>
-<span id="cb14-10"><a href="gxe-ppbmi.html#cb14-10" tabindex="-1"></a><span class="fu">fwrite</span>(tier1_yield, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_yield_by_ancestry_modality.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb14-11"><a href="gxe-ppbmi.html#cb14-11" tabindex="-1"></a></span>
-<span id="cb14-12"><a href="gxe-ppbmi.html#cb14-12" tabindex="-1"></a>tier1_yield_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier1_yield)</span>
-<span id="cb14-13"><a href="gxe-ppbmi.html#cb14-13" tabindex="-1"></a>tier1_yield_print[, sig_rate <span class="sc">:=</span> <span class="fu">fmt_pct</span>(sig_rate, <span class="dv">2</span>)]</span>
-<span id="cb14-14"><a href="gxe-ppbmi.html#cb14-14" tabindex="-1"></a>tier1_yield_print[, min_q <span class="sc">:=</span> <span class="fu">fmt_p</span>(min_q)]</span>
-<span id="cb14-15"><a href="gxe-ppbmi.html#cb14-15" tabindex="-1"></a><span class="fu">kable</span>(tier1_yield_print, <span class="at">caption =</span> <span class="st">&quot;Tier-1 discovery yield by ancestry and modality.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="gxe-ppbmi.html#cb11-1" tabindex="-1"></a>tier1_yield <span class="ot">&lt;-</span> tier1[, .(</span>
+<span id="cb11-2"><a href="gxe-ppbmi.html#cb11-2" tabindex="-1"></a>  <span class="at">n_tested =</span> .N,</span>
+<span id="cb11-3"><a href="gxe-ppbmi.html#cb11-3" tabindex="-1"></a>  <span class="at">n_sig =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(qval) <span class="sc">&amp;</span> qval <span class="sc">&lt;=</span> params<span class="sc">$</span>tier1_q),</span>
+<span id="cb11-4"><a href="gxe-ppbmi.html#cb11-4" tabindex="-1"></a>  <span class="at">min_q =</span> <span class="fu">suppressWarnings</span>(<span class="fu">min</span>(qval, <span class="at">na.rm =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb11-5"><a href="gxe-ppbmi.html#cb11-5" tabindex="-1"></a>), by <span class="ot">=</span> .(ancestry, modality)]</span>
+<span id="cb11-6"><a href="gxe-ppbmi.html#cb11-6" tabindex="-1"></a>tier1_yield[<span class="sc">!</span><span class="fu">is.finite</span>(min_q), min_q <span class="sc">:=</span> <span class="cn">NA_real_</span>]</span>
+<span id="cb11-7"><a href="gxe-ppbmi.html#cb11-7" tabindex="-1"></a>tier1_yield[, sig_rate <span class="sc">:=</span> n_sig <span class="sc">/</span> n_tested]</span>
+<span id="cb11-8"><a href="gxe-ppbmi.html#cb11-8" tabindex="-1"></a><span class="fu">setorder</span>(tier1_yield, ancestry, <span class="sc">-</span>n_sig)</span>
+<span id="cb11-9"><a href="gxe-ppbmi.html#cb11-9" tabindex="-1"></a></span>
+<span id="cb11-10"><a href="gxe-ppbmi.html#cb11-10" tabindex="-1"></a><span class="fu">fwrite</span>(tier1_yield, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_yield_by_ancestry_modality.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb11-11"><a href="gxe-ppbmi.html#cb11-11" tabindex="-1"></a></span>
+<span id="cb11-12"><a href="gxe-ppbmi.html#cb11-12" tabindex="-1"></a>tier1_yield_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier1_yield)</span>
+<span id="cb11-13"><a href="gxe-ppbmi.html#cb11-13" tabindex="-1"></a>tier1_yield_print[, sig_rate <span class="sc">:=</span> <span class="fu">fmt_pct</span>(sig_rate, <span class="dv">2</span>)]</span>
+<span id="cb11-14"><a href="gxe-ppbmi.html#cb11-14" tabindex="-1"></a>tier1_yield_print[, min_q <span class="sc">:=</span> <span class="fu">fmt_p</span>(min_q)]</span>
+<span id="cb11-15"><a href="gxe-ppbmi.html#cb11-15" tabindex="-1"></a><span class="fu">kable</span>(tier1_yield_print, <span class="at">caption =</span> <span class="st">&quot;Tier-1 discovery yield by ancestry and modality.&quot;</span>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="14%" />
@@ -1173,17 +1167,17 @@ correction across the prioritized set.</p>
 </tbody>
 </table>
 <p>Tier-1 discovery yield by ancestry and modality.</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="gxe-ppbmi.html#cb15-1" tabindex="-1"></a>p1 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(tier1_yield, <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">reorder</span>(modality, n_sig), <span class="at">y =</span> n_sig)) <span class="sc">+</span></span>
-<span id="cb15-2"><a href="gxe-ppbmi.html#cb15-2" tabindex="-1"></a>  <span class="fu">geom_col</span>() <span class="sc">+</span></span>
-<span id="cb15-3"><a href="gxe-ppbmi.html#cb15-3" tabindex="-1"></a>  <span class="fu">coord_flip</span>() <span class="sc">+</span></span>
-<span id="cb15-4"><a href="gxe-ppbmi.html#cb15-4" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> ancestry, <span class="at">scales =</span> <span class="st">&quot;free_y&quot;</span>) <span class="sc">+</span></span>
-<span id="cb15-5"><a href="gxe-ppbmi.html#cb15-5" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">&quot;Significant feature rows (q ≤ threshold)&quot;</span>,</span>
-<span id="cb15-6"><a href="gxe-ppbmi.html#cb15-6" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">&quot;Tier-1 G×ppBMI discoveries by molecular modality&quot;</span>) <span class="sc">+</span></span>
-<span id="cb15-7"><a href="gxe-ppbmi.html#cb15-7" tabindex="-1"></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
-<span id="cb15-8"><a href="gxe-ppbmi.html#cb15-8" tabindex="-1"></a><span class="fu">print</span>(p1)</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="gxe-ppbmi.html#cb12-1" tabindex="-1"></a>p1 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(tier1_yield, <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">reorder</span>(modality, n_sig), <span class="at">y =</span> n_sig)) <span class="sc">+</span></span>
+<span id="cb12-2"><a href="gxe-ppbmi.html#cb12-2" tabindex="-1"></a>  <span class="fu">geom_col</span>() <span class="sc">+</span></span>
+<span id="cb12-3"><a href="gxe-ppbmi.html#cb12-3" tabindex="-1"></a>  <span class="fu">coord_flip</span>() <span class="sc">+</span></span>
+<span id="cb12-4"><a href="gxe-ppbmi.html#cb12-4" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> ancestry, <span class="at">scales =</span> <span class="st">&quot;free_y&quot;</span>) <span class="sc">+</span></span>
+<span id="cb12-5"><a href="gxe-ppbmi.html#cb12-5" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">&quot;Significant feature rows (q ≤ threshold)&quot;</span>,</span>
+<span id="cb12-6"><a href="gxe-ppbmi.html#cb12-6" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">&quot;Tier-1 G×ppBMI discoveries by molecular modality&quot;</span>) <span class="sc">+</span></span>
+<span id="cb12-7"><a href="gxe-ppbmi.html#cb12-7" tabindex="-1"></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
+<span id="cb12-8"><a href="gxe-ppbmi.html#cb12-8" tabindex="-1"></a><span class="fu">print</span>(p1)</span></code></pre></div>
 <p><img src=".staging/raw_gxe-ppbmi_files/figure-markdown_github/tier1-yield-plot-1.png" /></p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="gxe-ppbmi.html#cb16-1" tabindex="-1"></a><span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier1_significant_by_modality.png&quot;</span>), p1,</span>
-<span id="cb16-2"><a href="gxe-ppbmi.html#cb16-2" tabindex="-1"></a>       <span class="at">width =</span> <span class="dv">9</span>, <span class="at">height =</span> <span class="fl">5.5</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="gxe-ppbmi.html#cb13-1" tabindex="-1"></a><span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier1_significant_by_modality.png&quot;</span>), p1,</span>
+<span id="cb13-2"><a href="gxe-ppbmi.html#cb13-2" tabindex="-1"></a>       <span class="at">width =</span> <span class="dv">9</span>, <span class="at">height =</span> <span class="fl">5.5</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span></code></pre></div>
 <p>The ancestry imbalance is substantial. This report therefore avoids
 interpreting a larger EUR count as evidence that ppBMI-dependent
 regulation is intrinsically more common in EUR; ancestry-specific sample
@@ -1192,18 +1186,18 @@ selection, and modality-specific power can all contribute.</p>
 </div>
 <div id="interaction-effect-distribution" class="section level3 hasAnchor" number="10.5.2">
 <h3><span class="header-section-number">10.5.2</span> Interaction-effect distribution<a href="gxe-ppbmi.html#interaction-effect-distribution" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="gxe-ppbmi.html#cb17-1" tabindex="-1"></a>p2 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(tier1_sig, <span class="fu">aes</span>(<span class="at">x =</span> b_gi)) <span class="sc">+</span></span>
-<span id="cb17-2"><a href="gxe-ppbmi.html#cb17-2" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">60</span>) <span class="sc">+</span></span>
-<span id="cb17-3"><a href="gxe-ppbmi.html#cb17-3" tabindex="-1"></a>  <span class="fu">facet_grid</span>(ancestry <span class="sc">~</span> modality, <span class="at">scales =</span> <span class="st">&quot;free_y&quot;</span>) <span class="sc">+</span></span>
-<span id="cb17-4"><a href="gxe-ppbmi.html#cb17-4" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]),</span>
-<span id="cb17-5"><a href="gxe-ppbmi.html#cb17-5" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">&quot;Significant feature rows&quot;</span>,</span>
-<span id="cb17-6"><a href="gxe-ppbmi.html#cb17-6" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">&quot;Distribution of significant Tier-1 interaction effects&quot;</span>) <span class="sc">+</span></span>
-<span id="cb17-7"><a href="gxe-ppbmi.html#cb17-7" tabindex="-1"></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">10</span>) <span class="sc">+</span></span>
-<span id="cb17-8"><a href="gxe-ppbmi.html#cb17-8" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">axis.text.x =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">7</span>))</span>
-<span id="cb17-9"><a href="gxe-ppbmi.html#cb17-9" tabindex="-1"></a><span class="fu">print</span>(p2)</span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="gxe-ppbmi.html#cb14-1" tabindex="-1"></a>p2 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(tier1_sig, <span class="fu">aes</span>(<span class="at">x =</span> b_gi)) <span class="sc">+</span></span>
+<span id="cb14-2"><a href="gxe-ppbmi.html#cb14-2" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">60</span>) <span class="sc">+</span></span>
+<span id="cb14-3"><a href="gxe-ppbmi.html#cb14-3" tabindex="-1"></a>  <span class="fu">facet_grid</span>(ancestry <span class="sc">~</span> modality, <span class="at">scales =</span> <span class="st">&quot;free_y&quot;</span>) <span class="sc">+</span></span>
+<span id="cb14-4"><a href="gxe-ppbmi.html#cb14-4" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]),</span>
+<span id="cb14-5"><a href="gxe-ppbmi.html#cb14-5" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">&quot;Significant feature rows&quot;</span>,</span>
+<span id="cb14-6"><a href="gxe-ppbmi.html#cb14-6" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">&quot;Distribution of significant Tier-1 interaction effects&quot;</span>) <span class="sc">+</span></span>
+<span id="cb14-7"><a href="gxe-ppbmi.html#cb14-7" tabindex="-1"></a>  <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">10</span>) <span class="sc">+</span></span>
+<span id="cb14-8"><a href="gxe-ppbmi.html#cb14-8" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">axis.text.x =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">7</span>))</span>
+<span id="cb14-9"><a href="gxe-ppbmi.html#cb14-9" tabindex="-1"></a><span class="fu">print</span>(p2)</span></code></pre></div>
 <p><img src=".staging/raw_gxe-ppbmi_files/figure-markdown_github/tier1-effect-plot-1.png" /></p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="gxe-ppbmi.html#cb18-1" tabindex="-1"></a><span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier1_interaction_effects.png&quot;</span>), p2,</span>
-<span id="cb18-2"><a href="gxe-ppbmi.html#cb18-2" tabindex="-1"></a>       <span class="at">width =</span> <span class="dv">11</span>, <span class="at">height =</span> <span class="dv">7</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="gxe-ppbmi.html#cb15-1" tabindex="-1"></a><span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier1_interaction_effects.png&quot;</span>), p2,</span>
+<span id="cb15-2"><a href="gxe-ppbmi.html#cb15-2" tabindex="-1"></a>       <span class="at">width =</span> <span class="dv">11</span>, <span class="at">height =</span> <span class="dv">7</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span></code></pre></div>
 <p>A positive <em>β</em><sub><em>G</em> × <em>E</em></sub> means that the allelic effect on the
 molecular phenotype becomes more positive (or less negative) as
 standardized ppBMI increases. It does <strong>not</strong> mean that ppBMI itself
@@ -1211,15 +1205,15 @@ increases the molecular phenotype.</p>
 </div>
 <div id="strongest-tier-1-signals" class="section level3 hasAnchor" number="10.5.3">
 <h3><span class="header-section-number">10.5.3</span> Strongest Tier-1 signals<a href="gxe-ppbmi.html#strongest-tier-1-signals" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="gxe-ppbmi.html#cb19-1" tabindex="-1"></a>tier1_top <span class="ot">&lt;-</span> tier1_sig[<span class="fu">order</span>(qval, pval_beta)][<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N),</span>
-<span id="cb19-2"><a href="gxe-ppbmi.html#cb19-2" tabindex="-1"></a>  .(gene_symbol, gene_id, ancestry, modality, phenotype_id, variant_id,</span>
-<span id="cb19-3"><a href="gxe-ppbmi.html#cb19-3" tabindex="-1"></a>    b_gi, b_gi_se, pval_beta, qval, af, ma_count)]</span>
-<span id="cb19-4"><a href="gxe-ppbmi.html#cb19-4" tabindex="-1"></a><span class="fu">fwrite</span>(tier1_top, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_top_signals.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb19-5"><a href="gxe-ppbmi.html#cb19-5" tabindex="-1"></a></span>
-<span id="cb19-6"><a href="gxe-ppbmi.html#cb19-6" tabindex="-1"></a>tier1_top_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier1_top)</span>
-<span id="cb19-7"><a href="gxe-ppbmi.html#cb19-7" tabindex="-1"></a>tier1_top_print[, <span class="st">`</span><span class="at">:=</span><span class="st">`</span>(<span class="at">pval_beta =</span> <span class="fu">fmt_p</span>(pval_beta), <span class="at">qval =</span> <span class="fu">fmt_p</span>(qval),</span>
-<span id="cb19-8"><a href="gxe-ppbmi.html#cb19-8" tabindex="-1"></a>                       <span class="at">b_gi =</span> <span class="fu">round</span>(b_gi, <span class="dv">4</span>), <span class="at">b_gi_se =</span> <span class="fu">round</span>(b_gi_se, <span class="dv">4</span>))]</span>
-<span id="cb19-9"><a href="gxe-ppbmi.html#cb19-9" tabindex="-1"></a><span class="fu">kable</span>(tier1_top_print, <span class="at">caption =</span> <span class="fu">paste0</span>(<span class="st">&quot;Top &quot;</span>, <span class="fu">nrow</span>(tier1_top), <span class="st">&quot; Tier-1 G×ppBMI signals.&quot;</span>))</span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="gxe-ppbmi.html#cb16-1" tabindex="-1"></a>tier1_top <span class="ot">&lt;-</span> tier1_sig[<span class="fu">order</span>(qval, pval_beta)][<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N),</span>
+<span id="cb16-2"><a href="gxe-ppbmi.html#cb16-2" tabindex="-1"></a>  .(gene_symbol, gene_id, ancestry, modality, phenotype_id, variant_id,</span>
+<span id="cb16-3"><a href="gxe-ppbmi.html#cb16-3" tabindex="-1"></a>    b_gi, b_gi_se, pval_beta, qval, af, ma_count)]</span>
+<span id="cb16-4"><a href="gxe-ppbmi.html#cb16-4" tabindex="-1"></a><span class="fu">fwrite</span>(tier1_top, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_top_signals.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb16-5"><a href="gxe-ppbmi.html#cb16-5" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="gxe-ppbmi.html#cb16-6" tabindex="-1"></a>tier1_top_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier1_top)</span>
+<span id="cb16-7"><a href="gxe-ppbmi.html#cb16-7" tabindex="-1"></a>tier1_top_print[, <span class="st">`</span><span class="at">:=</span><span class="st">`</span>(<span class="at">pval_beta =</span> <span class="fu">fmt_p</span>(pval_beta), <span class="at">qval =</span> <span class="fu">fmt_p</span>(qval),</span>
+<span id="cb16-8"><a href="gxe-ppbmi.html#cb16-8" tabindex="-1"></a>                       <span class="at">b_gi =</span> <span class="fu">round</span>(b_gi, <span class="dv">4</span>), <span class="at">b_gi_se =</span> <span class="fu">round</span>(b_gi_se, <span class="dv">4</span>))]</span>
+<span id="cb16-9"><a href="gxe-ppbmi.html#cb16-9" tabindex="-1"></a><span class="fu">kable</span>(tier1_top_print, <span class="at">caption =</span> <span class="fu">paste0</span>(<span class="st">&quot;Top &quot;</span>, <span class="fu">nrow</span>(tier1_top), <span class="st">&quot; Tier-1 G×ppBMI signals.&quot;</span>))</span></code></pre></div>
 <table>
 <colgroup>
 <col width="7%" />
@@ -1608,23 +1602,23 @@ increases the molecular phenotype.</p>
 </div>
 <div id="recurrent-genes-and-multi-feature-signals" class="section level3 hasAnchor" number="10.5.4">
 <h3><span class="header-section-number">10.5.4</span> Recurrent genes and multi-feature signals<a href="gxe-ppbmi.html#recurrent-genes-and-multi-feature-signals" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="gxe-ppbmi.html#cb20-1" tabindex="-1"></a>tier1_recurrent <span class="ot">&lt;-</span> tier1_sig[, .(</span>
-<span id="cb20-2"><a href="gxe-ppbmi.html#cb20-2" tabindex="-1"></a>  <span class="at">n_significant_rows =</span> .N,</span>
-<span id="cb20-3"><a href="gxe-ppbmi.html#cb20-3" tabindex="-1"></a>  <span class="at">n_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
-<span id="cb20-4"><a href="gxe-ppbmi.html#cb20-4" tabindex="-1"></a>  <span class="at">n_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
-<span id="cb20-5"><a href="gxe-ppbmi.html#cb20-5" tabindex="-1"></a>  <span class="at">modalities =</span> <span class="fu">paste</span>(<span class="fu">sort</span>(<span class="fu">unique</span>(modality)), <span class="at">collapse =</span> <span class="st">&quot;;&quot;</span>),</span>
-<span id="cb20-6"><a href="gxe-ppbmi.html#cb20-6" tabindex="-1"></a>  <span class="at">n_ancestries =</span> <span class="fu">uniqueN</span>(ancestry),</span>
-<span id="cb20-7"><a href="gxe-ppbmi.html#cb20-7" tabindex="-1"></a>  <span class="at">ancestries =</span> <span class="fu">paste</span>(<span class="fu">sort</span>(<span class="fu">unique</span>(ancestry)), <span class="at">collapse =</span> <span class="st">&quot;;&quot;</span>),</span>
-<span id="cb20-8"><a href="gxe-ppbmi.html#cb20-8" tabindex="-1"></a>  <span class="at">min_q =</span> <span class="fu">min</span>(qval, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb20-9"><a href="gxe-ppbmi.html#cb20-9" tabindex="-1"></a>  <span class="at">max_abs_beta_gxe =</span> <span class="fu">max</span>(<span class="fu">abs</span>(b_gi), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb20-10"><a href="gxe-ppbmi.html#cb20-10" tabindex="-1"></a>), by <span class="ot">=</span> .(gene_id, gene_symbol)]</span>
-<span id="cb20-11"><a href="gxe-ppbmi.html#cb20-11" tabindex="-1"></a><span class="fu">setorder</span>(tier1_recurrent, <span class="sc">-</span>n_features, min_q)</span>
-<span id="cb20-12"><a href="gxe-ppbmi.html#cb20-12" tabindex="-1"></a></span>
-<span id="cb20-13"><a href="gxe-ppbmi.html#cb20-13" tabindex="-1"></a><span class="fu">fwrite</span>(tier1_recurrent, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_recurrent_genes.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb20-14"><a href="gxe-ppbmi.html#cb20-14" tabindex="-1"></a></span>
-<span id="cb20-15"><a href="gxe-ppbmi.html#cb20-15" tabindex="-1"></a>rec_print <span class="ot">&lt;-</span> tier1_recurrent[<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N)]</span>
-<span id="cb20-16"><a href="gxe-ppbmi.html#cb20-16" tabindex="-1"></a>rec_print[, <span class="st">`</span><span class="at">:=</span><span class="st">`</span>(<span class="at">min_q =</span> <span class="fu">fmt_p</span>(min_q), <span class="at">max_abs_beta_gxe =</span> <span class="fu">round</span>(max_abs_beta_gxe, <span class="dv">3</span>))]</span>
-<span id="cb20-17"><a href="gxe-ppbmi.html#cb20-17" tabindex="-1"></a><span class="fu">kable</span>(rec_print, <span class="at">caption =</span> <span class="st">&quot;Most recurrent genes among significant Tier-1 feature rows.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="gxe-ppbmi.html#cb17-1" tabindex="-1"></a>tier1_recurrent <span class="ot">&lt;-</span> tier1_sig[, .(</span>
+<span id="cb17-2"><a href="gxe-ppbmi.html#cb17-2" tabindex="-1"></a>  <span class="at">n_significant_rows =</span> .N,</span>
+<span id="cb17-3"><a href="gxe-ppbmi.html#cb17-3" tabindex="-1"></a>  <span class="at">n_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
+<span id="cb17-4"><a href="gxe-ppbmi.html#cb17-4" tabindex="-1"></a>  <span class="at">n_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
+<span id="cb17-5"><a href="gxe-ppbmi.html#cb17-5" tabindex="-1"></a>  <span class="at">modalities =</span> <span class="fu">paste</span>(<span class="fu">sort</span>(<span class="fu">unique</span>(modality)), <span class="at">collapse =</span> <span class="st">&quot;;&quot;</span>),</span>
+<span id="cb17-6"><a href="gxe-ppbmi.html#cb17-6" tabindex="-1"></a>  <span class="at">n_ancestries =</span> <span class="fu">uniqueN</span>(ancestry),</span>
+<span id="cb17-7"><a href="gxe-ppbmi.html#cb17-7" tabindex="-1"></a>  <span class="at">ancestries =</span> <span class="fu">paste</span>(<span class="fu">sort</span>(<span class="fu">unique</span>(ancestry)), <span class="at">collapse =</span> <span class="st">&quot;;&quot;</span>),</span>
+<span id="cb17-8"><a href="gxe-ppbmi.html#cb17-8" tabindex="-1"></a>  <span class="at">min_q =</span> <span class="fu">min</span>(qval, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb17-9"><a href="gxe-ppbmi.html#cb17-9" tabindex="-1"></a>  <span class="at">max_abs_beta_gxe =</span> <span class="fu">max</span>(<span class="fu">abs</span>(b_gi), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb17-10"><a href="gxe-ppbmi.html#cb17-10" tabindex="-1"></a>), by <span class="ot">=</span> .(gene_id, gene_symbol)]</span>
+<span id="cb17-11"><a href="gxe-ppbmi.html#cb17-11" tabindex="-1"></a><span class="fu">setorder</span>(tier1_recurrent, <span class="sc">-</span>n_features, min_q)</span>
+<span id="cb17-12"><a href="gxe-ppbmi.html#cb17-12" tabindex="-1"></a></span>
+<span id="cb17-13"><a href="gxe-ppbmi.html#cb17-13" tabindex="-1"></a><span class="fu">fwrite</span>(tier1_recurrent, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_recurrent_genes.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb17-14"><a href="gxe-ppbmi.html#cb17-14" tabindex="-1"></a></span>
+<span id="cb17-15"><a href="gxe-ppbmi.html#cb17-15" tabindex="-1"></a>rec_print <span class="ot">&lt;-</span> tier1_recurrent[<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N)]</span>
+<span id="cb17-16"><a href="gxe-ppbmi.html#cb17-16" tabindex="-1"></a>rec_print[, <span class="st">`</span><span class="at">:=</span><span class="st">`</span>(<span class="at">min_q =</span> <span class="fu">fmt_p</span>(min_q), <span class="at">max_abs_beta_gxe =</span> <span class="fu">round</span>(max_abs_beta_gxe, <span class="dv">3</span>))]</span>
+<span id="cb17-17"><a href="gxe-ppbmi.html#cb17-17" tabindex="-1"></a><span class="fu">kable</span>(rec_print, <span class="at">caption =</span> <span class="st">&quot;Most recurrent genes among significant Tier-1 feature rows.&quot;</span>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="11%" />
@@ -1966,9 +1960,9 @@ signal.</p>
 <h2><span class="header-section-number">10.6</span> Cross-ancestry Tier-1 synthesis<a href="gxe-ppbmi.html#cross-ancestry-tier-1-synthesis" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="scope-of-cross-ancestry-testing" class="section level3 hasAnchor" number="10.6.1">
 <h3><span class="header-section-number">10.6.1</span> Scope of cross-ancestry testing<a href="gxe-ppbmi.html#scope-of-cross-ancestry-testing" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="gxe-ppbmi.html#cb21-1" tabindex="-1"></a>meta_scope <span class="ot">&lt;-</span> tier1_meta[, .N, by <span class="ot">=</span> .(scope, n_ancestries, lead_concordant)]</span>
-<span id="cb21-2"><a href="gxe-ppbmi.html#cb21-2" tabindex="-1"></a><span class="fu">setorder</span>(meta_scope, <span class="sc">-</span>N)</span>
-<span id="cb21-3"><a href="gxe-ppbmi.html#cb21-3" tabindex="-1"></a><span class="fu">kable</span>(meta_scope, <span class="at">caption =</span> <span class="st">&quot;Cross-ancestry Tier-1 synthesis by overlap and lead-variant concordance.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="gxe-ppbmi.html#cb18-1" tabindex="-1"></a>meta_scope <span class="ot">&lt;-</span> tier1_meta[, .N, by <span class="ot">=</span> .(scope, n_ancestries, lead_concordant)]</span>
+<span id="cb18-2"><a href="gxe-ppbmi.html#cb18-2" tabindex="-1"></a><span class="fu">setorder</span>(meta_scope, <span class="sc">-</span>N)</span>
+<span id="cb18-3"><a href="gxe-ppbmi.html#cb18-3" tabindex="-1"></a><span class="fu">kable</span>(meta_scope, <span class="at">caption =</span> <span class="st">&quot;Cross-ancestry Tier-1 synthesis by overlap and lead-variant concordance.&quot;</span>)</span></code></pre></div>
 <table>
 <thead>
 <tr class="header">
@@ -2000,17 +1994,17 @@ signal.</p>
 </tbody>
 </table>
 <p>Cross-ancestry Tier-1 synthesis by overlap and lead-variant concordance.</p>
-<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="gxe-ppbmi.html#cb22-1" tabindex="-1"></a>meta_modality <span class="ot">&lt;-</span> tier1_meta[, .(</span>
-<span id="cb22-2"><a href="gxe-ppbmi.html#cb22-2" tabindex="-1"></a>  <span class="at">n_features =</span> .N,</span>
-<span id="cb22-3"><a href="gxe-ppbmi.html#cb22-3" tabindex="-1"></a>  <span class="at">n_two_ancestry =</span> <span class="fu">sum</span>(n_ancestries <span class="sc">==</span> <span class="dv">2</span>),</span>
-<span id="cb22-4"><a href="gxe-ppbmi.html#cb22-4" tabindex="-1"></a>  <span class="at">n_same_lead =</span> <span class="fu">sum</span>(lead_concordant <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb22-5"><a href="gxe-ppbmi.html#cb22-5" tabindex="-1"></a>  <span class="at">n_sig_any_ancestry =</span> <span class="fu">sum</span>(significant_any_ancestry <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb22-6"><a href="gxe-ppbmi.html#cb22-6" tabindex="-1"></a>  <span class="at">n_sig_both_ancestries =</span> <span class="fu">sum</span>(significant_all_ancestries <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb22-7"><a href="gxe-ppbmi.html#cb22-7" tabindex="-1"></a>  <span class="at">n_acat_q05 =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(q_feature_acat) <span class="sc">&amp;</span> q_feature_acat <span class="sc">&lt;=</span> params<span class="sc">$</span>tier1_q)</span>
-<span id="cb22-8"><a href="gxe-ppbmi.html#cb22-8" tabindex="-1"></a>), by <span class="ot">=</span> modality]</span>
-<span id="cb22-9"><a href="gxe-ppbmi.html#cb22-9" tabindex="-1"></a><span class="fu">setorder</span>(meta_modality, <span class="sc">-</span>n_acat_q05)</span>
-<span id="cb22-10"><a href="gxe-ppbmi.html#cb22-10" tabindex="-1"></a><span class="fu">fwrite</span>(meta_modality, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_cross_ancestry_summary.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb22-11"><a href="gxe-ppbmi.html#cb22-11" tabindex="-1"></a><span class="fu">kable</span>(meta_modality, <span class="at">caption =</span> <span class="st">&quot;Cross-ancestry feature synthesis by modality.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="gxe-ppbmi.html#cb19-1" tabindex="-1"></a>meta_modality <span class="ot">&lt;-</span> tier1_meta[, .(</span>
+<span id="cb19-2"><a href="gxe-ppbmi.html#cb19-2" tabindex="-1"></a>  <span class="at">n_features =</span> .N,</span>
+<span id="cb19-3"><a href="gxe-ppbmi.html#cb19-3" tabindex="-1"></a>  <span class="at">n_two_ancestry =</span> <span class="fu">sum</span>(n_ancestries <span class="sc">==</span> <span class="dv">2</span>),</span>
+<span id="cb19-4"><a href="gxe-ppbmi.html#cb19-4" tabindex="-1"></a>  <span class="at">n_same_lead =</span> <span class="fu">sum</span>(lead_concordant <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb19-5"><a href="gxe-ppbmi.html#cb19-5" tabindex="-1"></a>  <span class="at">n_sig_any_ancestry =</span> <span class="fu">sum</span>(significant_any_ancestry <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb19-6"><a href="gxe-ppbmi.html#cb19-6" tabindex="-1"></a>  <span class="at">n_sig_both_ancestries =</span> <span class="fu">sum</span>(significant_all_ancestries <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb19-7"><a href="gxe-ppbmi.html#cb19-7" tabindex="-1"></a>  <span class="at">n_acat_q05 =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(q_feature_acat) <span class="sc">&amp;</span> q_feature_acat <span class="sc">&lt;=</span> params<span class="sc">$</span>tier1_q)</span>
+<span id="cb19-8"><a href="gxe-ppbmi.html#cb19-8" tabindex="-1"></a>), by <span class="ot">=</span> modality]</span>
+<span id="cb19-9"><a href="gxe-ppbmi.html#cb19-9" tabindex="-1"></a><span class="fu">setorder</span>(meta_modality, <span class="sc">-</span>n_acat_q05)</span>
+<span id="cb19-10"><a href="gxe-ppbmi.html#cb19-10" tabindex="-1"></a><span class="fu">fwrite</span>(meta_modality, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_cross_ancestry_summary.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb19-11"><a href="gxe-ppbmi.html#cb19-11" tabindex="-1"></a><span class="fu">kable</span>(meta_modality, <span class="at">caption =</span> <span class="st">&quot;Cross-ancestry feature synthesis by modality.&quot;</span>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="17%" />
@@ -2124,18 +2118,18 @@ effect-size meta-analysis applies only to the same-variant subset.</p>
 </div>
 <div id="features-significant-in-both-ancestries" class="section level3 hasAnchor" number="10.6.2">
 <h3><span class="header-section-number">10.6.2</span> Features significant in both ancestries<a href="gxe-ppbmi.html#features-significant-in-both-ancestries" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="gxe-ppbmi.html#cb23-1" tabindex="-1"></a>both_anc <span class="ot">&lt;-</span> tier1_meta[significant_all_ancestries <span class="sc">%in%</span> <span class="cn">TRUE</span>,</span>
-<span id="cb23-2"><a href="gxe-ppbmi.html#cb23-2" tabindex="-1"></a>  .(gene_symbol, gene_id, modality, phenotype_id,</span>
-<span id="cb23-3"><a href="gxe-ppbmi.html#cb23-3" tabindex="-1"></a>    variant_id_EAS, b_gi_EAS, qval_EAS,</span>
-<span id="cb23-4"><a href="gxe-ppbmi.html#cb23-4" tabindex="-1"></a>    variant_id_EUR, b_gi_EUR, qval_EUR,</span>
-<span id="cb23-5"><a href="gxe-ppbmi.html#cb23-5" tabindex="-1"></a>    lead_concordant, p_feature_acat, q_feature_acat)]</span>
-<span id="cb23-6"><a href="gxe-ppbmi.html#cb23-6" tabindex="-1"></a><span class="fu">fwrite</span>(both_anc, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_significant_both_ancestries.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb23-7"><a href="gxe-ppbmi.html#cb23-7" tabindex="-1"></a></span>
-<span id="cb23-8"><a href="gxe-ppbmi.html#cb23-8" tabindex="-1"></a>both_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(both_anc)</span>
-<span id="cb23-9"><a href="gxe-ppbmi.html#cb23-9" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">intersect</span>(<span class="fu">c</span>(<span class="st">&quot;qval_EAS&quot;</span>,<span class="st">&quot;qval_EUR&quot;</span>,<span class="st">&quot;p_feature_acat&quot;</span>,<span class="st">&quot;q_feature_acat&quot;</span>), <span class="fu">names</span>(both_print))) {</span>
-<span id="cb23-10"><a href="gxe-ppbmi.html#cb23-10" tabindex="-1"></a>  <span class="fu">set</span>(both_print, <span class="at">j =</span> cc, <span class="at">value =</span> <span class="fu">fmt_p</span>(both_print[[cc]]))</span>
-<span id="cb23-11"><a href="gxe-ppbmi.html#cb23-11" tabindex="-1"></a>}</span>
-<span id="cb23-12"><a href="gxe-ppbmi.html#cb23-12" tabindex="-1"></a><span class="fu">kable</span>(both_print, <span class="at">caption =</span> <span class="st">&quot;Tier-1 molecular phenotypes significant in both EAS and EUR.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="gxe-ppbmi.html#cb20-1" tabindex="-1"></a>both_anc <span class="ot">&lt;-</span> tier1_meta[significant_all_ancestries <span class="sc">%in%</span> <span class="cn">TRUE</span>,</span>
+<span id="cb20-2"><a href="gxe-ppbmi.html#cb20-2" tabindex="-1"></a>  .(gene_symbol, gene_id, modality, phenotype_id,</span>
+<span id="cb20-3"><a href="gxe-ppbmi.html#cb20-3" tabindex="-1"></a>    variant_id_EAS, b_gi_EAS, qval_EAS,</span>
+<span id="cb20-4"><a href="gxe-ppbmi.html#cb20-4" tabindex="-1"></a>    variant_id_EUR, b_gi_EUR, qval_EUR,</span>
+<span id="cb20-5"><a href="gxe-ppbmi.html#cb20-5" tabindex="-1"></a>    lead_concordant, p_feature_acat, q_feature_acat)]</span>
+<span id="cb20-6"><a href="gxe-ppbmi.html#cb20-6" tabindex="-1"></a><span class="fu">fwrite</span>(both_anc, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier1_significant_both_ancestries.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb20-7"><a href="gxe-ppbmi.html#cb20-7" tabindex="-1"></a></span>
+<span id="cb20-8"><a href="gxe-ppbmi.html#cb20-8" tabindex="-1"></a>both_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(both_anc)</span>
+<span id="cb20-9"><a href="gxe-ppbmi.html#cb20-9" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">intersect</span>(<span class="fu">c</span>(<span class="st">&quot;qval_EAS&quot;</span>,<span class="st">&quot;qval_EUR&quot;</span>,<span class="st">&quot;p_feature_acat&quot;</span>,<span class="st">&quot;q_feature_acat&quot;</span>), <span class="fu">names</span>(both_print))) {</span>
+<span id="cb20-10"><a href="gxe-ppbmi.html#cb20-10" tabindex="-1"></a>  <span class="fu">set</span>(both_print, <span class="at">j =</span> cc, <span class="at">value =</span> <span class="fu">fmt_p</span>(both_print[[cc]]))</span>
+<span id="cb20-11"><a href="gxe-ppbmi.html#cb20-11" tabindex="-1"></a>}</span>
+<span id="cb20-12"><a href="gxe-ppbmi.html#cb20-12" tabindex="-1"></a><span class="fu">kable</span>(both_print, <span class="at">caption =</span> <span class="st">&quot;Tier-1 molecular phenotypes significant in both EAS and EUR.&quot;</span>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="6%" />
@@ -2210,25 +2204,25 @@ as allelic replication when different variants are being compared.</p>
 </div>
 <div id="same-lead-effect-concordance" class="section level3 hasAnchor" number="10.6.3">
 <h3><span class="header-section-number">10.6.3</span> Same-lead effect concordance<a href="gxe-ppbmi.html#same-lead-effect-concordance" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="gxe-ppbmi.html#cb24-1" tabindex="-1"></a>same_lead <span class="ot">&lt;-</span> tier1_meta[</span>
-<span id="cb24-2"><a href="gxe-ppbmi.html#cb24-2" tabindex="-1"></a>  lead_concordant <span class="sc">%in%</span> <span class="cn">TRUE</span> <span class="sc">&amp;</span></span>
-<span id="cb24-3"><a href="gxe-ppbmi.html#cb24-3" tabindex="-1"></a>  <span class="fu">is.finite</span>(b_gi_EAS) <span class="sc">&amp;</span> <span class="fu">is.finite</span>(b_gi_EUR)</span>
-<span id="cb24-4"><a href="gxe-ppbmi.html#cb24-4" tabindex="-1"></a>]</span>
-<span id="cb24-5"><a href="gxe-ppbmi.html#cb24-5" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(same_lead) <span class="sc">&gt;</span> <span class="dv">1</span>) {</span>
-<span id="cb24-6"><a href="gxe-ppbmi.html#cb24-6" tabindex="-1"></a>  rho <span class="ot">&lt;-</span> <span class="fu">suppressWarnings</span>(<span class="fu">cor</span>(same_lead<span class="sc">$</span>b_gi_EAS, same_lead<span class="sc">$</span>b_gi_EUR,</span>
-<span id="cb24-7"><a href="gxe-ppbmi.html#cb24-7" tabindex="-1"></a>                              <span class="at">method =</span> <span class="st">&quot;spearman&quot;</span>, <span class="at">use =</span> <span class="st">&quot;complete.obs&quot;</span>))</span>
-<span id="cb24-8"><a href="gxe-ppbmi.html#cb24-8" tabindex="-1"></a>  p3 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(same_lead, <span class="fu">aes</span>(<span class="at">x =</span> b_gi_EAS, <span class="at">y =</span> b_gi_EUR)) <span class="sc">+</span></span>
-<span id="cb24-9"><a href="gxe-ppbmi.html#cb24-9" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
-<span id="cb24-10"><a href="gxe-ppbmi.html#cb24-10" tabindex="-1"></a>    <span class="fu">geom_abline</span>(<span class="at">slope =</span> <span class="dv">1</span>, <span class="at">intercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
-<span id="cb24-11"><a href="gxe-ppbmi.html#cb24-11" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EAS)&quot;</span>),</span>
-<span id="cb24-12"><a href="gxe-ppbmi.html#cb24-12" tabindex="-1"></a>         <span class="at">y =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EUR)&quot;</span>),</span>
-<span id="cb24-13"><a href="gxe-ppbmi.html#cb24-13" tabindex="-1"></a>         <span class="at">title =</span> <span class="st">&quot;Same-lead Tier-1 interaction effects across ancestries&quot;</span>,</span>
-<span id="cb24-14"><a href="gxe-ppbmi.html#cb24-14" tabindex="-1"></a>         <span class="at">subtitle =</span> <span class="fu">paste0</span>(<span class="st">&quot;Spearman rho = &quot;</span>, <span class="fu">round</span>(rho, <span class="dv">2</span>), <span class="st">&quot;; n = &quot;</span>, <span class="fu">nrow</span>(same_lead))) <span class="sc">+</span></span>
-<span id="cb24-15"><a href="gxe-ppbmi.html#cb24-15" tabindex="-1"></a>    <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
-<span id="cb24-16"><a href="gxe-ppbmi.html#cb24-16" tabindex="-1"></a>  <span class="fu">print</span>(p3)</span>
-<span id="cb24-17"><a href="gxe-ppbmi.html#cb24-17" tabindex="-1"></a>  <span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier1_same_lead_concordance.png&quot;</span>), p3,</span>
-<span id="cb24-18"><a href="gxe-ppbmi.html#cb24-18" tabindex="-1"></a>         <span class="at">width =</span> <span class="dv">7</span>, <span class="at">height =</span> <span class="dv">6</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span>
-<span id="cb24-19"><a href="gxe-ppbmi.html#cb24-19" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="gxe-ppbmi.html#cb21-1" tabindex="-1"></a>same_lead <span class="ot">&lt;-</span> tier1_meta[</span>
+<span id="cb21-2"><a href="gxe-ppbmi.html#cb21-2" tabindex="-1"></a>  lead_concordant <span class="sc">%in%</span> <span class="cn">TRUE</span> <span class="sc">&amp;</span></span>
+<span id="cb21-3"><a href="gxe-ppbmi.html#cb21-3" tabindex="-1"></a>  <span class="fu">is.finite</span>(b_gi_EAS) <span class="sc">&amp;</span> <span class="fu">is.finite</span>(b_gi_EUR)</span>
+<span id="cb21-4"><a href="gxe-ppbmi.html#cb21-4" tabindex="-1"></a>]</span>
+<span id="cb21-5"><a href="gxe-ppbmi.html#cb21-5" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(same_lead) <span class="sc">&gt;</span> <span class="dv">1</span>) {</span>
+<span id="cb21-6"><a href="gxe-ppbmi.html#cb21-6" tabindex="-1"></a>  rho <span class="ot">&lt;-</span> <span class="fu">suppressWarnings</span>(<span class="fu">cor</span>(same_lead<span class="sc">$</span>b_gi_EAS, same_lead<span class="sc">$</span>b_gi_EUR,</span>
+<span id="cb21-7"><a href="gxe-ppbmi.html#cb21-7" tabindex="-1"></a>                              <span class="at">method =</span> <span class="st">&quot;spearman&quot;</span>, <span class="at">use =</span> <span class="st">&quot;complete.obs&quot;</span>))</span>
+<span id="cb21-8"><a href="gxe-ppbmi.html#cb21-8" tabindex="-1"></a>  p3 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(same_lead, <span class="fu">aes</span>(<span class="at">x =</span> b_gi_EAS, <span class="at">y =</span> b_gi_EUR)) <span class="sc">+</span></span>
+<span id="cb21-9"><a href="gxe-ppbmi.html#cb21-9" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
+<span id="cb21-10"><a href="gxe-ppbmi.html#cb21-10" tabindex="-1"></a>    <span class="fu">geom_abline</span>(<span class="at">slope =</span> <span class="dv">1</span>, <span class="at">intercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb21-11"><a href="gxe-ppbmi.html#cb21-11" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EAS)&quot;</span>),</span>
+<span id="cb21-12"><a href="gxe-ppbmi.html#cb21-12" tabindex="-1"></a>         <span class="at">y =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EUR)&quot;</span>),</span>
+<span id="cb21-13"><a href="gxe-ppbmi.html#cb21-13" tabindex="-1"></a>         <span class="at">title =</span> <span class="st">&quot;Same-lead Tier-1 interaction effects across ancestries&quot;</span>,</span>
+<span id="cb21-14"><a href="gxe-ppbmi.html#cb21-14" tabindex="-1"></a>         <span class="at">subtitle =</span> <span class="fu">paste0</span>(<span class="st">&quot;Spearman rho = &quot;</span>, <span class="fu">round</span>(rho, <span class="dv">2</span>), <span class="st">&quot;; n = &quot;</span>, <span class="fu">nrow</span>(same_lead))) <span class="sc">+</span></span>
+<span id="cb21-15"><a href="gxe-ppbmi.html#cb21-15" tabindex="-1"></a>    <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
+<span id="cb21-16"><a href="gxe-ppbmi.html#cb21-16" tabindex="-1"></a>  <span class="fu">print</span>(p3)</span>
+<span id="cb21-17"><a href="gxe-ppbmi.html#cb21-17" tabindex="-1"></a>  <span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier1_same_lead_concordance.png&quot;</span>), p3,</span>
+<span id="cb21-18"><a href="gxe-ppbmi.html#cb21-18" tabindex="-1"></a>         <span class="at">width =</span> <span class="dv">7</span>, <span class="at">height =</span> <span class="dv">6</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span>
+<span id="cb21-19"><a href="gxe-ppbmi.html#cb21-19" tabindex="-1"></a>}</span></code></pre></div>
 <p><img src=".staging/raw_gxe-ppbmi_files/figure-markdown_github/same-lead-scatter-1.png" /></p>
 </div>
 </div>
@@ -2239,19 +2233,19 @@ genome-wide discovery layer: it tests molecular phenotypes prioritized
 from other genetic evidence and performs a focused cis G×ppBMI scan.</p>
 <div id="overall-yield" class="section level3 hasAnchor" number="10.7.1">
 <h3><span class="header-section-number">10.7.1</span> Overall yield<a href="gxe-ppbmi.html#overall-yield" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="gxe-ppbmi.html#cb25-1" tabindex="-1"></a>tier2_yield <span class="ot">&lt;-</span> tier2[, .(</span>
-<span id="cb25-2"><a href="gxe-ppbmi.html#cb25-2" tabindex="-1"></a>  <span class="at">n_prioritized =</span> .N,</span>
-<span id="cb25-3"><a href="gxe-ppbmi.html#cb25-3" tabindex="-1"></a>  <span class="at">n_q05 =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(q_meta) <span class="sc">&amp;</span> q_meta <span class="sc">&lt;=</span> params<span class="sc">$</span>tier2_q),</span>
-<span id="cb25-4"><a href="gxe-ppbmi.html#cb25-4" tabindex="-1"></a>  <span class="at">n_two_ancestry =</span> <span class="fu">sum</span>(n_ancestries <span class="sc">==</span> <span class="dv">2</span>),</span>
-<span id="cb25-5"><a href="gxe-ppbmi.html#cb25-5" tabindex="-1"></a>  <span class="at">n_one_ancestry =</span> <span class="fu">sum</span>(n_ancestries <span class="sc">==</span> <span class="dv">1</span>)</span>
-<span id="cb25-6"><a href="gxe-ppbmi.html#cb25-6" tabindex="-1"></a>), by <span class="ot">=</span> modality]</span>
-<span id="cb25-7"><a href="gxe-ppbmi.html#cb25-7" tabindex="-1"></a>tier2_yield[, q05_rate <span class="sc">:=</span> n_q05 <span class="sc">/</span> n_prioritized]</span>
-<span id="cb25-8"><a href="gxe-ppbmi.html#cb25-8" tabindex="-1"></a><span class="fu">setorder</span>(tier2_yield, <span class="sc">-</span>n_q05)</span>
-<span id="cb25-9"><a href="gxe-ppbmi.html#cb25-9" tabindex="-1"></a><span class="fu">fwrite</span>(tier2_yield, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier2_yield_by_modality.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb25-10"><a href="gxe-ppbmi.html#cb25-10" tabindex="-1"></a></span>
-<span id="cb25-11"><a href="gxe-ppbmi.html#cb25-11" tabindex="-1"></a>tier2_yield_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier2_yield)</span>
-<span id="cb25-12"><a href="gxe-ppbmi.html#cb25-12" tabindex="-1"></a>tier2_yield_print[, q05_rate <span class="sc">:=</span> <span class="fu">fmt_pct</span>(q05_rate, <span class="dv">1</span>)]</span>
-<span id="cb25-13"><a href="gxe-ppbmi.html#cb25-13" tabindex="-1"></a><span class="fu">kable</span>(tier2_yield_print, <span class="at">caption =</span> <span class="st">&quot;Tier-2 prioritized G×ppBMI results by modality.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="gxe-ppbmi.html#cb22-1" tabindex="-1"></a>tier2_yield <span class="ot">&lt;-</span> tier2[, .(</span>
+<span id="cb22-2"><a href="gxe-ppbmi.html#cb22-2" tabindex="-1"></a>  <span class="at">n_prioritized =</span> .N,</span>
+<span id="cb22-3"><a href="gxe-ppbmi.html#cb22-3" tabindex="-1"></a>  <span class="at">n_q05 =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(q_meta) <span class="sc">&amp;</span> q_meta <span class="sc">&lt;=</span> params<span class="sc">$</span>tier2_q),</span>
+<span id="cb22-4"><a href="gxe-ppbmi.html#cb22-4" tabindex="-1"></a>  <span class="at">n_two_ancestry =</span> <span class="fu">sum</span>(n_ancestries <span class="sc">==</span> <span class="dv">2</span>),</span>
+<span id="cb22-5"><a href="gxe-ppbmi.html#cb22-5" tabindex="-1"></a>  <span class="at">n_one_ancestry =</span> <span class="fu">sum</span>(n_ancestries <span class="sc">==</span> <span class="dv">1</span>)</span>
+<span id="cb22-6"><a href="gxe-ppbmi.html#cb22-6" tabindex="-1"></a>), by <span class="ot">=</span> modality]</span>
+<span id="cb22-7"><a href="gxe-ppbmi.html#cb22-7" tabindex="-1"></a>tier2_yield[, q05_rate <span class="sc">:=</span> n_q05 <span class="sc">/</span> n_prioritized]</span>
+<span id="cb22-8"><a href="gxe-ppbmi.html#cb22-8" tabindex="-1"></a><span class="fu">setorder</span>(tier2_yield, <span class="sc">-</span>n_q05)</span>
+<span id="cb22-9"><a href="gxe-ppbmi.html#cb22-9" tabindex="-1"></a><span class="fu">fwrite</span>(tier2_yield, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier2_yield_by_modality.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb22-10"><a href="gxe-ppbmi.html#cb22-10" tabindex="-1"></a></span>
+<span id="cb22-11"><a href="gxe-ppbmi.html#cb22-11" tabindex="-1"></a>tier2_yield_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier2_yield)</span>
+<span id="cb22-12"><a href="gxe-ppbmi.html#cb22-12" tabindex="-1"></a>tier2_yield_print[, q05_rate <span class="sc">:=</span> <span class="fu">fmt_pct</span>(q05_rate, <span class="dv">1</span>)]</span>
+<span id="cb22-13"><a href="gxe-ppbmi.html#cb22-13" tabindex="-1"></a><span class="fu">kable</span>(tier2_yield_print, <span class="at">caption =</span> <span class="st">&quot;Tier-2 prioritized G×ppBMI results by modality.&quot;</span>)</span></code></pre></div>
 <table style="width:99%;">
 <colgroup>
 <col width="22%" />
@@ -2365,25 +2359,25 @@ replicated discoveries.</p>
 </div>
 <div id="two-ancestry-evidence-hierarchy" class="section level3 hasAnchor" number="10.7.2">
 <h3><span class="header-section-number">10.7.2</span> Two-ancestry evidence hierarchy<a href="gxe-ppbmi.html#two-ancestry-evidence-hierarchy" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="gxe-ppbmi.html#cb26-1" tabindex="-1"></a>tier2_support <span class="ot">&lt;-</span> <span class="fu">data.table</span>(</span>
-<span id="cb26-2"><a href="gxe-ppbmi.html#cb26-2" tabindex="-1"></a>  <span class="at">criterion =</span> <span class="fu">c</span>(</span>
-<span id="cb26-3"><a href="gxe-ppbmi.html#cb26-3" tabindex="-1"></a>    <span class="st">&quot;Two ancestries tested&quot;</span>,</span>
-<span id="cb26-4"><a href="gxe-ppbmi.html#cb26-4" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;Two ancestries + q_meta &lt;= &quot;</span>, params<span class="sc">$</span>tier2_q),</span>
-<span id="cb26-5"><a href="gxe-ppbmi.html#cb26-5" tabindex="-1"></a>    <span class="st">&quot;Two ancestries + same interaction direction&quot;</span>,</span>
-<span id="cb26-6"><a href="gxe-ppbmi.html#cb26-6" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;Two ancestries + nominal P &lt; &quot;</span>, params<span class="sc">$</span>ancestry_nominal_p, <span class="st">&quot; in both&quot;</span>),</span>
-<span id="cb26-7"><a href="gxe-ppbmi.html#cb26-7" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;Two ancestries + P_het &gt;= &quot;</span>, params<span class="sc">$</span>heterogeneity_p),</span>
-<span id="cb26-8"><a href="gxe-ppbmi.html#cb26-8" tabindex="-1"></a>    <span class="st">&quot;Robust combined sensitivity definition&quot;</span></span>
-<span id="cb26-9"><a href="gxe-ppbmi.html#cb26-9" tabindex="-1"></a>  ),</span>
-<span id="cb26-10"><a href="gxe-ppbmi.html#cb26-10" tabindex="-1"></a>  <span class="at">n =</span> <span class="fu">c</span>(</span>
-<span id="cb26-11"><a href="gxe-ppbmi.html#cb26-11" tabindex="-1"></a>    <span class="fu">nrow</span>(tier2_two),</span>
-<span id="cb26-12"><a href="gxe-ppbmi.html#cb26-12" tabindex="-1"></a>    tier2_two[<span class="fu">is.finite</span>(q_meta) <span class="sc">&amp;</span> q_meta <span class="sc">&lt;=</span> params<span class="sc">$</span>tier2_q, .N],</span>
-<span id="cb26-13"><a href="gxe-ppbmi.html#cb26-13" tabindex="-1"></a>    tier2_two[same_direction <span class="sc">%in%</span> <span class="cn">TRUE</span>, .N],</span>
-<span id="cb26-14"><a href="gxe-ppbmi.html#cb26-14" tabindex="-1"></a>    tier2_two[both_nominal <span class="sc">%in%</span> <span class="cn">TRUE</span>, .N],</span>
-<span id="cb26-15"><a href="gxe-ppbmi.html#cb26-15" tabindex="-1"></a>    tier2_two[low_heterogeneity <span class="sc">%in%</span> <span class="cn">TRUE</span>, .N],</span>
-<span id="cb26-16"><a href="gxe-ppbmi.html#cb26-16" tabindex="-1"></a>    <span class="fu">nrow</span>(tier2_robust)</span>
-<span id="cb26-17"><a href="gxe-ppbmi.html#cb26-17" tabindex="-1"></a>  )</span>
-<span id="cb26-18"><a href="gxe-ppbmi.html#cb26-18" tabindex="-1"></a>)</span>
-<span id="cb26-19"><a href="gxe-ppbmi.html#cb26-19" tabindex="-1"></a><span class="fu">kable</span>(tier2_support, <span class="at">caption =</span> <span class="st">&quot;Tier-2 two-ancestry evidence hierarchy.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="gxe-ppbmi.html#cb23-1" tabindex="-1"></a>tier2_support <span class="ot">&lt;-</span> <span class="fu">data.table</span>(</span>
+<span id="cb23-2"><a href="gxe-ppbmi.html#cb23-2" tabindex="-1"></a>  <span class="at">criterion =</span> <span class="fu">c</span>(</span>
+<span id="cb23-3"><a href="gxe-ppbmi.html#cb23-3" tabindex="-1"></a>    <span class="st">&quot;Two ancestries tested&quot;</span>,</span>
+<span id="cb23-4"><a href="gxe-ppbmi.html#cb23-4" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;Two ancestries + q_meta &lt;= &quot;</span>, params<span class="sc">$</span>tier2_q),</span>
+<span id="cb23-5"><a href="gxe-ppbmi.html#cb23-5" tabindex="-1"></a>    <span class="st">&quot;Two ancestries + same interaction direction&quot;</span>,</span>
+<span id="cb23-6"><a href="gxe-ppbmi.html#cb23-6" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;Two ancestries + nominal P &lt; &quot;</span>, params<span class="sc">$</span>ancestry_nominal_p, <span class="st">&quot; in both&quot;</span>),</span>
+<span id="cb23-7"><a href="gxe-ppbmi.html#cb23-7" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;Two ancestries + P_het &gt;= &quot;</span>, params<span class="sc">$</span>heterogeneity_p),</span>
+<span id="cb23-8"><a href="gxe-ppbmi.html#cb23-8" tabindex="-1"></a>    <span class="st">&quot;Robust combined sensitivity definition&quot;</span></span>
+<span id="cb23-9"><a href="gxe-ppbmi.html#cb23-9" tabindex="-1"></a>  ),</span>
+<span id="cb23-10"><a href="gxe-ppbmi.html#cb23-10" tabindex="-1"></a>  <span class="at">n =</span> <span class="fu">c</span>(</span>
+<span id="cb23-11"><a href="gxe-ppbmi.html#cb23-11" tabindex="-1"></a>    <span class="fu">nrow</span>(tier2_two),</span>
+<span id="cb23-12"><a href="gxe-ppbmi.html#cb23-12" tabindex="-1"></a>    tier2_two[<span class="fu">is.finite</span>(q_meta) <span class="sc">&amp;</span> q_meta <span class="sc">&lt;=</span> params<span class="sc">$</span>tier2_q, .N],</span>
+<span id="cb23-13"><a href="gxe-ppbmi.html#cb23-13" tabindex="-1"></a>    tier2_two[same_direction <span class="sc">%in%</span> <span class="cn">TRUE</span>, .N],</span>
+<span id="cb23-14"><a href="gxe-ppbmi.html#cb23-14" tabindex="-1"></a>    tier2_two[both_nominal <span class="sc">%in%</span> <span class="cn">TRUE</span>, .N],</span>
+<span id="cb23-15"><a href="gxe-ppbmi.html#cb23-15" tabindex="-1"></a>    tier2_two[low_heterogeneity <span class="sc">%in%</span> <span class="cn">TRUE</span>, .N],</span>
+<span id="cb23-16"><a href="gxe-ppbmi.html#cb23-16" tabindex="-1"></a>    <span class="fu">nrow</span>(tier2_robust)</span>
+<span id="cb23-17"><a href="gxe-ppbmi.html#cb23-17" tabindex="-1"></a>  )</span>
+<span id="cb23-18"><a href="gxe-ppbmi.html#cb23-18" tabindex="-1"></a>)</span>
+<span id="cb23-19"><a href="gxe-ppbmi.html#cb23-19" tabindex="-1"></a><span class="fu">kable</span>(tier2_support, <span class="at">caption =</span> <span class="st">&quot;Tier-2 two-ancestry evidence hierarchy.&quot;</span>)</span></code></pre></div>
 <table>
 <thead>
 <tr class="header">
@@ -2430,12 +2424,12 @@ ancestries; and</li>
 </ul>
 <p>This is a reporting sensitivity definition, not a new production
 pipeline threshold.</p>
-<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="gxe-ppbmi.html#cb27-1" tabindex="-1"></a>robust_modality <span class="ot">&lt;-</span> tier2_robust[, .(</span>
-<span id="cb27-2"><a href="gxe-ppbmi.html#cb27-2" tabindex="-1"></a>  <span class="at">n_robust =</span> .N,</span>
-<span id="cb27-3"><a href="gxe-ppbmi.html#cb27-3" tabindex="-1"></a>  <span class="at">n_genes =</span> <span class="fu">uniqueN</span>(gene_id)</span>
-<span id="cb27-4"><a href="gxe-ppbmi.html#cb27-4" tabindex="-1"></a>), by <span class="ot">=</span> modality]</span>
-<span id="cb27-5"><a href="gxe-ppbmi.html#cb27-5" tabindex="-1"></a><span class="fu">setorder</span>(robust_modality, <span class="sc">-</span>n_robust)</span>
-<span id="cb27-6"><a href="gxe-ppbmi.html#cb27-6" tabindex="-1"></a><span class="fu">kable</span>(robust_modality, <span class="at">caption =</span> <span class="st">&quot;Robust two-ancestry Tier-2 sensitivity subset by modality.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="gxe-ppbmi.html#cb24-1" tabindex="-1"></a>robust_modality <span class="ot">&lt;-</span> tier2_robust[, .(</span>
+<span id="cb24-2"><a href="gxe-ppbmi.html#cb24-2" tabindex="-1"></a>  <span class="at">n_robust =</span> .N,</span>
+<span id="cb24-3"><a href="gxe-ppbmi.html#cb24-3" tabindex="-1"></a>  <span class="at">n_genes =</span> <span class="fu">uniqueN</span>(gene_id)</span>
+<span id="cb24-4"><a href="gxe-ppbmi.html#cb24-4" tabindex="-1"></a>), by <span class="ot">=</span> modality]</span>
+<span id="cb24-5"><a href="gxe-ppbmi.html#cb24-5" tabindex="-1"></a><span class="fu">setorder</span>(robust_modality, <span class="sc">-</span>n_robust)</span>
+<span id="cb24-6"><a href="gxe-ppbmi.html#cb24-6" tabindex="-1"></a><span class="fu">kable</span>(robust_modality, <span class="at">caption =</span> <span class="st">&quot;Robust two-ancestry Tier-2 sensitivity subset by modality.&quot;</span>)</span></code></pre></div>
 <table>
 <thead>
 <tr class="header">
@@ -2493,38 +2487,38 @@ pipeline threshold.</p>
 </tbody>
 </table>
 <p>Robust two-ancestry Tier-2 sensitivity subset by modality.</p>
-<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="gxe-ppbmi.html#cb28-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(tier2_two)) {</span>
-<span id="cb28-2"><a href="gxe-ppbmi.html#cb28-2" tabindex="-1"></a>  p4 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(tier2_two, <span class="fu">aes</span>(<span class="at">x =</span> b_gi_EAS, <span class="at">y =</span> b_gi_EUR,</span>
-<span id="cb28-3"><a href="gxe-ppbmi.html#cb28-3" tabindex="-1"></a>                             <span class="at">shape =</span> robust_two_ancestry)) <span class="sc">+</span></span>
-<span id="cb28-4"><a href="gxe-ppbmi.html#cb28-4" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.45</span>) <span class="sc">+</span></span>
-<span id="cb28-5"><a href="gxe-ppbmi.html#cb28-5" tabindex="-1"></a>    <span class="fu">geom_abline</span>(<span class="at">slope =</span> <span class="dv">1</span>, <span class="at">intercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
-<span id="cb28-6"><a href="gxe-ppbmi.html#cb28-6" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EAS)&quot;</span>),</span>
-<span id="cb28-7"><a href="gxe-ppbmi.html#cb28-7" tabindex="-1"></a>         <span class="at">y =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EUR)&quot;</span>),</span>
-<span id="cb28-8"><a href="gxe-ppbmi.html#cb28-8" tabindex="-1"></a>         <span class="at">shape =</span> <span class="st">&quot;Robust subset&quot;</span>,</span>
-<span id="cb28-9"><a href="gxe-ppbmi.html#cb28-9" tabindex="-1"></a>         <span class="at">title =</span> <span class="st">&quot;Tier-2 interaction-effect concordance across ancestries&quot;</span>) <span class="sc">+</span></span>
-<span id="cb28-10"><a href="gxe-ppbmi.html#cb28-10" tabindex="-1"></a>    <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
-<span id="cb28-11"><a href="gxe-ppbmi.html#cb28-11" tabindex="-1"></a>  <span class="fu">print</span>(p4)</span>
-<span id="cb28-12"><a href="gxe-ppbmi.html#cb28-12" tabindex="-1"></a>  <span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier2_two_ancestry_concordance.png&quot;</span>), p4,</span>
-<span id="cb28-13"><a href="gxe-ppbmi.html#cb28-13" tabindex="-1"></a>         <span class="at">width =</span> <span class="fl">7.5</span>, <span class="at">height =</span> <span class="fl">6.2</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span>
-<span id="cb28-14"><a href="gxe-ppbmi.html#cb28-14" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="gxe-ppbmi.html#cb25-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(tier2_two)) {</span>
+<span id="cb25-2"><a href="gxe-ppbmi.html#cb25-2" tabindex="-1"></a>  p4 <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(tier2_two, <span class="fu">aes</span>(<span class="at">x =</span> b_gi_EAS, <span class="at">y =</span> b_gi_EUR,</span>
+<span id="cb25-3"><a href="gxe-ppbmi.html#cb25-3" tabindex="-1"></a>                             <span class="at">shape =</span> robust_two_ancestry)) <span class="sc">+</span></span>
+<span id="cb25-4"><a href="gxe-ppbmi.html#cb25-4" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.45</span>) <span class="sc">+</span></span>
+<span id="cb25-5"><a href="gxe-ppbmi.html#cb25-5" tabindex="-1"></a>    <span class="fu">geom_abline</span>(<span class="at">slope =</span> <span class="dv">1</span>, <span class="at">intercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb25-6"><a href="gxe-ppbmi.html#cb25-6" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EAS)&quot;</span>),</span>
+<span id="cb25-7"><a href="gxe-ppbmi.html#cb25-7" tabindex="-1"></a>         <span class="at">y =</span> <span class="fu">expression</span>(beta[G <span class="sc">%*%</span> E]<span class="sc">~</span><span class="st">&quot;(EUR)&quot;</span>),</span>
+<span id="cb25-8"><a href="gxe-ppbmi.html#cb25-8" tabindex="-1"></a>         <span class="at">shape =</span> <span class="st">&quot;Robust subset&quot;</span>,</span>
+<span id="cb25-9"><a href="gxe-ppbmi.html#cb25-9" tabindex="-1"></a>         <span class="at">title =</span> <span class="st">&quot;Tier-2 interaction-effect concordance across ancestries&quot;</span>) <span class="sc">+</span></span>
+<span id="cb25-10"><a href="gxe-ppbmi.html#cb25-10" tabindex="-1"></a>    <span class="fu">theme_bw</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
+<span id="cb25-11"><a href="gxe-ppbmi.html#cb25-11" tabindex="-1"></a>  <span class="fu">print</span>(p4)</span>
+<span id="cb25-12"><a href="gxe-ppbmi.html#cb25-12" tabindex="-1"></a>  <span class="fu">ggsave</span>(<span class="fu">file.path</span>(params<span class="sc">$</span>figures_dir, <span class="st">&quot;tier2_two_ancestry_concordance.png&quot;</span>), p4,</span>
+<span id="cb25-13"><a href="gxe-ppbmi.html#cb25-13" tabindex="-1"></a>         <span class="at">width =</span> <span class="fl">7.5</span>, <span class="at">height =</span> <span class="fl">6.2</span>, <span class="at">dpi =</span> <span class="dv">160</span>)</span>
+<span id="cb25-14"><a href="gxe-ppbmi.html#cb25-14" tabindex="-1"></a>}</span></code></pre></div>
 <p><img src=".staging/raw_gxe-ppbmi_files/figure-markdown_github/tier2-concordance-plot-1.png" /></p>
 </div>
 <div id="strongest-robust-tier-2-features" class="section level3 hasAnchor" number="10.7.3">
 <h3><span class="header-section-number">10.7.3</span> Strongest robust Tier-2 features<a href="gxe-ppbmi.html#strongest-robust-tier-2-features" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="gxe-ppbmi.html#cb29-1" tabindex="-1"></a>tier2_robust_top <span class="ot">&lt;-</span> tier2_robust[<span class="fu">order</span>(q_meta, p_meta)][<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N),</span>
-<span id="cb29-2"><a href="gxe-ppbmi.html#cb29-2" tabindex="-1"></a>  .(gene_symbol, gene_id, modality, phenotype_id, variant_id,</span>
-<span id="cb29-3"><a href="gxe-ppbmi.html#cb29-3" tabindex="-1"></a>    beta_meta, se_meta, p_meta, q_meta, p_het, i2,</span>
-<span id="cb29-4"><a href="gxe-ppbmi.html#cb29-4" tabindex="-1"></a>    b_gi_EAS, pval_EAS, b_gi_EUR, pval_EUR)]</span>
-<span id="cb29-5"><a href="gxe-ppbmi.html#cb29-5" tabindex="-1"></a><span class="fu">fwrite</span>(tier2_robust_top, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier2_robust_top_signals.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb29-6"><a href="gxe-ppbmi.html#cb29-6" tabindex="-1"></a></span>
-<span id="cb29-7"><a href="gxe-ppbmi.html#cb29-7" tabindex="-1"></a>tier2_robust_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier2_robust_top)</span>
-<span id="cb29-8"><a href="gxe-ppbmi.html#cb29-8" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">intersect</span>(<span class="fu">c</span>(<span class="st">&quot;p_meta&quot;</span>,<span class="st">&quot;q_meta&quot;</span>,<span class="st">&quot;p_het&quot;</span>,<span class="st">&quot;pval_EAS&quot;</span>,<span class="st">&quot;pval_EUR&quot;</span>), <span class="fu">names</span>(tier2_robust_print))) {</span>
-<span id="cb29-9"><a href="gxe-ppbmi.html#cb29-9" tabindex="-1"></a>  <span class="fu">set</span>(tier2_robust_print, <span class="at">j =</span> cc, <span class="at">value =</span> <span class="fu">fmt_p</span>(tier2_robust_print[[cc]]))</span>
-<span id="cb29-10"><a href="gxe-ppbmi.html#cb29-10" tabindex="-1"></a>}</span>
-<span id="cb29-11"><a href="gxe-ppbmi.html#cb29-11" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">intersect</span>(<span class="fu">c</span>(<span class="st">&quot;beta_meta&quot;</span>,<span class="st">&quot;se_meta&quot;</span>,<span class="st">&quot;i2&quot;</span>,<span class="st">&quot;b_gi_EAS&quot;</span>,<span class="st">&quot;b_gi_EUR&quot;</span>), <span class="fu">names</span>(tier2_robust_print))) {</span>
-<span id="cb29-12"><a href="gxe-ppbmi.html#cb29-12" tabindex="-1"></a>  <span class="fu">set</span>(tier2_robust_print, <span class="at">j =</span> cc, <span class="at">value =</span> <span class="fu">round</span>(tier2_robust_print[[cc]], <span class="dv">4</span>))</span>
-<span id="cb29-13"><a href="gxe-ppbmi.html#cb29-13" tabindex="-1"></a>}</span>
-<span id="cb29-14"><a href="gxe-ppbmi.html#cb29-14" tabindex="-1"></a><span class="fu">kable</span>(tier2_robust_print, <span class="at">caption =</span> <span class="st">&quot;Top robust two-ancestry Tier-2 G×ppBMI signals.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="gxe-ppbmi.html#cb26-1" tabindex="-1"></a>tier2_robust_top <span class="ot">&lt;-</span> tier2_robust[<span class="fu">order</span>(q_meta, p_meta)][<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N),</span>
+<span id="cb26-2"><a href="gxe-ppbmi.html#cb26-2" tabindex="-1"></a>  .(gene_symbol, gene_id, modality, phenotype_id, variant_id,</span>
+<span id="cb26-3"><a href="gxe-ppbmi.html#cb26-3" tabindex="-1"></a>    beta_meta, se_meta, p_meta, q_meta, p_het, i2,</span>
+<span id="cb26-4"><a href="gxe-ppbmi.html#cb26-4" tabindex="-1"></a>    b_gi_EAS, pval_EAS, b_gi_EUR, pval_EUR)]</span>
+<span id="cb26-5"><a href="gxe-ppbmi.html#cb26-5" tabindex="-1"></a><span class="fu">fwrite</span>(tier2_robust_top, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier2_robust_top_signals.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb26-6"><a href="gxe-ppbmi.html#cb26-6" tabindex="-1"></a></span>
+<span id="cb26-7"><a href="gxe-ppbmi.html#cb26-7" tabindex="-1"></a>tier2_robust_print <span class="ot">&lt;-</span> <span class="fu">copy</span>(tier2_robust_top)</span>
+<span id="cb26-8"><a href="gxe-ppbmi.html#cb26-8" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">intersect</span>(<span class="fu">c</span>(<span class="st">&quot;p_meta&quot;</span>,<span class="st">&quot;q_meta&quot;</span>,<span class="st">&quot;p_het&quot;</span>,<span class="st">&quot;pval_EAS&quot;</span>,<span class="st">&quot;pval_EUR&quot;</span>), <span class="fu">names</span>(tier2_robust_print))) {</span>
+<span id="cb26-9"><a href="gxe-ppbmi.html#cb26-9" tabindex="-1"></a>  <span class="fu">set</span>(tier2_robust_print, <span class="at">j =</span> cc, <span class="at">value =</span> <span class="fu">fmt_p</span>(tier2_robust_print[[cc]]))</span>
+<span id="cb26-10"><a href="gxe-ppbmi.html#cb26-10" tabindex="-1"></a>}</span>
+<span id="cb26-11"><a href="gxe-ppbmi.html#cb26-11" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">intersect</span>(<span class="fu">c</span>(<span class="st">&quot;beta_meta&quot;</span>,<span class="st">&quot;se_meta&quot;</span>,<span class="st">&quot;i2&quot;</span>,<span class="st">&quot;b_gi_EAS&quot;</span>,<span class="st">&quot;b_gi_EUR&quot;</span>), <span class="fu">names</span>(tier2_robust_print))) {</span>
+<span id="cb26-12"><a href="gxe-ppbmi.html#cb26-12" tabindex="-1"></a>  <span class="fu">set</span>(tier2_robust_print, <span class="at">j =</span> cc, <span class="at">value =</span> <span class="fu">round</span>(tier2_robust_print[[cc]], <span class="dv">4</span>))</span>
+<span id="cb26-13"><a href="gxe-ppbmi.html#cb26-13" tabindex="-1"></a>}</span>
+<span id="cb26-14"><a href="gxe-ppbmi.html#cb26-14" tabindex="-1"></a><span class="fu">kable</span>(tier2_robust_print, <span class="at">caption =</span> <span class="st">&quot;Top robust two-ancestry Tier-2 G×ppBMI signals.&quot;</span>)</span></code></pre></div>
 <table>
 <colgroup>
 <col width="6%" />
@@ -2994,21 +2988,21 @@ pipeline threshold.</p>
 </div>
 <div id="recurrent-robust-tier-2-genes" class="section level3 hasAnchor" number="10.7.4">
 <h3><span class="header-section-number">10.7.4</span> Recurrent robust Tier-2 genes<a href="gxe-ppbmi.html#recurrent-robust-tier-2-genes" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="gxe-ppbmi.html#cb30-1" tabindex="-1"></a>tier2_robust_recurrent <span class="ot">&lt;-</span> tier2_robust[, .(</span>
-<span id="cb30-2"><a href="gxe-ppbmi.html#cb30-2" tabindex="-1"></a>  <span class="at">n_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
-<span id="cb30-3"><a href="gxe-ppbmi.html#cb30-3" tabindex="-1"></a>  <span class="at">n_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
-<span id="cb30-4"><a href="gxe-ppbmi.html#cb30-4" tabindex="-1"></a>  <span class="at">modalities =</span> <span class="fu">paste</span>(<span class="fu">sort</span>(<span class="fu">unique</span>(modality)), <span class="at">collapse =</span> <span class="st">&quot;;&quot;</span>),</span>
-<span id="cb30-5"><a href="gxe-ppbmi.html#cb30-5" tabindex="-1"></a>  <span class="at">min_q_meta =</span> <span class="fu">min</span>(q_meta, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb30-6"><a href="gxe-ppbmi.html#cb30-6" tabindex="-1"></a>  <span class="at">max_abs_beta_meta =</span> <span class="fu">max</span>(<span class="fu">abs</span>(beta_meta), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb30-7"><a href="gxe-ppbmi.html#cb30-7" tabindex="-1"></a>), by <span class="ot">=</span> .(gene_id, gene_symbol)]</span>
-<span id="cb30-8"><a href="gxe-ppbmi.html#cb30-8" tabindex="-1"></a><span class="fu">setorder</span>(tier2_robust_recurrent, <span class="sc">-</span>n_features, min_q_meta)</span>
-<span id="cb30-9"><a href="gxe-ppbmi.html#cb30-9" tabindex="-1"></a></span>
-<span id="cb30-10"><a href="gxe-ppbmi.html#cb30-10" tabindex="-1"></a><span class="fu">fwrite</span>(tier2_robust_recurrent,</span>
-<span id="cb30-11"><a href="gxe-ppbmi.html#cb30-11" tabindex="-1"></a>       <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier2_robust_recurrent_genes.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb30-12"><a href="gxe-ppbmi.html#cb30-12" tabindex="-1"></a></span>
-<span id="cb30-13"><a href="gxe-ppbmi.html#cb30-13" tabindex="-1"></a>rr <span class="ot">&lt;-</span> tier2_robust_recurrent[<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N)]</span>
-<span id="cb30-14"><a href="gxe-ppbmi.html#cb30-14" tabindex="-1"></a>rr[, <span class="st">`</span><span class="at">:=</span><span class="st">`</span>(<span class="at">min_q_meta =</span> <span class="fu">fmt_p</span>(min_q_meta), <span class="at">max_abs_beta_meta =</span> <span class="fu">round</span>(max_abs_beta_meta, <span class="dv">3</span>))]</span>
-<span id="cb30-15"><a href="gxe-ppbmi.html#cb30-15" tabindex="-1"></a><span class="fu">kable</span>(rr, <span class="at">caption =</span> <span class="st">&quot;Most recurrent genes in the robust two-ancestry Tier-2 subset.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="gxe-ppbmi.html#cb27-1" tabindex="-1"></a>tier2_robust_recurrent <span class="ot">&lt;-</span> tier2_robust[, .(</span>
+<span id="cb27-2"><a href="gxe-ppbmi.html#cb27-2" tabindex="-1"></a>  <span class="at">n_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
+<span id="cb27-3"><a href="gxe-ppbmi.html#cb27-3" tabindex="-1"></a>  <span class="at">n_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
+<span id="cb27-4"><a href="gxe-ppbmi.html#cb27-4" tabindex="-1"></a>  <span class="at">modalities =</span> <span class="fu">paste</span>(<span class="fu">sort</span>(<span class="fu">unique</span>(modality)), <span class="at">collapse =</span> <span class="st">&quot;;&quot;</span>),</span>
+<span id="cb27-5"><a href="gxe-ppbmi.html#cb27-5" tabindex="-1"></a>  <span class="at">min_q_meta =</span> <span class="fu">min</span>(q_meta, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb27-6"><a href="gxe-ppbmi.html#cb27-6" tabindex="-1"></a>  <span class="at">max_abs_beta_meta =</span> <span class="fu">max</span>(<span class="fu">abs</span>(beta_meta), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb27-7"><a href="gxe-ppbmi.html#cb27-7" tabindex="-1"></a>), by <span class="ot">=</span> .(gene_id, gene_symbol)]</span>
+<span id="cb27-8"><a href="gxe-ppbmi.html#cb27-8" tabindex="-1"></a><span class="fu">setorder</span>(tier2_robust_recurrent, <span class="sc">-</span>n_features, min_q_meta)</span>
+<span id="cb27-9"><a href="gxe-ppbmi.html#cb27-9" tabindex="-1"></a></span>
+<span id="cb27-10"><a href="gxe-ppbmi.html#cb27-10" tabindex="-1"></a><span class="fu">fwrite</span>(tier2_robust_recurrent,</span>
+<span id="cb27-11"><a href="gxe-ppbmi.html#cb27-11" tabindex="-1"></a>       <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;tier2_robust_recurrent_genes.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb27-12"><a href="gxe-ppbmi.html#cb27-12" tabindex="-1"></a></span>
+<span id="cb27-13"><a href="gxe-ppbmi.html#cb27-13" tabindex="-1"></a>rr <span class="ot">&lt;-</span> tier2_robust_recurrent[<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N)]</span>
+<span id="cb27-14"><a href="gxe-ppbmi.html#cb27-14" tabindex="-1"></a>rr[, <span class="st">`</span><span class="at">:=</span><span class="st">`</span>(<span class="at">min_q_meta =</span> <span class="fu">fmt_p</span>(min_q_meta), <span class="at">max_abs_beta_meta =</span> <span class="fu">round</span>(max_abs_beta_meta, <span class="dv">3</span>))]</span>
+<span id="cb27-15"><a href="gxe-ppbmi.html#cb27-15" tabindex="-1"></a><span class="fu">kable</span>(rr, <span class="at">caption =</span> <span class="st">&quot;Most recurrent genes in the robust two-ancestry Tier-2 subset.&quot;</span>)</span></code></pre></div>
 <table style="width:99%;">
 <colgroup>
 <col width="13%" />
@@ -3265,14 +3259,14 @@ pipeline threshold.</p>
 <h2><span class="header-section-number">10.8</span> Biological patterns in the ppBMI interaction atlas<a href="gxe-ppbmi.html#biological-patterns-in-the-ppbmi-interaction-atlas" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="splicing-is-the-dominant-tier-1-interaction-modality" class="section level3 hasAnchor" number="10.8.1">
 <h3><span class="header-section-number">10.8.1</span> Splicing is the dominant Tier-1 interaction modality<a href="gxe-ppbmi.html#splicing-is-the-dominant-tier-1-interaction-modality" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="gxe-ppbmi.html#cb31-1" tabindex="-1"></a>splice_by_anc <span class="ot">&lt;-</span> tier1_sig[, .(</span>
-<span id="cb31-2"><a href="gxe-ppbmi.html#cb31-2" tabindex="-1"></a>  <span class="at">n_significant =</span> .N,</span>
-<span id="cb31-3"><a href="gxe-ppbmi.html#cb31-3" tabindex="-1"></a>  <span class="at">n_splicing =</span> <span class="fu">sum</span>(modality <span class="sc">==</span> <span class="st">&quot;splicing&quot;</span>)</span>
-<span id="cb31-4"><a href="gxe-ppbmi.html#cb31-4" tabindex="-1"></a>), by <span class="ot">=</span> ancestry]</span>
-<span id="cb31-5"><a href="gxe-ppbmi.html#cb31-5" tabindex="-1"></a>splice_by_anc[, splicing_fraction <span class="sc">:=</span> n_splicing <span class="sc">/</span> n_significant]</span>
-<span id="cb31-6"><a href="gxe-ppbmi.html#cb31-6" tabindex="-1"></a>sp <span class="ot">&lt;-</span> <span class="fu">copy</span>(splice_by_anc)</span>
-<span id="cb31-7"><a href="gxe-ppbmi.html#cb31-7" tabindex="-1"></a>sp[, splicing_fraction <span class="sc">:=</span> <span class="fu">fmt_pct</span>(splicing_fraction, <span class="dv">1</span>)]</span>
-<span id="cb31-8"><a href="gxe-ppbmi.html#cb31-8" tabindex="-1"></a><span class="fu">kable</span>(sp, <span class="at">caption =</span> <span class="st">&quot;Contribution of splicing to significant Tier-1 G×ppBMI rows.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="gxe-ppbmi.html#cb28-1" tabindex="-1"></a>splice_by_anc <span class="ot">&lt;-</span> tier1_sig[, .(</span>
+<span id="cb28-2"><a href="gxe-ppbmi.html#cb28-2" tabindex="-1"></a>  <span class="at">n_significant =</span> .N,</span>
+<span id="cb28-3"><a href="gxe-ppbmi.html#cb28-3" tabindex="-1"></a>  <span class="at">n_splicing =</span> <span class="fu">sum</span>(modality <span class="sc">==</span> <span class="st">&quot;splicing&quot;</span>)</span>
+<span id="cb28-4"><a href="gxe-ppbmi.html#cb28-4" tabindex="-1"></a>), by <span class="ot">=</span> ancestry]</span>
+<span id="cb28-5"><a href="gxe-ppbmi.html#cb28-5" tabindex="-1"></a>splice_by_anc[, splicing_fraction <span class="sc">:=</span> n_splicing <span class="sc">/</span> n_significant]</span>
+<span id="cb28-6"><a href="gxe-ppbmi.html#cb28-6" tabindex="-1"></a>sp <span class="ot">&lt;-</span> <span class="fu">copy</span>(splice_by_anc)</span>
+<span id="cb28-7"><a href="gxe-ppbmi.html#cb28-7" tabindex="-1"></a>sp[, splicing_fraction <span class="sc">:=</span> <span class="fu">fmt_pct</span>(splicing_fraction, <span class="dv">1</span>)]</span>
+<span id="cb28-8"><a href="gxe-ppbmi.html#cb28-8" tabindex="-1"></a><span class="fu">kable</span>(sp, <span class="at">caption =</span> <span class="st">&quot;Contribution of splicing to significant Tier-1 G×ppBMI rows.&quot;</span>)</span></code></pre></div>
 <table>
 <thead>
 <tr class="header">
@@ -3307,48 +3301,48 @@ modalities.</p>
 </div>
 <div id="candidate-loci-with-multiple-internal-lines-of-evidence" class="section level3 hasAnchor" number="10.8.2">
 <h3><span class="header-section-number">10.8.2</span> Candidate loci with multiple internal lines of evidence<a href="gxe-ppbmi.html#candidate-loci-with-multiple-internal-lines-of-evidence" class="anchor-section" aria-label="Anchor link to header"></a></h3>
-<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb32-1"><a href="gxe-ppbmi.html#cb32-1" tabindex="-1"></a>t1_gene <span class="ot">&lt;-</span> tier1_sig[, .(</span>
-<span id="cb32-2"><a href="gxe-ppbmi.html#cb32-2" tabindex="-1"></a>  <span class="at">tier1_rows =</span> .N,</span>
-<span id="cb32-3"><a href="gxe-ppbmi.html#cb32-3" tabindex="-1"></a>  <span class="at">tier1_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
-<span id="cb32-4"><a href="gxe-ppbmi.html#cb32-4" tabindex="-1"></a>  <span class="at">tier1_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
-<span id="cb32-5"><a href="gxe-ppbmi.html#cb32-5" tabindex="-1"></a>  <span class="at">tier1_ancestries =</span> <span class="fu">uniqueN</span>(ancestry),</span>
-<span id="cb32-6"><a href="gxe-ppbmi.html#cb32-6" tabindex="-1"></a>  <span class="at">tier1_min_q =</span> <span class="fu">min</span>(qval, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb32-7"><a href="gxe-ppbmi.html#cb32-7" tabindex="-1"></a>), by <span class="ot">=</span> gene_id]</span>
-<span id="cb32-8"><a href="gxe-ppbmi.html#cb32-8" tabindex="-1"></a></span>
-<span id="cb32-9"><a href="gxe-ppbmi.html#cb32-9" tabindex="-1"></a>t1m_gene <span class="ot">&lt;-</span> tier1_meta[, .(</span>
-<span id="cb32-10"><a href="gxe-ppbmi.html#cb32-10" tabindex="-1"></a>  <span class="at">meta_acat_features =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(q_feature_acat) <span class="sc">&amp;</span> q_feature_acat <span class="sc">&lt;=</span> params<span class="sc">$</span>tier1_q),</span>
-<span id="cb32-11"><a href="gxe-ppbmi.html#cb32-11" tabindex="-1"></a>  <span class="at">meta_both_ancestries =</span> <span class="fu">sum</span>(significant_all_ancestries <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb32-12"><a href="gxe-ppbmi.html#cb32-12" tabindex="-1"></a>), by <span class="ot">=</span> gene_id]</span>
-<span id="cb32-13"><a href="gxe-ppbmi.html#cb32-13" tabindex="-1"></a></span>
-<span id="cb32-14"><a href="gxe-ppbmi.html#cb32-14" tabindex="-1"></a>t2r_gene <span class="ot">&lt;-</span> tier2_robust[, .(</span>
-<span id="cb32-15"><a href="gxe-ppbmi.html#cb32-15" tabindex="-1"></a>  <span class="at">tier2_robust_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
-<span id="cb32-16"><a href="gxe-ppbmi.html#cb32-16" tabindex="-1"></a>  <span class="at">tier2_robust_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
-<span id="cb32-17"><a href="gxe-ppbmi.html#cb32-17" tabindex="-1"></a>  <span class="at">tier2_min_q =</span> <span class="fu">min</span>(q_meta, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb32-18"><a href="gxe-ppbmi.html#cb32-18" tabindex="-1"></a>), by <span class="ot">=</span> gene_id]</span>
-<span id="cb32-19"><a href="gxe-ppbmi.html#cb32-19" tabindex="-1"></a></span>
-<span id="cb32-20"><a href="gxe-ppbmi.html#cb32-20" tabindex="-1"></a>evidence <span class="ot">&lt;-</span> <span class="fu">merge</span>(t1_gene, t1m_gene, <span class="at">by =</span> <span class="st">&quot;gene_id&quot;</span>, <span class="at">all =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb32-21"><a href="gxe-ppbmi.html#cb32-21" tabindex="-1"></a>evidence <span class="ot">&lt;-</span> <span class="fu">merge</span>(evidence, t2r_gene, <span class="at">by =</span> <span class="st">&quot;gene_id&quot;</span>, <span class="at">all =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb32-22"><a href="gxe-ppbmi.html#cb32-22" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">setdiff</span>(<span class="fu">names</span>(evidence), <span class="st">&quot;gene_id&quot;</span>)) {</span>
-<span id="cb32-23"><a href="gxe-ppbmi.html#cb32-23" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.numeric</span>(evidence[[cc]]) <span class="sc">||</span> <span class="fu">is.integer</span>(evidence[[cc]])) {</span>
-<span id="cb32-24"><a href="gxe-ppbmi.html#cb32-24" tabindex="-1"></a>    evidence[<span class="fu">is.na</span>(<span class="fu">get</span>(cc)), (cc) <span class="sc">:=</span> <span class="dv">0</span>]</span>
-<span id="cb32-25"><a href="gxe-ppbmi.html#cb32-25" tabindex="-1"></a>  }</span>
-<span id="cb32-26"><a href="gxe-ppbmi.html#cb32-26" tabindex="-1"></a>}</span>
-<span id="cb32-27"><a href="gxe-ppbmi.html#cb32-27" tabindex="-1"></a>evidence <span class="ot">&lt;-</span> <span class="fu">add_symbol</span>(evidence)</span>
-<span id="cb32-28"><a href="gxe-ppbmi.html#cb32-28" tabindex="-1"></a>evidence[, evidence_score <span class="sc">:=</span> (tier1_features <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">+</span></span>
-<span id="cb32-29"><a href="gxe-ppbmi.html#cb32-29" tabindex="-1"></a>                            (tier1_modalities <span class="sc">&gt;</span> <span class="dv">1</span>) <span class="sc">+</span></span>
-<span id="cb32-30"><a href="gxe-ppbmi.html#cb32-30" tabindex="-1"></a>                            (tier1_ancestries <span class="sc">&gt;</span> <span class="dv">1</span>) <span class="sc">+</span></span>
-<span id="cb32-31"><a href="gxe-ppbmi.html#cb32-31" tabindex="-1"></a>                            (meta_acat_features <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">+</span></span>
-<span id="cb32-32"><a href="gxe-ppbmi.html#cb32-32" tabindex="-1"></a>                            (meta_both_ancestries <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">+</span></span>
-<span id="cb32-33"><a href="gxe-ppbmi.html#cb32-33" tabindex="-1"></a>                            (tier2_robust_features <span class="sc">&gt;</span> <span class="dv">0</span>)]</span>
-<span id="cb32-34"><a href="gxe-ppbmi.html#cb32-34" tabindex="-1"></a><span class="fu">setorder</span>(evidence, <span class="sc">-</span>evidence_score, <span class="sc">-</span>tier1_features, <span class="sc">-</span>tier2_robust_features,</span>
-<span id="cb32-35"><a href="gxe-ppbmi.html#cb32-35" tabindex="-1"></a>         tier1_min_q)</span>
-<span id="cb32-36"><a href="gxe-ppbmi.html#cb32-36" tabindex="-1"></a></span>
-<span id="cb32-37"><a href="gxe-ppbmi.html#cb32-37" tabindex="-1"></a><span class="fu">fwrite</span>(evidence, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;gxe_internal_evidence_gene_summary.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
-<span id="cb32-38"><a href="gxe-ppbmi.html#cb32-38" tabindex="-1"></a>ev_print <span class="ot">&lt;-</span> evidence[<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N),</span>
-<span id="cb32-39"><a href="gxe-ppbmi.html#cb32-39" tabindex="-1"></a>  .(gene_symbol, gene_id, evidence_score, tier1_features, tier1_modalities,</span>
-<span id="cb32-40"><a href="gxe-ppbmi.html#cb32-40" tabindex="-1"></a>    tier1_ancestries, meta_acat_features, meta_both_ancestries,</span>
-<span id="cb32-41"><a href="gxe-ppbmi.html#cb32-41" tabindex="-1"></a>    tier2_robust_features, tier2_robust_modalities)]</span>
-<span id="cb32-42"><a href="gxe-ppbmi.html#cb32-42" tabindex="-1"></a><span class="fu">kable</span>(ev_print, <span class="at">caption =</span> <span class="st">&quot;Genes prioritized by multiple internal G×ppBMI evidence dimensions.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="gxe-ppbmi.html#cb29-1" tabindex="-1"></a>t1_gene <span class="ot">&lt;-</span> tier1_sig[, .(</span>
+<span id="cb29-2"><a href="gxe-ppbmi.html#cb29-2" tabindex="-1"></a>  <span class="at">tier1_rows =</span> .N,</span>
+<span id="cb29-3"><a href="gxe-ppbmi.html#cb29-3" tabindex="-1"></a>  <span class="at">tier1_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
+<span id="cb29-4"><a href="gxe-ppbmi.html#cb29-4" tabindex="-1"></a>  <span class="at">tier1_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
+<span id="cb29-5"><a href="gxe-ppbmi.html#cb29-5" tabindex="-1"></a>  <span class="at">tier1_ancestries =</span> <span class="fu">uniqueN</span>(ancestry),</span>
+<span id="cb29-6"><a href="gxe-ppbmi.html#cb29-6" tabindex="-1"></a>  <span class="at">tier1_min_q =</span> <span class="fu">min</span>(qval, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb29-7"><a href="gxe-ppbmi.html#cb29-7" tabindex="-1"></a>), by <span class="ot">=</span> gene_id]</span>
+<span id="cb29-8"><a href="gxe-ppbmi.html#cb29-8" tabindex="-1"></a></span>
+<span id="cb29-9"><a href="gxe-ppbmi.html#cb29-9" tabindex="-1"></a>t1m_gene <span class="ot">&lt;-</span> tier1_meta[, .(</span>
+<span id="cb29-10"><a href="gxe-ppbmi.html#cb29-10" tabindex="-1"></a>  <span class="at">meta_acat_features =</span> <span class="fu">sum</span>(<span class="fu">is.finite</span>(q_feature_acat) <span class="sc">&amp;</span> q_feature_acat <span class="sc">&lt;=</span> params<span class="sc">$</span>tier1_q),</span>
+<span id="cb29-11"><a href="gxe-ppbmi.html#cb29-11" tabindex="-1"></a>  <span class="at">meta_both_ancestries =</span> <span class="fu">sum</span>(significant_all_ancestries <span class="sc">%in%</span> <span class="cn">TRUE</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb29-12"><a href="gxe-ppbmi.html#cb29-12" tabindex="-1"></a>), by <span class="ot">=</span> gene_id]</span>
+<span id="cb29-13"><a href="gxe-ppbmi.html#cb29-13" tabindex="-1"></a></span>
+<span id="cb29-14"><a href="gxe-ppbmi.html#cb29-14" tabindex="-1"></a>t2r_gene <span class="ot">&lt;-</span> tier2_robust[, .(</span>
+<span id="cb29-15"><a href="gxe-ppbmi.html#cb29-15" tabindex="-1"></a>  <span class="at">tier2_robust_features =</span> <span class="fu">uniqueN</span>(phenotype_id),</span>
+<span id="cb29-16"><a href="gxe-ppbmi.html#cb29-16" tabindex="-1"></a>  <span class="at">tier2_robust_modalities =</span> <span class="fu">uniqueN</span>(modality),</span>
+<span id="cb29-17"><a href="gxe-ppbmi.html#cb29-17" tabindex="-1"></a>  <span class="at">tier2_min_q =</span> <span class="fu">min</span>(q_meta, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb29-18"><a href="gxe-ppbmi.html#cb29-18" tabindex="-1"></a>), by <span class="ot">=</span> gene_id]</span>
+<span id="cb29-19"><a href="gxe-ppbmi.html#cb29-19" tabindex="-1"></a></span>
+<span id="cb29-20"><a href="gxe-ppbmi.html#cb29-20" tabindex="-1"></a>evidence <span class="ot">&lt;-</span> <span class="fu">merge</span>(t1_gene, t1m_gene, <span class="at">by =</span> <span class="st">&quot;gene_id&quot;</span>, <span class="at">all =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb29-21"><a href="gxe-ppbmi.html#cb29-21" tabindex="-1"></a>evidence <span class="ot">&lt;-</span> <span class="fu">merge</span>(evidence, t2r_gene, <span class="at">by =</span> <span class="st">&quot;gene_id&quot;</span>, <span class="at">all =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb29-22"><a href="gxe-ppbmi.html#cb29-22" tabindex="-1"></a><span class="cf">for</span> (cc <span class="cf">in</span> <span class="fu">setdiff</span>(<span class="fu">names</span>(evidence), <span class="st">&quot;gene_id&quot;</span>)) {</span>
+<span id="cb29-23"><a href="gxe-ppbmi.html#cb29-23" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.numeric</span>(evidence[[cc]]) <span class="sc">||</span> <span class="fu">is.integer</span>(evidence[[cc]])) {</span>
+<span id="cb29-24"><a href="gxe-ppbmi.html#cb29-24" tabindex="-1"></a>    evidence[<span class="fu">is.na</span>(<span class="fu">get</span>(cc)), (cc) <span class="sc">:=</span> <span class="dv">0</span>]</span>
+<span id="cb29-25"><a href="gxe-ppbmi.html#cb29-25" tabindex="-1"></a>  }</span>
+<span id="cb29-26"><a href="gxe-ppbmi.html#cb29-26" tabindex="-1"></a>}</span>
+<span id="cb29-27"><a href="gxe-ppbmi.html#cb29-27" tabindex="-1"></a>evidence <span class="ot">&lt;-</span> <span class="fu">add_symbol</span>(evidence)</span>
+<span id="cb29-28"><a href="gxe-ppbmi.html#cb29-28" tabindex="-1"></a>evidence[, evidence_score <span class="sc">:=</span> (tier1_features <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">+</span></span>
+<span id="cb29-29"><a href="gxe-ppbmi.html#cb29-29" tabindex="-1"></a>                            (tier1_modalities <span class="sc">&gt;</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb29-30"><a href="gxe-ppbmi.html#cb29-30" tabindex="-1"></a>                            (tier1_ancestries <span class="sc">&gt;</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb29-31"><a href="gxe-ppbmi.html#cb29-31" tabindex="-1"></a>                            (meta_acat_features <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">+</span></span>
+<span id="cb29-32"><a href="gxe-ppbmi.html#cb29-32" tabindex="-1"></a>                            (meta_both_ancestries <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">+</span></span>
+<span id="cb29-33"><a href="gxe-ppbmi.html#cb29-33" tabindex="-1"></a>                            (tier2_robust_features <span class="sc">&gt;</span> <span class="dv">0</span>)]</span>
+<span id="cb29-34"><a href="gxe-ppbmi.html#cb29-34" tabindex="-1"></a><span class="fu">setorder</span>(evidence, <span class="sc">-</span>evidence_score, <span class="sc">-</span>tier1_features, <span class="sc">-</span>tier2_robust_features,</span>
+<span id="cb29-35"><a href="gxe-ppbmi.html#cb29-35" tabindex="-1"></a>         tier1_min_q)</span>
+<span id="cb29-36"><a href="gxe-ppbmi.html#cb29-36" tabindex="-1"></a></span>
+<span id="cb29-37"><a href="gxe-ppbmi.html#cb29-37" tabindex="-1"></a><span class="fu">fwrite</span>(evidence, <span class="fu">file.path</span>(params<span class="sc">$</span>tables_dir, <span class="st">&quot;gxe_internal_evidence_gene_summary.tsv&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;</span><span class="sc">\t</span><span class="st">&quot;</span>)</span>
+<span id="cb29-38"><a href="gxe-ppbmi.html#cb29-38" tabindex="-1"></a>ev_print <span class="ot">&lt;-</span> evidence[<span class="dv">1</span><span class="sc">:</span><span class="fu">min</span>(params<span class="sc">$</span>top_n, .N),</span>
+<span id="cb29-39"><a href="gxe-ppbmi.html#cb29-39" tabindex="-1"></a>  .(gene_symbol, gene_id, evidence_score, tier1_features, tier1_modalities,</span>
+<span id="cb29-40"><a href="gxe-ppbmi.html#cb29-40" tabindex="-1"></a>    tier1_ancestries, meta_acat_features, meta_both_ancestries,</span>
+<span id="cb29-41"><a href="gxe-ppbmi.html#cb29-41" tabindex="-1"></a>    tier2_robust_features, tier2_robust_modalities)]</span>
+<span id="cb29-42"><a href="gxe-ppbmi.html#cb29-42" tabindex="-1"></a><span class="fu">kable</span>(ev_print, <span class="at">caption =</span> <span class="st">&quot;Genes prioritized by multiple internal G×ppBMI evidence dimensions.&quot;</span>)</span></code></pre></div>
 <table style="width:99%;">
 <colgroup>
 <col width="7%" />
@@ -3715,9 +3709,9 @@ outcomes requires additional evidence.</li>
 </div>
 <div id="reusable-output-tables" class="section level2 hasAnchor" number="10.10">
 <h2><span class="header-section-number">10.10</span> Reusable output tables<a href="gxe-ppbmi.html#reusable-output-tables" class="anchor-section" aria-label="Anchor link to header"></a></h2>
-<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="gxe-ppbmi.html#cb33-1" tabindex="-1"></a>generated <span class="ot">&lt;-</span> <span class="fu">list.files</span>(params<span class="sc">$</span>tables_dir, <span class="at">full.names =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb33-2"><a href="gxe-ppbmi.html#cb33-2" tabindex="-1"></a><span class="fu">kable</span>(<span class="fu">data.table</span>(<span class="at">file =</span> <span class="fu">basename</span>(generated)),</span>
-<span id="cb33-3"><a href="gxe-ppbmi.html#cb33-3" tabindex="-1"></a>      <span class="at">caption =</span> <span class="st">&quot;Tables written by this report.&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="gxe-ppbmi.html#cb30-1" tabindex="-1"></a>generated <span class="ot">&lt;-</span> <span class="fu">list.files</span>(params<span class="sc">$</span>tables_dir, <span class="at">full.names =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb30-2"><a href="gxe-ppbmi.html#cb30-2" tabindex="-1"></a><span class="fu">kable</span>(<span class="fu">data.table</span>(<span class="at">file =</span> <span class="fu">basename</span>(generated)),</span>
+<span id="cb30-3"><a href="gxe-ppbmi.html#cb30-3" tabindex="-1"></a>      <span class="at">caption =</span> <span class="st">&quot;Tables written by this report.&quot;</span>)</span></code></pre></div>
 <table>
 <thead>
 <tr class="header">

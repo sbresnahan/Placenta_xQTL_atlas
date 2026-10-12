@@ -467,7 +467,7 @@ Figures are written under `figures/integration/`.
 Resolved source files used by the integration report.
 
     ## 
-    ## Rendered: 2026-10-12 10:46:45
+    ## Rendered: 2026-10-12 11:13:02
 
     ## R version 4.4.1 (2024-06-14)
     ## Platform: aarch64-apple-darwin20

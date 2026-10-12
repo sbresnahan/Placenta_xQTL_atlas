@@ -115,14 +115,10 @@ fine-mapping
 overview
 pip-diagnostics
 credible-sets
-credible-sets-versus-conditional-signals
 cross-ancestry-concordance
 top-loci
-functional-annotation-enrichment-of-high-pip-variants
-gene-set-enrichment-of-high-confidence-fine-mapped-genes
+functional-annotation-enrichment
 run-diagnostics
-methods-summary
-session-info-1
 finemap-literature
 background-and-scope-1
 methods-and-result-reconciliation
