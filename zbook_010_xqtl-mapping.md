@@ -1,7 +1,5 @@
 # Multi-ancestry placental xQTL analysis {#xqtl-mapping}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/report_placenta_xqtl.Rmd</code>.</p>
-
 
 ## Executive summary
 
@@ -323,11 +321,7 @@ All pipeline stages were run on the MD Anderson seadragon
 high-performance computing cluster (LSF scheduler, RHEL8). Analyses used
 R 4.3.1 (GENESIS, GWASTools, SNPRelate, sva, Rhcpp, edgeR, tximport,
 rtracklayer, MuSiC, qvalue, data.table) and Python 3 (tensorqtl 1.0.10,
-sushie, pandas, pyarrow, genotypeio). The complete analysis codebase,
-including per-stage scripts, configuration files, and a step-by-step
-manifest, is available at github.com/sbresnahan/Placenta_xQTL_atlas.
-
-## Cohort and data landscape
+sushie, pandas, pyarrow, genotypeio). # Cohort and data landscape
 
 *Cohort compilation and sample QC, in the style of DevBrain Fig. S1
 (dataset compilation) and Fig. 2A (genotype PCA).*
@@ -2744,11 +2738,7 @@ Three **characterization** observations:
 
 ### Literature context
 
-The literature review of the top xQTL hits — the ERAP1/ERAP2 positive
-control and the top hits per modality in the context of the published
-literature — now lives in the companion document
-`literature_xqtl_mapping.md` (with its evidence table,
-`xqtl_top_hits_evidence_table.csv`).
+
 
 **Modality-matched covariates, in line with QTL practice.**
 Latent-factor covariates are a standard power lever in QTL mapping
@@ -2798,15 +2788,6 @@ hints only.
     slope meta-analysis are the clean options.
 7.  **Stepwise secondary signals**: 964 units carry a conditionally
     independent secondary signal (table above).
-8.  **Fine-mapping is in progress; colocalization is future work.** The
-    phenotype-level discovery set (ungrouped layer + expression) is
-    being fine-mapped jointly across ancestries with SuSHiE (modules
-    31–34; per-variant PIPs, 95% credible sets, cross-ancestry effect
-    correlations, and functional-annotation enrichment of high-PIP
-    variants) — results are reported separately (`report_finemap`). GWAS
-    colocalization (coloc/eCAVIAR) against placental and
-    pregnancy-outcome GWAS and locus-zoom visual QC of each hit remain
-    the next steps after fine-mapping.
 9.  **Replication path**: the FDR-significant hits are the priorities
     for lookup in larger placental resources or a future meta-analysis;
     visual QC of phenotype levels by genotype is the immediate sanity
@@ -2825,16 +2806,12 @@ hints only.
   FDR-significant phenotype-level discovery set (ungrouped layer;
   expression from the primary scan), with fastVEP/cCRE/open-chromatin
   enrichment of high-PIP variants (scripts 31–34).
-- Pipeline scripts: this repository (`05_qtl_mapping/`, scripts 19–35 +
-  `compute_qvalues.R`; genotype pooling in `01_genotype_imputation/`).
 - Report extras: targeted cross-ancestry/cross-modality lookups,
   showcase locus scans, lead-variant annotations, and gnomAD constraint
   tables (`05_qtl_mapping/35_extract_report_extras.py`), staged into the
   archive under `data/extras/` by `make_report_archive.sh`; report
   panels that use them render only when the corresponding file is
   present.
-- Report code: `report_placenta_xqtl.Rmd` + `xqtl_report_functions.R` +
-  `build_xqtl_enrichment.R`; figures in `figures/`, tables in `tables/`.
 - Gene symbols: `gene_map.tsv` regenerated in full from the normalized
   GTF (config `normalized_gtf`) by `make_report_archive.sh` at archive
   time — covers every tested gene, version-stripped IDs.

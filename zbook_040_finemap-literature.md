@@ -1,7 +1,5 @@
 # Literature context: fine-mapped loci {#finemap-literature}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/literature_finemap_revised_20261010.md</code>.</p>
-
 
 **Project:** Placenta xQTL atlas  
 **Revision:** 2026-10-10, rebuilt against the newly supplied `report_finemap.html`,
@@ -20,15 +18,15 @@ sites, alternative polyadenylation, RNA editing, and transcript stability.
 The run report records **5,529 loci attempted, 5,269 successfully fine-mapped,
 and 4,290 loci with at least one credible set**.
 
-This revision does **not** retain the previous review's claim of 5,236
-high-confidence genes. Recalculation from the supplied current results gives
+this review does **not** retain the literature review's claim of 5,236
+high-confidence genes. Recalculation from the supplied results gives
 **2,055 current loci whose best credible set has lead PIP ≥ 0.9**, spanning
 **1,142 unique Ensembl genes**. Of those high-confidence loci, **1,899
 (92.4%) have a single-variant credible set**. Thus the strongest conclusion of
 the new run is not the sheer size of the gene catalog but the high degree of
 variant-level resolution among loci that pass the PIP threshold.
 
-The biological reading is also different from the previous review. The old
+The biological reading is also different from the literature review. The old
 fine-mapping review emphasized a splicing-heavy set of established pregnancy
 and imprinted genes. In the new run, many of those loci are absent or no longer
 reach PIP ≥ 0.9. Instead, the leading pattern is **cross-modality recurrence**:
@@ -163,14 +161,14 @@ retain at least one single-variant PIP ≥0.9 signal. By contrast, **FLT1, PAPPA
 ACVR2A, HSD11B2, IGF2, PEG3, MEST and GNAS are not current high-confidence
 genes**, and GCM1, HLA-C and MEG3 are present only below the 0.9 threshold.
 
-The implication is important: the prior review's statement that fine-mapping
+The implication is important: the literature review's statement that fine-mapping
 "recovered known pregnancy genes as positive controls" was too dependent on an
 older result set. The new run should be interpreted from the loci it actually
 resolves, not from biologically attractive loci that were present previously.
 
 #### 3.4 Imprinting remains visible, but it is no longer a dominant catalog-wide theme
 
-The previous review highlighted six canonical imprinted genes and stated that
+The literature review highlighted six canonical imprinted genes and stated that
 27 imprinted genes were present in the high-confidence set. That claim is not
 supported by the current files supplied here. Among the original six, **only
 IGF2R remains PIP ≥0.9**. A second clear current imprinted signal is **SGCE**,
@@ -336,7 +334,7 @@ mitochondrial stress pathway.
 #### 4.3 Intragenomic conflict and imprinting
 
 **IGF2R — expression; 1 high-confidence locus; lead PIP 0.9992; CS = 1.**  
-IGF2R is the only one of the previous review's six canonical conflict genes
+IGF2R is the only one of the literature review's six canonical conflict genes
 that remains high-confidence in the new run. It antagonizes IGF2 signaling
 and is a classic parent-of-origin growth-regulation locus [49]. Its clean
 single-variant expression credible set remains a compelling molecular
@@ -350,36 +348,9 @@ tracks maternal one-carbon nutritional status `[A18]`. The resolved
 isoform-expression QTL therefore provides a current-run example of genetic
 regulation operating within an imprinted placental domain.
 
-### 5. What changed from the previous fine-mapping literature review
-
-The previous review should not be incrementally patched; several of its
-headline conclusions are tied to an older fine-mapping result set.
-
-- **High-confidence catalog size:** old = 5,236 genes; current = **1,142 unique
-  genes / 2,055 high-confidence loci** after restricting to current-run loci.
-- **Most recurrent gene:** WSB1 remains first, but is now **6 modalities**, not
-  7. SCARB2 and OLAH (5 each) replace GBP3 as the next-most recurrent genes.
-- **GBP3:** now 4 modalities, not 6.
-- **CYP19A1:** now 3 modalities, not 5.
-- **SIGLEC6:** now 2 modalities, not 4.
-- **ERAP1:** now 4 modalities, not 6.
-- **IL1R1:** now 3 modalities, not 4.
-- **GCM1:** current best lead PIP is ~0.47 and is not high-confidence.
-- **HLA-C:** current best lead PIP is ~0.31 and is not high-confidence.
-- **MEG3:** current best lead PIP is ~0.61 and is not high-confidence.
-- **FLT1, PAPPA, ACVR2A, HSD11B2, IGF2, PEG3, MEST and GNAS:** no current
-  fine-mapped locus meeting the supplied run membership/high-confidence
-  criteria.
-- **Splicing dominance:** no longer supported. The current PIP≥0.9 catalog has
-  only 24 splicing loci (21 genes), versus 714 isoform-expression loci and 640
-  expression loci.
-- **Imprinted-gene enrichment:** the old claim of 27 high-confidence imprinted
-  genes cannot be reconstructed from the supplied current files and has been
-  removed.
-
 ### 6. Synthesis
 
-The revised fine-mapping catalog supports three conclusions.
+The fine-mapping catalog supports three conclusions.
 
 First, **fine-mapping resolution is exceptionally sharp**: more than 92% of
 PIP≥0.9 current loci have one-variant credible sets. This creates a strong
@@ -419,13 +390,13 @@ placental role is incompletely characterized.
   recurrence and placental interpretability; they are not the only biologically
   important genes among the 1,142 current high-confidence genes.
 - **Citation integration is incomplete.** The original
-  `finemap_hits_evidence_table.csv` was not supplied with this revision. Legacy
+  `finemap_hits_evidence_table.csv` was not supplied with this review. Legacy
   numeric citation indices are retained where possible; new sources remain
   `[A#]` until that evidence table is provided.
 
 ### 8. Companion files
 
-- `literature_finemap_revised_20261010.md` — this revised literature review.
+- `literature_finemap_revised_20261010.md` — this literature review.
 - `finemap_current_high_confidence_genes_20261010.tsv` — recalculated
   PIP≥0.9 gene summary using only loci present in the current locus summary.
 - `finemap_old_deep_dive_audit_20261010.tsv` — status of each of the prior
@@ -438,7 +409,7 @@ placental role is incompletely characterized.
 
 ### 9. New literature/reference addendum
 
-The entries below were added during this revision. They should be appended to
+The entries below were added during this review. They should be appended to
 the original `finemap_hits_evidence_table.csv` once that file is available,
 preserving its existing numeric indices and assigning these references new
 indices after the current maximum.

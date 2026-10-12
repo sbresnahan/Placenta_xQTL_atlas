@@ -64,11 +64,6 @@
   height: auto;
 }
 
-.book .book-body .source-note {
-  color: var(--atlas-muted);
-  font-size: 0.9em;
-  margin-bottom: 1.3em;
-}
 
 .book .book-body pre {
   overflow-x: auto;

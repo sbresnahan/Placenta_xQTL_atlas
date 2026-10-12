@@ -1,7 +1,5 @@
 # Transcriptome-wide association study {#twas}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/report_twas.Rmd</code>.</p>
-
 
 ## Executive summary
 

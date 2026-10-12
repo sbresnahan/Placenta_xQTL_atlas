@@ -1,7 +1,5 @@
 # Literature context: colocalization findings {#coloc-literature}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/literature_colocalization.md</code>.</p>
-
 
 **Project:** Placenta xQTL atlas  
 **Companion report:** `report_colocalization.Rmd` / rendered `report_colocalization.html`  
@@ -82,7 +80,7 @@ Other mixed events implicate **FAP, C3orf38, FES, FUBP1, GCLM, MRPL18/TCP1, BCKD
 
 ### 3. The chr17p13 birth-weight hotspot: ELP5, CLDN7 and CTDNEP1
 
-The strongest and best externally validated locus in the current results lies
+The strongest and best externally validated locus in the results lies
 at **17p13**, where ELP5, CLDN7 and CTDNEP1 sit within a compact regulatory
 region.
 
@@ -119,7 +117,7 @@ birth-weight association region.
 #### 3.3 CTDNEP1: direct replication of prior placental multi-omics
 
 CTDNEP1 provides the strongest external validation of the atlas's biological
-interpretation. In the current results, an EAS CTDNEP1 intron-retention
+interpretation. In the results, an EAS CTDNEP1 intron-retention
 phenotype colocalizes with trans-ancestry own birth weight (PP4 ~0.967) and
 with JECS Dr0m/Dr1m BMI signals.
 
@@ -403,7 +401,7 @@ and functional work.
 - `coloc_diagnostics_summary.tsv` — run/failure-status aggregation.
 
 
-### Revised references for colocBoost additions
+### references for colocBoost additions
 
 15. Cao X, Sun H, Feng R, et al. **Integrative multi-omics QTL colocalization maps regulatory architecture in aging human brain.** medRxiv 2025. doi:10.1101/2025.04.17.25326042. https://www.medrxiv.org/content/10.1101/2025.04.17.25326042v3
 16. ColocBoost documentation. **Interpretation of ColocBoost output / colocalization confidence sets.** https://statfungen.github.io/colocboost/

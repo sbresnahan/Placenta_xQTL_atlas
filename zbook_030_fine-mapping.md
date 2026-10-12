@@ -1,7 +1,5 @@
 # Cross-ancestry fine-mapping {#fine-mapping}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/report_finemap.Rmd</code>.</p>
-
 ## Overview
 
 SuSHiE jointly fine-maps each significant xQTL locus across ancestry
@@ -12,7 +10,6 @@ loci, and two complementary enrichment analyses: functional-annotation
 enrichment of high-PIP variants, and gene-set enrichment of
 high-confidence fine-mapped genes. A literature review of the top
 fine-mapped genes lives in the companion document
-`literature_finemap.md`.
 
 | Metric                              | Value |
 |:------------------------------------|:------|

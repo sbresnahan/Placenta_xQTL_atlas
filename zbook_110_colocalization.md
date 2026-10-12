@@ -1,7 +1,5 @@
 # GWAS colocalization {#colocalization}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/report_colocalization.Rmd</code>.</p>
-
 
 ## Executive summary
 
@@ -653,7 +651,7 @@ The companion **`literature_colocalization.md`** reviews the strongest
 and most recurrent loci in the context of placental biology and previous
 growth GWAS / placental multi-omics work.
 
-The revised literature review also places the multi-trait colocBoost
+The literature review also places the multi-trait colocBoost
 events in context. The strongest new external anchor is **FES**, which
 appears in a maternal-birth-weight colocBoost event and was
 independently prioritized by prior placental multi-omics. The **SH3YL1**

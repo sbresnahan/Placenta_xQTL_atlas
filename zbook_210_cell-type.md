@@ -1,7 +1,5 @@
 # Cell-type attribution {#cell-type}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/report_celltype_annotations_with_diagnostics.Rmd</code>.</p>
-
 ## Executive summary
 
 This report summarizes the deconvolution-based **cell-type attribution
@@ -73,7 +71,7 @@ The detailed interaction table is the statistical source of truth. The
 feature-level table selects the best tested cell type per ancestry ×
 modality × phenotype and gates `primary_cell_type` on FDR.
 `gene_celltype_annotation.tsv` is retained as a compatibility artifact,
-but the report now rebuilds the current prioritized-gene layer from the
+but the report rebuilds the prioritized-gene layer from the
 SuSiE-coloc, colocBoost, and TWAS aggregates and derives each gene’s
 cell-type annotation directly from `xqtl_celltype_annotation.tsv.gz`.
 
@@ -81,7 +79,7 @@ cell-type annotation directly from `xqtl_celltype_annotation.tsv.gz`.
 |------------------:|---------------------:|-------------------------------:|
 | 0 | 1301 | 0 |
 
-Coverage of the archived gene-level table relative to the current
+Coverage of the gene-level table relative to the current
 evidence union
 
 ## Model-fit quality control
@@ -452,12 +450,12 @@ result from the same ancestry.
 | EAS      |                 0 |                 0 |              0 | NA              |
 | EUR      |                 0 |                 0 |              0 | NA              |
 
-Cell-type assignments among the current evidence-prioritized gene union
+Cell-type assignments among the evidence-prioritized gene union
 
 | gene | evidence_sources | evidence_ancestries | primary_cell_type_EAS | primary_q_GxC_EAS | modality_EAS | phenotype_id_EAS | primary_cell_type_EUR | primary_q_GxC_EUR | modality_EUR | phenotype_id_EUR |
 |:--|:------|:-------|:--------|------:|:-----|:------|:--------|------:|:-----|:------|
 
-Top 25 current evidence-prioritized genes ordered by strongest available
+Top 25 evidence-prioritized genes ordered by strongest available
 G×cell FDR
 
 ## Diagnostic distributions
@@ -558,7 +556,7 @@ Feature-assignment table columns
 This report is descriptive: it reads the completed Module-06 attribution
 outputs and does not refit genotype × cell-type models.
 
-    ## Rendered: 2026-10-12 10:16:07
+    ## Rendered: 2026-10-12 10:46:34
 
     ## results_dir: /Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle
 

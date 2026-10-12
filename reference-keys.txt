@@ -15,7 +15,6 @@ cross-ancestry-fine-mapping
 functional-enrichment-of-fine-mapped-variants
 report-integration-targeted-lookups
 software-and-computing
-cohort-and-data-landscape
 sample-attrition
 cohort-composition-and-genotype-processing
 genotype-pca
@@ -82,11 +81,10 @@ enrichment-limitations
 biological-interpretation
 literature-context
 limitations-and-next-steps
-reproducibility-1
+reproducibility
 session-info
 xqtl-literature
 background-and-scope
-what-changed-from-the-2026-10-05-review
 methods
 overview-of-the-current-top-hits
 recurring-multi-modality-loci
@@ -95,7 +93,7 @@ splicing-corrected-interpretation-after-modality-matched-hcp-covariates
 hplrv2-specific-features-among-the-top-80
 rna-editing-coverage-asymmetry
 atlas-wide-ancestry-sharing-and-functional-context
-modality-by-modality-results-and-literature-snapshots
+modality-by-modality-results-and-literature-context
 isoform-expression
 isoform-usage
 splicing
@@ -111,7 +109,7 @@ novelty
 a-changed-view-of-ancestry-specificity
 limitations
 recommended-follow-up-from-the-literature-review
-evidence-table-additions-in-this-revision
+evidence-table-additions-in-this-review
 companion-files
 fine-mapping
 overview
@@ -140,7 +138,6 @@ gene-snapshots
 recurrent-and-placental-biology-signals
 pregnancy-and-trophoblast-function-signals
 intragenomic-conflict-and-imprinting
-what-changed-from-the-previous-fine-mapping-literature-review
 synthesis-1
 limitations-1
 companion-files-1
@@ -171,7 +168,7 @@ cross-ancestry-characterization
 strongest-call-catalog
 literature-context-1
 interpretation-and-limitations
-reproducibility-2
+reproducibility-1
 coloc-literature
 scope-and-interpretation
 overview-of-the-result-landscape
@@ -204,7 +201,7 @@ exact-cross-ancestry-replication-is-absent
 limitations-2
 synthesis-2
 companion-files-2
-revised-references-for-colocboost-additions
+references-for-colocboost-additions
 twas
 executive-summary-2
 methods-2
@@ -225,7 +222,7 @@ birth-weight-and-placental-function-candidates
 childhood-anthropometry-and-recurrent-metabolic-genes
 literature-context-2
 interpretation-and-limitations-1
-reproducibility-3
+reproducibility-2
 twas-literature
 scope-and-interpretation-1
 overall-architecture-of-the-current-twas
@@ -271,7 +268,7 @@ recommended-interpretation
 column-dictionary
 xqtl_celltype_interactions.tsv.gz
 xqtl_celltype_annotation.tsv.gz
-reproducibility-4
+reproducibility-3
 gxe-ppbmi
 executive-summary-4
 inputs-and-provenance-1
@@ -337,4 +334,4 @@ cell-type-context-of-multi-line-loci
 interpretation-priorities
 guardrails-and-limitations
 reusable-outputs
-reproducibility-5
+reproducibility-4

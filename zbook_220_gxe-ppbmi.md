@@ -1,7 +1,5 @@
 # Genotype × pre-pregnancy BMI interactions {#gxe-ppbmi}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/report_gxe_ppBMI.Rmd</code>.</p>
-
 ## Executive summary
 
 This report describes placenta genotype × maternal pre-pregnancy BMI
@@ -62,16 +60,15 @@ such as `ppBMI.chr1`. **All scientific summaries in this report filter
 on the exact merged label `exposure == "r params$exposure"`** to avoid
 double-counting shard and merged rows.
 
-The analysis implementation is documented in the current repository:
 
 - Module 07 README:
-  <https://github.com/sbresnahan/Placenta_xQTL_atlas/tree/main/07_gxe_mapping>
+  
 - Tier-1 scan:
-  <https://github.com/sbresnahan/Placenta_xQTL_atlas/blob/main/07_gxe_mapping/52_gxe_scan.py>
+  
 - Tier-1 cross-ancestry synthesis:
-  <https://github.com/sbresnahan/Placenta_xQTL_atlas/blob/main/07_gxe_mapping/54_tier1_meta.py>
+  
 - Tier-2 prioritized scan:
-  <https://github.com/sbresnahan/Placenta_xQTL_atlas/blob/main/07_gxe_mapping/54_tier2_stratified.py>
+  
 
 ## Analysis framework
 

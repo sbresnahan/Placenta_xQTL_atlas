@@ -1,7 +1,5 @@
 # Literature context: G×ppBMI findings {#gxe-literature}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/literature_gxe_ppBMI.md</code>.</p>
-
 
 **Placenta xQTL Atlas — Module 07 G×E (ppBMI)**  
 **Review date:** 2026-10-12
@@ -179,7 +177,7 @@ sensitive lactogenic context; specific G×ppBMI splicing effect novel.
 #### SKP2
 
 **SKP2** shows significant G×ppBMI evidence across more than one molecular
-phenotype in the current results. A 2026 placental study showed that SKP2 is
+phenotype in the results. A 2026 placental study showed that SKP2 is
 highly expressed in placenta and co-expressed in syncytiotrophoblast precursor,
 syncytiotrophoblast, and cytotrophoblast populations; it also identified a
 RhoBTB1/CUL3-dependent mechanism regulating SKP2 stability [12].
@@ -287,7 +285,7 @@ synthesis layer.
 
 ### 7. Integrated biological interpretation
 
-Taken together, the current results and prior literature support four working
+Taken together, the results and prior literature support four working
 hypotheses.
 
 1. **Maternal adiposity is a genuine placental molecular environment.** Human

@@ -1,7 +1,5 @@
 # Literature context: TWAS findings {#twas-literature}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/literature_twas.md</code>.</p>
-
 
 **Project:** Placenta xQTL atlas  
 **Companion report:** `report_twas.Rmd` / rendered `report_twas.html`  
@@ -98,7 +96,7 @@ The cost is increased correlation and multiplicity. Isoform hits should therefor
 
 ### 12. Practical evidence tiers for manuscript prioritization
 
-A useful hierarchy for the current results is:
+A useful hierarchy for the results is:
 
 **Tier 1 — TWAS + colocalization + independent placental biology.** Examples include CLDN7/CTDNEP1 at chr17p13 and SLC38A1. These are the strongest candidates for mechanistic discussion.
 

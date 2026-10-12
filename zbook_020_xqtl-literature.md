@@ -1,14 +1,12 @@
 # Literature context: placental xQTL mapping {#xqtl-literature}
 
-<p class="source-note">Book chapter rebuilt locally from <code>reports/literature_xqtl_mapping_revised_20261010.md</code>.</p>
-
 
 **Project:** Placenta xQTL atlas (multi-ancestry, multi-modality cis-QTL mapping)  
 **Revision date:** 2026-10-10  
 **Companion analysis:** `report_placenta_xqtl.html`  
 **Current result tables:** `tables/top_ungrouped_hits.tsv`, `tables/xqtl_catalog_phenotype_level.tsv`, `tables/phenotype_feature_counts.tsv`, `tables/egene_catalog_combined.tsv`, and enrichment tables.
 
-**Citation convention.** Legacy bracketed citations `[N]` retain the indices from the original `xqtl_top_hits_evidence_table.csv`; their wording is preserved only where the corresponding gene remains in the current top-hit set. New literature or reference annotations added during this revision are labeled `[322]`–`[339]` and are listed in the revision addendum (§9). This avoids renumbering the original evidence table.
+**Citation convention.** Legacy bracketed citations `[N]` retain the indices from the original `xqtl_top_hits_evidence_table.csv`; their wording is preserved only where the corresponding gene remains in the current top-hit set. New literature or reference annotations added during this review are labeled `[322]`–`[339]` and are listed in the additional evidence (§9). This avoids renumbering the original evidence table.
 
 ---
 
@@ -22,22 +20,13 @@ This literature review focuses on the **eight ungrouped multi-phenotype scans**.
 
 The purpose is descriptive rather than causal: to ask whether the strongest placental regulatory loci intersect known placental biology, prior QTL findings, or pregnancy-disease genetics, and to flag novel signals for mechanistic follow-up.
 
-### 2. What changed from the 2026-10-05 review
-
-The prior review was based on an earlier result state. Four changes materially affect interpretation:
-
-1. **Sample accounting is now final:** 281 EAS and 136 EUR mapped individuals, rather than the earlier approximate EAS count.
-2. **Splicing was recalibrated with modality-matched hidden covariates.** EUR now has 35 grouped splicing eGenes and 28 significant ungrouped splicing phenotypes; EAS remains near-null with 5 grouped eGenes and 5 significant ungrouped phenotypes. The previous “all top splicing hits are ~1% rare variants” interpretation is therefore obsolete.
-3. **The top-80 composition changed.** Newly entering genes include RBM23, ZFP62, CMYA5, TENT2, PLAC4, TRMT13, ZNF234, APOC1P1/APOC1, ZNF180, TSR1, SCARB2, ENOSF1, RPL14, and PGAP6. Several earlier rare splicing and alt-TSS genes drop out.
-4. **Cross-ancestry sharing among the selected top entries is now 39/80**, not 38/80.
-
 ### 3. Methods
 
 - **Hit selection.** Within each ancestry × ungrouped modality table, entries were ordered by Storey q-value and nominal p-value, and the top five were retained. Expression and the cross-modality combined scan are not part of this top-80 review because they do not have the same ungrouped multi-feature structure.
 - **Cross-ancestry sharing.** “Shared” means the exact `phenotype_id` is FDR-significant (q ≤ 0.05) in both ancestries. Lead variants may differ. This is replication of a molecular feature, not proof of a shared causal variant and not a colocalization result.
 - **Atlas-wide counts.** Significant-feature counts come from `xqtl_catalog_phenotype_level.tsv`; tested feature counts use the normalized (VST/INT) stage in `phenotype_feature_counts.tsv`.
-- **Literature synthesis.** Existing snapshots and numeric references were retained for genes still present. Targeted update searches were performed for newly entering genes, prioritizing PubMed papers with direct placental/pregnancy relevance, followed by mechanistic primary literature and curated reference resources when direct pregnancy literature was absent.
-- **Opposite-ancestry q-values.** The supplied current tables include the significant catalog and top-10 tables, but not every non-significant ungrouped row. Therefore the revised tables report a binary shared flag rather than inventing or carrying forward stale `q(other)` values.
+- **Literature synthesis.** existing literature sources and numeric references were retained for genes still present. targeted literature searches were performed for newly entering genes, prioritizing PubMed papers with direct placental/pregnancy relevance, followed by mechanistic primary literature and curated reference resources when direct pregnancy literature was absent.
+- **Opposite-ancestry q-values.** The supplied current tables include the significant catalog and top-10 tables, but not every non-significant ungrouped row. Therefore the tables report a binary shared flag rather than inventing or carrying forward stale `q(other)` values.
 
 ### 4. Overview of the current top hits
 
@@ -53,7 +42,7 @@ The prior review was based on an earlier result state. Four changes materially a
 | RNA editing | 30 / 3,120 | 246 / 17,951 | 7 / 10 |
 | Transcript stability | 140 / 4,501 | 203 / 7,687 | 4 / 10 |
 
-The updated pattern is more nuanced than the prior review. Alternative polyadenylation remains strikingly cross-ancestry reproducible at the top of the distribution (10/10). Isoform expression (8/10), RNA editing (7/10), isoform usage and alt-TSS (5/10 each) also contain substantial shared signal. By contrast, none of the selected splicing or intron-retention entries is shared at the exact-feature level.
+Alternative polyadenylation remains strikingly cross-ancestry reproducible at the top of the distribution (10/10). Isoform expression (8/10), RNA editing (7/10), isoform usage and alt-TSS (5/10 each) also contain substantial shared signal. By contrast, none of the selected splicing or intron-retention entries is shared at the exact-feature level.
 
 #### 4.1 Recurring multi-modality loci
 
@@ -75,7 +64,7 @@ The clearest same-variant opposite-direction patterns are **PSCA** (isoform usag
 
 #### 4.3 Splicing: corrected interpretation after modality-matched HCP covariates
 
-The previous rare-variant narrative should be retired. In the current top five, EAS splicing lead AFs are approximately 0.053–0.098 and EUR lead minor-allele frequencies are approximately 0.052–0.054 (the TSR1 lead has AF 0.948, hence MAF ≈ 0.052). EUR top hits are concentrated around a chromosome-19 signal in which 19:44433568:C:T is the lead for ZNF234, APOC1P1/APOC1, and ZNF180. EAS remains a weak layer overall: only five ungrouped phenotypes reach FDR ≤ 5%.
+In the current top five, EAS splicing lead AFs are approximately 0.053–0.098 and EUR lead minor-allele frequencies are approximately 0.052–0.054 (the TSR1 lead has AF 0.948, hence MAF ≈ 0.052). EUR top hits are concentrated around a chromosome-19 signal in which 19:44433568:C:T is the lead for ZNF234, APOC1P1/APOC1, and ZNF180. EAS remains a weak layer overall: only five ungrouped phenotypes reach FDR ≤ 5%.
 
 This is now best described as **ancestry-asymmetric, modest-frequency splicing regulation**, not as a set of extreme rare-variant associations. The concentration of several EUR rows under one lead and the shared CMYA5/TENT2 EAS splice cluster also reinforce the need for locus-level rather than naïve gene-by-gene interpretation.
 
@@ -83,7 +72,7 @@ This is now best described as **ancestry-asymmetric, modest-frequency splicing r
 
 Five current top entries explicitly carry `HPLRT_*` identifiers: **TRIM5** and **DRAM2** isoforms, an **ERAP2** alt-TSS feature, an **HSP90B1** alt-polyA feature, and a **PECAM1** alt-polyA feature. These are concrete examples in which the long-read placental annotation exposes regulatory phenotypes absent from a standard transcript-only view.
 
-The chr22 `ENSG00000290199` hit remains poorly characterized, but the current feature ID is `ENST00000703580.1`; therefore the previous statement that this transcript was necessarily “HPLRv2-only” has been removed.
+The chr22 `ENSG00000290199` hit remains poorly characterized, but the current feature ID is `ENST00000703580.1`; therefore the statement that this transcript was necessarily “HPLRv2-only” has been removed.
 
 #### 4.5 RNA-editing coverage asymmetry
 
@@ -95,7 +84,7 @@ At the combined gene-level layer, **572 of 1,403 EAS and 1,650 EUR unique eGenes
 
 ---
 
-### 5. Modality-by-modality results and literature snapshots
+### 5. Modality-by-modality results and literature context
 
 
 #### 5.1 Isoform expression
@@ -124,10 +113,10 @@ The strongest isoform-expression signals retain ERAP2/ZSCAN9 as positive control
 - **ERGIC3** (EAS2). *Biology:* an ER–Golgi intermediate compartment protein; the ERGIC is a stress-responsive hub integrating membrane trafficking and adaptation [155], and ERGIC3-dependent secretory cargo trafficking is regulated by the E3 ligase MARCH2 [156]. No placental literature — a novel, strongly shared, multi-modality locus.
 
 
-- **RBM23** (EAS3). *Biology:* RBM23 (CAPERβ) is a U2AF65-related RNA-binding protein that couples steroid-receptor transcriptional coactivation with alternative-splicing regulation [322]. I found no direct placental QTL or pregnancy-disease literature in the targeted update search; the EAS isoform-expression QTL is therefore novel in placental context.
+- **RBM23** (EAS3). *Biology:* RBM23 (CAPERβ) is a U2AF65-related RNA-binding protein that couples steroid-receptor transcriptional coactivation with alternative-splicing regulation [322]. I found no direct placental QTL or pregnancy-disease literature in the targeted literature search; the EAS isoform-expression QTL is therefore novel in placental context.
 
 
-- **ENSG00000290199** (EAS4). This chr22 locus is currently represented by Ensembl transcript ENST00000703580.1 and remains poorly characterized. The current results support a large-effect EAS isoform-expression QTL that is also FDR-significant in EUR. The previous review called the feature “HPLRv2-novel”; because the current feature ID is an Ensembl transcript rather than an HPLRT identifier, that novelty claim has been removed.
+- **ENSG00000290199** (EAS4). This chr22 locus is currently represented by Ensembl transcript ENST00000703580.1 and remains poorly characterized. The results support a large-effect EAS isoform-expression QTL that is also FDR-significant in EUR. The literature review called the feature “HPLRv2-novel”; because the current feature ID is an Ensembl transcript rather than an HPLRT identifier, that novelty claim has been removed.
 
 
 - **FBLN1** (EAS5). *Placental biology:* fibulin-1 is expressed during mouse placental development, with elevated transcripts in abnormal placentation [121]; in human pregnancy, plasma fibulin-1 rises across gestation and is consistently lower in PPROM [124]. No prior QTL evidence.
@@ -136,7 +125,7 @@ The strongest isoform-expression signals retain ERAP2/ZSCAN9 as positive control
 - **ERAP2** (EUR1). *Placental biology/disease:* ERAP2 is one of the most replicated preeclampsia candidate genes: associated with preeclampsia in Australian and Norwegian cohorts [110], fetal ERAP2 rs2549782 associated with preeclampsia in African Americans [112], a Chilean haplotype study links rs2549782 to ERAP2 protein expression and PE risk [113], and ERAP1/ERAP2 show altered placental expression and lymphocyte activation in PE [107]; ERAP2 was also associated with PE (and ERAP1 with eclampsia) in Brazilian women [108]. *Prior QTL evidence:* ERAP2 was one of the notable eGenes in the Kikas et al. placental eQTL study [56] — the present hit is a direct cross-ancestry replication and extension to isoform- and promoter-level regulation.
 
 
-- **ZSCAN9** (EUR2). *Prior QTL evidence:* ZSCAN9 was likewise a notable placental eGene in Kikas et al. [56], making this a second direct replication. *Biology:* it is a KRAB zinc-finger protein; KRAB-ZFPs repress transposable elements and shape mammalian regulatory evolution [316, 317], a mechanism of particular relevance in placenta. The updated atlas continues to place multiple chromosome-19 zinc-finger loci among strong regulatory signals, although the specific top splicing genes have changed.
+- **ZSCAN9** (EUR2). *Prior QTL evidence:* ZSCAN9 was likewise a notable placental eGene in Kikas et al. [56], making this a second direct replication. *Biology:* it is a KRAB zinc-finger protein; KRAB-ZFPs repress transposable elements and shape mammalian regulatory evolution [316, 317], a mechanism of particular relevance in placenta. The atlas continues to place multiple chromosome-19 zinc-finger loci among strong regulatory signals, although the specific top splicing genes have changed.
 
 
 - **GBP3** (EUR3). *Biology:* guanylate-binding proteins are interferon-induced pattern-recognition/antimicrobial effectors [114, 115]. Novel in placenta; joins OAS1 and TRIM5 in the innate-immunity theme.
@@ -152,7 +141,7 @@ The strongest isoform-expression signals retain ERAP2/ZSCAN9 as positive control
 
 #### 5.2 Isoform usage
 
-The PSCA and ERAP1 switch-like loci remain dominant. The EUR fifth-ranked entry is now **PECAM1**, replacing ZNF880 from the previous review.
+The PSCA and ERAP1 switch-like loci remain dominant. The EUR fifth-ranked entry is now **PECAM1**, replacing ZNF880 from the literature review.
 
 
 | Anc | Rank | Gene | Feature | Lead variant | Slope | AF | q | Shared |
@@ -198,7 +187,7 @@ The PSCA and ERAP1 switch-like loci remain dominant. The EUR fifth-ranked entry 
 
 #### 5.3 Splicing
 
-This section is the largest substantive revision. Under modality-matched HCP covariates, EUR splicing is no longer null and EAS is weak but nonzero. The old extreme 1% minor-allele-frequency LILRB/CNN2/DOCK8/SREK1/ZNF439/440 top set is not present in the current results.
+Under modality-matched HCP covariates, EUR splicing is no longer null and EAS is weak but nonzero. The old extreme 1% minor-allele-frequency LILRB/CNN2/DOCK8/SREK1/ZNF439/440 top set is not present in the results.
 
 
 | Anc | Rank | Gene | Feature | Lead variant | Slope | AF | q | Shared |
@@ -216,7 +205,7 @@ This section is the largest substantive revision. Under modality-matched HCP cov
 
 
 
-- **ZFP62** (EAS1). *Biology:* ZFP62 is a poorly characterized human zinc-finger protein [333]. No direct placental or pregnancy literature was identified in the targeted update search, so the EAS splicing association is currently best treated as an uncharacterized regulatory signal.
+- **ZFP62** (EAS1). *Biology:* ZFP62 is a poorly characterized human zinc-finger protein [333]. No direct placental or pregnancy literature was identified in the targeted literature search, so the EAS splicing association is currently best treated as an uncharacterized regulatory signal.
 
 
 - **CMYA5** (EAS2). *Biology:* CMYA5/myospryn is a very large striated-muscle protein induced by MEF2A, localized to the costamere, and interacting with α-actinin-2 [323]. Direct placental evidence is lacking; because the same splice cluster is also annotated to TENT2, gene attribution at this locus should remain cautious.
@@ -299,7 +288,7 @@ The ancestry split remains strong: none of the ten top entries is FDR-significan
 
 #### 5.5 Alternative TSS
 
-The updated promoter results replace the prior rare ACBD3/MMP14/RAF1/PRKCH-AS1/TEX10 top hits. Strong switch-like patterns now include MYL12B in EAS and ERAP2/SCARB2 in EUR.
+The promoter results replace the prior rare ACBD3/MMP14/RAF1/PRKCH-AS1/TEX10 top hits. Strong switch-like patterns now include MYL12B in EAS and ERAP2/SCARB2 in EUR.
 
 
 | Anc | Rank | Gene | Feature | Lead variant | Slope | AF | q | Shared |
@@ -326,7 +315,7 @@ The updated promoter results replace the prior rare ACBD3/MMP14/RAF1/PRKCH-AS1/T
 - **LGALS8** (EAS4). *Placental biology:* galectins collectively shape early pregnancy and pregnancy pathologies [18]. Note that the well-studied chr19 placental galectin cluster (LGALS13/14/16) does not include LGALS8 (chr1); LGALS8-specific placental evidence is limited — largely novel.
 
 
-- **RPL14** (EAS5). *Biology:* RPL14 encodes a large-subunit ribosomal protein [339]. The prior review already noted that mTORC1 controls ribosome biogenesis and protein synthesis in primary human trophoblasts [259]; the EAS alt-TSS QTL places a specific ribosomal gene under cis promoter regulation in placenta.
+- **RPL14** (EAS5). *Biology:* RPL14 encodes a large-subunit ribosomal protein [339]. The literature review already noted that mTORC1 controls ribosome biogenesis and protein synthesis in primary human trophoblasts [259]; the EAS alt-TSS QTL places a specific ribosomal gene under cis promoter regulation in placenta.
 
 
 - **ERAP2** (EUR1–4). *Placental biology/disease:* ERAP2 is one of the most replicated preeclampsia candidate genes: associated with preeclampsia in Australian and Norwegian cohorts [110], fetal ERAP2 rs2549782 associated with preeclampsia in African Americans [112], a Chilean haplotype study links rs2549782 to ERAP2 protein expression and PE risk [113], and ERAP1/ERAP2 show altered placental expression and lymphocyte activation in PE [107]; ERAP2 was also associated with PE (and ERAP1 with eclampsia) in Brazilian women [108]. *Prior QTL evidence:* ERAP2 was one of the notable eGenes in the Kikas et al. placental eQTL study [56] — the present hit is a direct cross-ancestry replication and extension to isoform- and promoter-level regulation.
@@ -382,7 +371,7 @@ Alternative polyadenylation remains the most cross-ancestry-robust top-hit modal
 
 #### 5.7 RNA editing
 
-The principal shared editing sites remain CTNND1 and HSPD1. **PGAP6** enters the EAS top five, replacing CNOT12 in the previous review.
+The principal shared editing sites remain CTNND1 and HSPD1. **PGAP6** enters the EAS top five, replacing CNOT12 in the literature review.
 
 
 | Anc | Rank | Gene | Feature | Lead variant | Slope | AF | q | Shared |
@@ -482,7 +471,7 @@ The stability top five is essentially unchanged in gene composition. Four of ten
 
 The strongest current loci continue to include direct placental-QTL positive controls. **ERAP2** and **ZSCAN9** were notable placental eGenes in the earlier Kikas et al. work [56], and the present atlas extends ERAP2 into transcript- and promoter-level regulation. **SNX19** remains notable because genetically predicted placental expression has previously been associated with adult blood-pressure traits in a placental TWAS [194].
 
-The disease-context signal is also robust to the updated hit list. Genes with substantial independent preeclampsia or maternal–fetal-interface evidence include **ERAP1/ERAP2**, **HLA-C**, **LGALS14**, **CYP19A1**, **ANXA1**, **HSPD1**, **COX6C**, **PSG9**, **PECAM1**, **HSP90B1**, and **CTSB**. The revised splicing layer adds **PLAC4**, a particularly compelling placenta-specific gene with direct severe early-onset preeclampsia and syncytialization evidence [325], and **APOC1**, which now has both preeclampsia multi-omics and recurrent-pregnancy-loss mechanistic support [A5, A6].
+The disease-context signal is also robust to the hit list. Genes with substantial independent preeclampsia or maternal–fetal-interface evidence include **ERAP1/ERAP2**, **HLA-C**, **LGALS14**, **CYP19A1**, **ANXA1**, **HSPD1**, **COX6C**, **PSG9**, **PECAM1**, **HSP90B1**, and **CTSB**. The splicing layer adds **PLAC4**, a particularly compelling placenta-specific gene with direct severe early-onset preeclampsia and syncytialization evidence [325], and **APOC1**, which now has both preeclampsia multi-omics and recurrent-pregnancy-loss mechanistic support [A5, A6].
 
 These overlaps are biologically coherent but should not be presented as disease colocalization. The atlas maps molecular traits in placenta; formal inference about mediation of pregnancy-disease GWAS requires the dedicated colocalization/TWAS analyses.
 
@@ -503,7 +492,7 @@ The five explicit HPLRv2 top features are additionally novel at the phenotype-de
 
 #### 6.4 A changed view of ancestry specificity
 
-The revised results separate three phenomena that were conflated previously:
+The results separate three phenomena that were conflated previously:
 
 - **true feature-level replication**, abundant for alt-polyA, isoform expression, and RNA editing;
 - **detection/phenotyping asymmetry**, especially intron retention and RNA editing;
@@ -519,8 +508,8 @@ Accordingly, absence of a shared top hit should not automatically be labeled an 
 - **Splicing interpretation is covariate-sensitive.** The corrected modality-matched HCP analysis resolves the prior EUR null, but EAS remains a low-yield layer and deserves cautious interpretation rather than overclaiming biological absence.
 - **Coverage differs by ancestry and modality.** RNA editing is the clearest example (17,951 versus 3,120 normalized features).
 - **Effect estimates are discovery estimates.** Large slopes, especially at lower-frequency variants, remain susceptible to winner's curse.
-- **Abstract/reference-level literature review.** The legacy review was primarily abstract-level. New additions were also targeted rather than systematic. “No direct literature found” should be read literally as a search result, not as proof of novelty.
-- **No stale opposite-ancestry q-values.** Exact `q(other)` values for non-significant features cannot be reconstructed from the attached top-10 and FDR-only tables; this revision intentionally omits them.
+- **Abstract/reference-level literature review.** The literature review was primarily abstract-level. New additions were also targeted rather than systematic. “No direct literature found” should be read literally as a search result, not as proof of novelty.
+- **No stale opposite-ancestry q-values.** Exact `q(other)` values for non-significant features cannot be reconstructed from the attached top-10 and FDR-only tables; this review intentionally omits them.
 
 ### 8. Recommended follow-up from the literature review
 
@@ -528,7 +517,7 @@ The strongest candidates for immediate integration with fine-mapping/colocalizat
 
 For splicing specifically, follow-up should treat the chr19 19:44433568:C:T set as a **single locus with multiple annotated consequences** until conditional/fine-mapping evidence separates ZNF234, APOC1P1/APOC1, and ZNF180.
 
-### 9. Evidence-table additions in this revision
+### 9. Evidence-table additions in this review
 
 The entries below are new to the 2026-10-10 revision. They have now been appended to the companion evidence table as references **322–339**, while all original evidence-table indices remain unchanged.
 
@@ -572,7 +561,7 @@ The entries below are new to the 2026-10-10 revision. They have now been appende
 
 ### 10. Companion files
 
-- `literature_xqtl_mapping_revised_20261010.md` — this revised review.
+- `literature_xqtl_mapping_revised_20261010.md` — this review.
 - `xqtl_top_hits_current_20261010.tsv` — exact current top-five-per-ancestry/modality entries used here, with the recomputed shared flag.
 - `xqtl_literature_revision_sources_20261010.tsv` — structured bibliography for `[322]`–`[339]`.
 - Original `xqtl_top_hits_evidence_table.csv` — still required to resolve legacy numeric citations `[N]`.
