@@ -21,6 +21,15 @@ Objective 1.6 roll-up:
 Usage:
   python3 49_aggregate_coloc_twas.py --results-dir $RESULTS_DIR \
       --qtl-dir $QTL_DIR
+
+Selective rebuild examples:
+  # Re-run only cell-type attribution while reusing completed upstream aggregates.
+  python3 49_aggregate_coloc_twas.py --results-dir $RESULTS_DIR \
+      --qtl-dir $QTL_DIR --force-section celltype
+
+  # Re-run more than one selected aggregation section.
+  python3 49_aggregate_coloc_twas.py --results-dir $RESULTS_DIR \
+      --qtl-dir $QTL_DIR --force-section coloc --force-section twas
 """
 
 import argparse
@@ -865,8 +874,21 @@ def main():
                    help="plink2 executable for extracting lead-variant dosages")
     p.add_argument("--skip-celltype", action="store_true")
     p.add_argument("--force", action="store_true",
-                   help="rebuild aggregation outputs even when completed files exist")
+                   help="rebuild all aggregation sections even when completed files exist")
+    p.add_argument(
+        "--force-section", action="append", default=[],
+        choices=["coloc", "colocboost", "twas", "celltype"],
+        help=("force rebuild of one selected section while allowing completed "
+              "outputs from other sections to be reused; repeat the option to "
+              "force multiple sections"))
     args = p.parse_args()
+
+    force_sections = set(args.force_section)
+    if args.skip_celltype and "celltype" in force_sections:
+        p.error("--skip-celltype cannot be combined with --force-section celltype")
+
+    def force_section(name):
+        return args.force or name in force_sections
 
     workers = args.celltype_workers if args.celltype_workers is not None else _scheduler_workers()
     if workers < 1:
@@ -878,10 +900,15 @@ def main():
     out_dir = coloc_dir / "aggregated"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.force:
+        print("Force rebuild: all sections")
+    elif force_sections:
+        print("Force rebuild section(s): " + ", ".join(sorted(force_sections)))
+
     print("[1/4] SuSiE-coloc")
     coloc_results = out_dir / "coloc_results.tsv.gz"
     coloc_best = out_dir / "coloc_best.tsv.gz"
-    if not args.force and _outputs_complete(coloc_results, coloc_best):
+    if not force_section("coloc") and _outputs_complete(coloc_results, coloc_best):
         try:
             best = _read_tsv(coloc_best)
             pp_col = next((c for c in best.columns if c.startswith("PP.H4")), None)
@@ -896,7 +923,7 @@ def main():
 
     print("[2/4] colocBoost")
     colocboost_out = out_dir / "colocboost_clusters.tsv.gz"
-    if not args.force and _outputs_complete(colocboost_out):
+    if not force_section("colocboost") and _outputs_complete(colocboost_out):
         print("  skipped (existing output: colocboost_clusters.tsv.gz)")
     else:
         aggregate_colocboost(coloc_dir, out_dir)
@@ -904,7 +931,7 @@ def main():
     print("[3/4] isoTWAS/TWAS")
     twas_results = out_dir / "twas_results.tsv.gz"
     twas_genes = out_dir / "twas_gene_results.tsv.gz"
-    if not args.force and _outputs_complete(twas_results, twas_genes):
+    if not force_section("twas") and _outputs_complete(twas_results, twas_genes):
         try:
             genes_twas = _read_tsv(twas_genes)
             print(f"  skipped (existing outputs); {len(genes_twas)} gene rows")
@@ -920,7 +947,7 @@ def main():
         return
     cell_inter = out_dir / "xqtl_celltype_interactions.tsv.gz"
     cell_annot = out_dir / "xqtl_celltype_annotation.tsv.gz"
-    if not args.force and _outputs_complete(cell_inter, cell_annot):
+    if not force_section("celltype") and _outputs_complete(cell_inter, cell_annot):
         print("  skipped (existing outputs: xqtl_celltype_interactions.tsv.gz, "
               "xqtl_celltype_annotation.tsv.gz)")
         return
