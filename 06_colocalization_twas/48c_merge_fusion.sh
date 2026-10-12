@@ -17,10 +17,13 @@
 # NA/blank TWAS.P rows are moved to the failure audit with a generic reason.
 #
 # Env: ISOTWAS_DIR, WEIGHT_SET, TRAIT_ID, SHARD_MANIFEST
+#      ALLOW_MISSING_SHARDS=1 permits a partial merge. Missing shard phenotypes
+#      are recorded in the failures table instead of aborting the merge.
 # =============================================================================
 set -eo pipefail
 
 SHARD_MANIFEST="${SHARD_MANIFEST:?ERROR: SHARD_MANIFEST not set}"
+ALLOW_MISSING_SHARDS="${ALLOW_MISSING_SHARDS:-0}"
 if [ ! -s "$SHARD_MANIFEST" ]; then
     echo "ERROR: FUSION shard manifest missing/empty: $SHARD_MANIFEST" >&2
     exit 1
@@ -38,10 +41,13 @@ TMP_FAILURES="${FAILURES}.tmp.${LSB_JOBID:-$$}"
 trap 'rm -f "$TMP_FINAL" "$TMP_FAILURES"' EXIT
 rm -f "$TMP_FINAL" "$TMP_FAILURES"
 
-# Fail only for shard-level/infrastructure incompleteness. Phenotype-level
-# failures are represented inside completed shard outputs and are filtered
-# below instead of aborting the merge.
+# By default, preserve the strict historical behavior and abort on incomplete
+# shards. Recovery/forced merges can opt into partial publication with
+# ALLOW_MISSING_SHARDS=1; the Python merger below then records every phenotype
+# from each missing shard's .pos file in the failure audit.
 N_EXPECTED=0
+N_AVAILABLE=0
+N_MISSING=0
 while IFS=$'\t' read -r ARRAY_INDEX CHR SHARD_INDEX N_FEATURES SHARD_POS; do
     [ "$ARRAY_INDEX" = "array_index" ] && continue
     N_EXPECTED=$((N_EXPECTED + 1))
@@ -49,19 +55,29 @@ while IFS=$'\t' read -r ARRAY_INDEX CHR SHARD_INDEX N_FEATURES SHARD_POS; do
     SHARD_OUT="${PER_SHARD_DIR}/${SHARD_STEM}.twas.tsv"
     DONE="${SHARD_OUT}.done"
     if [ ! -f "$DONE" ] || [ ! -s "$SHARD_OUT" ]; then
+        N_MISSING=$((N_MISSING + 1))
+        if [ "$ALLOW_MISSING_SHARDS" = "1" ]; then
+            echo "WARNING: ${SHARD_STEM} is incomplete; omitting from TWAS output and recording its phenotypes as failures" >&2
+            continue
+        fi
         echo "ERROR: ${SHARD_STEM} is incomplete: expected $SHARD_OUT and $DONE" >&2
         exit 1
     fi
+    N_AVAILABLE=$((N_AVAILABLE + 1))
 done < "$SHARD_MANIFEST"
 
 if [ "$N_EXPECTED" -eq 0 ]; then
     echo "ERROR: no feature shards in $SHARD_MANIFEST" >&2
     exit 1
 fi
+if [ "$N_AVAILABLE" -eq 0 ]; then
+    echo "ERROR: no completed feature-shard outputs are available for ${WEIGHT_SET} x ${TRAIT_ID}" >&2
+    exit 1
+fi
 
 # Normalize and merge with Python's stdlib CSV reader so old shard files
 # (without FUSION.STATUS/FUSION.ERROR) can coexist with newly resilient shards.
-python3 - "$SHARD_MANIFEST" "$PER_SHARD_DIR" "$WEIGHT_SET" "$TRAIT_ID" "$TMP_FINAL" "$TMP_FAILURES" <<'PY'
+python3 - "$SHARD_MANIFEST" "$PER_SHARD_DIR" "$WEIGHT_SET" "$TRAIT_ID" "$TMP_FINAL" "$TMP_FAILURES" "$ALLOW_MISSING_SHARDS" <<'PY'
 import csv
 import sys
 from pathlib import Path
@@ -72,6 +88,7 @@ weight_set = sys.argv[3]
 trait_id = sys.argv[4]
 final_path = Path(sys.argv[5])
 fail_path = Path(sys.argv[6])
+allow_missing = sys.argv[7] == "1"
 
 status_col = "FUSION.STATUS"
 error_col = "FUSION.ERROR"
@@ -87,6 +104,48 @@ for mrow in manifest:
     shard = int(mrow["shard_index"])
     stem = f"chr{chrom:02d}.shard{shard:04d}"
     path = per_shard_dir / f"{stem}.twas.tsv"
+    done = Path(str(path) + ".done")
+
+    if not (path.is_file() and path.stat().st_size > 0 and done.is_file()):
+        if not allow_missing:
+            raise SystemExit(
+                f"ERROR: incomplete shard during merge: expected {path} and {done}"
+            )
+
+        # The shard output is unavailable, but its .pos file is part of the
+        # content-addressed manifest. Record each expected phenotype so the
+        # failure audit remains phenotype-level rather than one row per shard.
+        pos_path = Path(mrow["weights_file"])
+        if pos_path.is_file() and pos_path.stat().st_size > 0:
+            with pos_path.open(newline="", encoding="utf-8") as pfh:
+                pos_reader = csv.DictReader(pfh, delimiter="\t")
+                for prow in pos_reader:
+                    failure_rows.append({
+                        "weight_set": weight_set,
+                        "trait_id": trait_id,
+                        "shard": stem,
+                        "ID": prow.get("ID", ""),
+                        "FILE": prow.get("WGT", ""),
+                        "CHR": prow.get("CHR", ""),
+                        "P0": prow.get("P0", ""),
+                        "P1": prow.get("P1", ""),
+                        "FUSION.STATUS": "missing_shard",
+                        "FUSION.ERROR": "FUSION shard output/.done sentinel missing at merge time",
+                    })
+        else:
+            failure_rows.append({
+                "weight_set": weight_set,
+                "trait_id": trait_id,
+                "shard": stem,
+                "ID": "",
+                "FILE": str(pos_path),
+                "CHR": str(chrom),
+                "P0": "",
+                "P1": "",
+                "FUSION.STATUS": "missing_shard",
+                "FUSION.ERROR": "FUSION shard output/.done sentinel and shard .pos file missing at merge time",
+            })
+        continue
 
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh, delimiter="\t")
@@ -168,5 +227,5 @@ trap - EXIT
 
 N_SUCCESS=$(awk 'END{print (NR > 0 ? NR - 1 : 0)}' "$FINAL")
 N_FAILED=$(awk 'END{print (NR > 0 ? NR - 1 : 0)}' "$FAILURES")
-echo "wrote $FINAL (${N_SUCCESS} successful phenotype rows from ${N_EXPECTED} chromosome x feature shards)"
-echo "wrote $FAILURES (${N_FAILED} failed/skipped phenotype rows)"
+echo "wrote $FINAL (${N_SUCCESS} successful phenotype rows from ${N_AVAILABLE}/${N_EXPECTED} available chromosome x feature shards)"
+echo "wrote $FAILURES (${N_FAILED} failed/skipped phenotype rows; ${N_MISSING} missing shards)"
