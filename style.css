@@ -37,15 +37,24 @@
   color: var(--atlas-ink);
 }
 
-.book .book-body table {
+.book .book-body .table-scroll {
   width: 100%;
-  display: block;
+  max-width: 100%;
   max-height: 32rem;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow: auto;
   -webkit-overflow-scrolling: touch;
-  border-collapse: collapse;
+  scrollbar-gutter: stable;
   margin: 1em 0 1.5em 0;
+}
+
+.book .book-body .table-scroll table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  max-height: none;
+  overflow: visible;
+  border-collapse: collapse;
+  margin: 0;
 }
 
 .book .book-body table th,
@@ -69,10 +78,13 @@
 
 
 @media print {
-  .book .book-body table {
-    display: table;
+  .book .book-body .table-scroll {
     max-height: none;
     overflow: visible;
+  }
+
+  .book .book-body .table-scroll table {
+    width: 100%;
   }
 }
 

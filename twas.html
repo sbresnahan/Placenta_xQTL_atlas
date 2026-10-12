@@ -565,6 +565,7 @@ comparable. Pooled weights provide the broadest trait coverage.</p>
 <h2><span class="header-section-number">7.3</span> Input landscape and QC<a href="twas.html#input-landscape-and-qc" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="testing-coverage" class="section level3 hasAnchor" number="7.3.1">
 <h3><span class="header-section-number">7.3.1</span> Testing coverage<a href="twas.html#testing-coverage" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -921,6 +922,7 @@ comparable. Pooled weights provide the broadest trait coverage.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Gene-level testing coverage and significant ACAT rows by prediction
 weight set and GWAS trait.</p>
 <p><img src=".staging/raw_twas_files/figure-markdown_github/coverage-heatmap-1.png" /></p>
@@ -938,6 +940,7 @@ cross-ancestry replication comparison.</p>
 stored as zero</strong>, and <strong>121 ACAT p-values stored as zero</strong>. The zero
 values indicate floating-point underflow for very strong associations,
 not literal probability zero.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="9%" />
@@ -1010,11 +1013,13 @@ not literal probability zero.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Model rows lacking a complete TWAS p/q result.</p>
 </div>
 </div>
 <div id="prediction-model-characteristics" class="section level2 hasAnchor" number="7.4">
 <h2><span class="header-section-number">7.4</span> Prediction-model characteristics<a href="twas.html#prediction-model-characteristics" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -1070,6 +1075,7 @@ not literal probability zero.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Model counts, discoveries, and median cross-validated prediction R².</p>
 <p><img src=".staging/raw_twas_files/figure-markdown_github/cv-r2-plot-1.png" /></p>
 </div>
@@ -1078,6 +1084,7 @@ not literal probability zero.</p>
 <div id="discoveries-by-trait-and-weight-set" class="section level3 hasAnchor" number="7.5.1">
 <h3><span class="header-section-number">7.5.1</span> Discoveries by trait and weight set<a href="twas.html#discoveries-by-trait-and-weight-set" class="anchor-section" aria-label="Anchor link to header"></a></h3>
 <p><img src=".staging/raw_twas_files/figure-markdown_github/trait-discoveries-1.png" /></p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="8%" />
@@ -1766,11 +1773,13 @@ not literal probability zero.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top 60 significant gene-level ACAT results. Full table is written to
 tables/twas/twas_significant_genes.tsv.</p>
 </div>
 <div id="recurrent-genes-across-developmental-traits" class="section level3 hasAnchor" number="7.5.2">
 <h3><span class="header-section-number">7.5.2</span> Recurrent genes across developmental traits<a href="twas.html#recurrent-genes-across-developmental-traits" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="5%" />
@@ -2065,6 +2074,7 @@ tables/twas/twas_significant_genes.tsv.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Genes recurring across the largest number of significant TWAS traits.</p>
 <p><img src=".staging/raw_twas_files/figure-markdown_github/recurrent-plot-1.png" /></p>
 <p><strong>ADCY3</strong> is the broadest recurrent signal in the supplied aggregate,
@@ -2088,6 +2098,7 @@ association.</p>
 </div>
 <div id="cross-weight-set-concordance" class="section level2 hasAnchor" number="7.7">
 <h2><span class="header-section-number">7.7</span> Cross-weight-set concordance<a href="twas.html#cross-weight-set-concordance" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2112,6 +2123,7 @@ association.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Direction/rank concordance for exact trait + model IDs shared between
 ancestry-specific and pooled prediction weights.</p>
 <p>The shared-model comparisons are not independent replications because
@@ -2131,6 +2143,7 @@ multi-trait colocalization events. Convergence therefore raises
 priority, while lack of colocalization does not automatically invalidate
 a TWAS association.</p>
 <pre><code>## Among significant TWAS gene–trait pairs, 31 overlap a called SuSiE-coloc pair, 12 overlap a mixed xQTL–GWAS colocBoost event, and 40 have support from either framework.</code></pre>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="5%" />
@@ -2826,6 +2839,7 @@ a TWAS association.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Significant TWAS gene–trait results with independent colocalization
 support (up to 80 shown).</p>
 <p>The highest-priority examples include <strong>ELP5</strong>, <strong>PLCE1-AS1</strong>,
@@ -2836,6 +2850,7 @@ colocalization by identifying multi-GWAS developmental clusters at
 </div>
 <div id="birth-weight-and-placental-function-candidates" class="section level2 hasAnchor" number="7.9">
 <h2><span class="header-section-number">7.9</span> Birth-weight and placental-function candidates<a href="twas.html#birth-weight-and-placental-function-candidates" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="9%" />
@@ -3362,6 +3377,7 @@ colocalization by identifying multi-GWAS developmental clusters at
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top significant birth-weight / low-birth-weight gene-level TWAS results.</p>
 <p>Several birth-weight results have direct placental context. <strong>CLDN7</strong>
 was previously implicated in genetically regulated placental expression
@@ -3375,6 +3391,7 @@ fetal-birth-weight GWAS itself.</p>
 </div>
 <div id="childhood-anthropometry-and-recurrent-metabolic-genes" class="section level2 hasAnchor" number="7.10">
 <h2><span class="header-section-number">7.10</span> Childhood anthropometry and recurrent metabolic genes<a href="twas.html#childhood-anthropometry-and-recurrent-metabolic-genes" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="9%" />
@@ -4001,6 +4018,7 @@ fetal-birth-weight GWAS itself.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top significant childhood-anthropometry gene-level TWAS results.</p>
 <p><strong>ADCY3</strong>, <strong>LEP</strong>, and <strong>LEPR</strong> are notable because human genetic
 evidence independently establishes roles in body-weight regulation.
@@ -4072,6 +4090,7 @@ phenotypes have distinct causal interpretations.</li>
 <li><code>tables/twas/twas_weightset_concordance.tsv</code></li>
 </ul>
 <p>and figures to <code>figures/twas/</code>.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="17%" />
@@ -4118,6 +4137,7 @@ phenotypes have distinct causal interpretations.</li>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Resolved report inputs.</p>
 <pre><code>## R version 4.4.1 (2024-06-14)
 ## Platform: aarch64-apple-darwin20

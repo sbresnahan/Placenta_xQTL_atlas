@@ -526,6 +526,7 @@ features (18.8%) received a significant primary-cell-type assignment</strong>.
 The gene-level integration below is rebuilt directly from the
 feature-level source table at knit time, so it remains synchronized when
 coloc/TWAS aggregation changes.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="12%" />
@@ -560,6 +561,7 @@ coloc/TWAS aggregation changes.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Feature-level cell-type attribution summary by ancestry</p>
 <p><strong>Follow-up diagnostic summary.</strong> EUR’s N≈136 is the full analysis
 cohort, not hidden sample loss. EAS assigns 41.0% of significant xQTL
@@ -581,6 +583,7 @@ analysis.</p>
 </div>
 <div id="inputs-and-provenance" class="section level2 hasAnchor" number="9.2">
 <h2><span class="header-section-number">9.2</span> Inputs and provenance<a href="cell-type.html#inputs-and-provenance" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="22%" />
@@ -641,6 +644,7 @@ analysis.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Input tables used by this report</p>
 <p>The detailed interaction table is the statistical source of truth. The
 feature-level table selects the best tested cell type per ancestry ×
@@ -649,6 +653,7 @@ modality × phenotype and gates <code>primary_cell_type</code> on FDR.
 but the report rebuilds the prioritized-gene layer from the
 SuSiE-coloc, colocBoost, and TWAS aggregates and derives each gene’s
 cell-type annotation directly from <code>xqtl_celltype_annotation.tsv.gz</code>.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="26%" />
@@ -670,6 +675,7 @@ cell-type annotation directly from <code>xqtl_celltype_annotation.tsv.gz</code>.
 </tr>
 </tbody>
 </table>
+</div>
 <p>Coverage of the gene-level table relative to the current
 evidence union</p>
 </div>
@@ -677,6 +683,7 @@ evidence union</p>
 <h2><span class="header-section-number">9.3</span> Model-fit quality control<a href="cell-type.html#model-fit-quality-control" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="fit-status" class="section level3 hasAnchor" number="9.3.1">
 <h3><span class="header-section-number">9.3.1</span> Fit status<a href="cell-type.html#fit-status" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -707,6 +714,7 @@ evidence union</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>G×C model status by ancestry</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/status-plot-1.png" /></p>
 <p>Rank-deficient models are retained in the detailed table for
@@ -716,6 +724,7 @@ be investigated before interpreting cell-type assignment rates.</p>
 </div>
 <div id="sample-size-and-minor-allele-frequency" class="section level3 hasAnchor" number="9.3.2">
 <h3><span class="header-section-number">9.3.2</span> Sample size and minor-allele frequency<a href="cell-type.html#sample-size-and-minor-allele-frequency" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="8%" />
@@ -982,6 +991,7 @@ be investigated before interpreting cell-type assignment rates.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Complete-model sample size, MAF, and interaction SE by ancestry and
 modality</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/sample-size-plot-1.png" /></p>
@@ -993,6 +1003,7 @@ attribution yield reflects hidden sample loss, sample-size-dependent
 interaction power, lack of genotype × cell-composition support, or
 unstable classical OLS inference. The results below are intentionally
 restricted to the most informative diagnostics.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="5%" />
@@ -1047,12 +1058,14 @@ restricted to the most informative diagnostics.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Key ancestry-level diagnostics for cell-type attribution</p>
 <p>There is no evidence that EUR was inadvertently reduced to 136 samples:
 genotype, phenotype, covariate, and deconvolution inputs all contain 136
 EUR samples for essentially every modality (splicing has 135 complete
 samples). Thus <strong>N≈136 is the EUR cohort size itself</strong>, not pipeline
 attrition.</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -1083,6 +1096,7 @@ attrition.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Effect of sample size on feature-level attribution (10 EAS downsampling
 replicates)</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/downsample-plot-1.png" /></p>
@@ -1092,6 +1106,7 @@ interaction power, but <strong>does not by itself explain the EUR result</strong
 The supplied diagnostics bundle contains 10 completed downsampling
 replicates, so the displayed range is descriptive rather than a precise
 confidence interval.</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -1130,6 +1145,7 @@ confidence interval.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Median residualized G×cell interaction-information ratio by cell type</p>
 <p>Median residualized G×cell interaction information is <strong>7.1× higher in
 EAS</strong>, despite the sample-size ratio being only <strong>2.07×</strong>. The median
@@ -1152,6 +1168,7 @@ biologically absent in EUR.</p>
 </div>
 <div id="lead-variant-provenance" class="section level3 hasAnchor" number="9.3.4">
 <h3><span class="header-section-number">9.3.4</span> Lead-variant provenance<a href="cell-type.html#lead-variant-provenance" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -1173,6 +1190,7 @@ biologically absent in EUR.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Source of lead variants tested for cell-type interaction</p>
 <p>Ideally all tested variants come from the exact ancestry-specific
 Module-05 discovery lead table. Any fallback source should be reviewed
@@ -1183,6 +1201,7 @@ because it can change the interpretation of the attribution test.</p>
 <h2><span class="header-section-number">9.4</span> Feature-level cell-type assignments<a href="cell-type.html#feature-level-cell-type-assignments" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="assignment-rate-by-modality" class="section level3 hasAnchor" number="9.4.1">
 <h3><span class="header-section-number">9.4.1</span> Assignment rate by modality<a href="cell-type.html#assignment-rate-by-modality" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="14%" />
@@ -1329,11 +1348,13 @@ because it can change the interpretation of the attribution test.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Cell-type assignment rate among significant xQTL features</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/modality-assignment-plot-1.png" /></p>
 </div>
 <div id="which-cell-types-are-assigned" class="section level3 hasAnchor" number="9.4.2">
 <h3><span class="header-section-number">9.4.2</span> Which cell types are assigned?<a href="cell-type.html#which-cell-types-are-assigned" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="14%" />
@@ -1436,6 +1457,7 @@ because it can change the interpretation of the attribution test.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Primary cell types among significantly assigned xQTL features</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/assigned-celltypes-plot-1.png" /></p>
 </div>
@@ -1451,6 +1473,7 @@ cell-proportion variable. For cross-cell-type interpretation,
 <code>beta_GxC_iqr</code> is often more intuitive: it is the change in genetic
 effect across the observed interquartile range of that transformed cell
 proportion.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -1569,10 +1592,12 @@ proportion.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Effect-size summary for FDR-significant G×C tests</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/effect-iqr-plot-1.png" /></p>
 <div id="top-feature-level-assignments" class="section level3 hasAnchor" number="9.5.1">
 <h3><span class="header-section-number">9.5.1</span> Top feature-level assignments<a href="cell-type.html#top-feature-level-assignments" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="5%" />
@@ -1930,6 +1955,7 @@ proportion.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top 25 feature-level cell-type assignments by FDR</p>
 </div>
 </div>
@@ -1938,6 +1964,7 @@ proportion.</p>
 <p>The detailed table stores raw cell-proportion quartiles for each tested
 target. Because these values repeat across many features, the table
 below collapses to one row per ancestry × cell type.</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2049,6 +2076,7 @@ below collapses to one row per ancestry × cell type.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Raw deconvolved cell-proportion quartiles</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/cell-proportion-plot-1.png" /></p>
 </div>
@@ -2059,6 +2087,7 @@ configured maternal-fraction threshold in the Module-06 analysis. The
 principal questions are whether the interaction effect retains its
 direction and whether strong primary assignments remain supported after
 exclusion.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="8%" />
@@ -2097,6 +2126,7 @@ exclusion.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Maternal-contamination sensitivity of the best cell-type test for each
 feature</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/maternal-scatter-1.png" /></p>
@@ -2108,6 +2138,7 @@ same molecular phenotype can be represented by different lead variants
 across ancestries. Cross-ancestry comparisons below therefore describe
 <strong>attribution concordance</strong>, not a formal meta-analysis of a shared G×C
 effect.</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2138,6 +2169,7 @@ effect.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Cross-ancestry feature-level attribution concordance</p>
 <p><img src=".staging/raw_cell-type_files/figure-markdown_github/cross-best-celltype-1.png" /></p>
 </div>
@@ -2157,6 +2189,7 @@ another ancestry. <strong>An ancestry-matched cell-type assignment is
 presented as contextual support only when the genetic-evidence ancestry
 and the G×cell ancestry match.</strong> Pooled TWAS evidence is therefore not
 treated as ancestry-specific cell-type support.</p>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="30%" />
@@ -2178,7 +2211,9 @@ treated as ancestry-specific cell-type support.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Genes represented by the current downstream evidence sources</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2191,10 +2226,12 @@ treated as ancestry-specific cell-type support.</p>
 <tbody>
 </tbody>
 </table>
+</div>
 <p>Overlap of SuSiE-coloc, colocBoost, and significant TWAS gene
 prioritization</p>
 <div id="ancestry-matched-cell-type-support" class="section level3 hasAnchor" number="9.9.1">
 <h3><span class="header-section-number">9.9.1</span> Ancestry-matched cell-type support<a href="cell-type.html#ancestry-matched-cell-type-support" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="8%" />
@@ -2217,6 +2254,7 @@ prioritization</p>
 <tbody>
 </tbody>
 </table>
+</div>
 <p>Ancestry-matched G×cell attribution among evidence-prioritized genes</p>
 </div>
 <div id="colocboost-cell-type-integration" class="section level3 hasAnchor" number="9.9.2">
@@ -2231,6 +2269,7 @@ result from the same ancestry.</p>
 </div>
 <div id="current-prioritized-gene-table" class="section level3 hasAnchor" number="9.9.3">
 <h3><span class="header-section-number">9.9.3</span> Current prioritized-gene table<a href="cell-type.html#current-prioritized-gene-table" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="12%" />
@@ -2265,7 +2304,9 @@ result from the same ancestry.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Cell-type assignments among the evidence-prioritized gene union</p>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="3%" />
@@ -2298,6 +2339,7 @@ result from the same ancestry.</p>
 <tbody>
 </tbody>
 </table>
+</div>
 <p>Top 25 evidence-prioritized genes ordered by strongest available
 G×cell FDR</p>
 </div>
@@ -2361,6 +2403,7 @@ tissue.</li>
 <h2><span class="header-section-number">9.12</span> Column dictionary<a href="cell-type.html#column-dictionary" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="xqtl_celltype_interactions.tsv.gz" class="section level3 hasAnchor" number="9.12.1">
 <h3><span class="header-section-number">9.12.1</span> <code>xqtl_celltype_interactions.tsv.gz</code><a href="cell-type.html#xqtl_celltype_interactions.tsv.gz" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="31%" />
@@ -2443,10 +2486,12 @@ tissue.</li>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Detailed interaction-table columns</p>
 </div>
 <div id="xqtl_celltype_annotation.tsv.gz" class="section level3 hasAnchor" number="9.12.2">
 <h3><span class="header-section-number">9.12.2</span> <code>xqtl_celltype_annotation.tsv.gz</code><a href="cell-type.html#xqtl_celltype_annotation.tsv.gz" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="29%" />
@@ -2485,6 +2530,7 @@ tissue.</li>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Feature-assignment table columns</p>
 </div>
 </div>
@@ -2492,7 +2538,7 @@ tissue.</li>
 <h2><span class="header-section-number">9.13</span> Reproducibility<a href="cell-type.html#reproducibility-3" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <p>This report is descriptive: it reads the completed Module-06 attribution
 outputs and does not refit genotype × cell-type models.</p>
-<pre><code>## Rendered: 2026-10-12 11:39:56
+<pre><code>## Rendered: 2026-10-12 12:06:50
 
 ## results_dir: /Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle
 

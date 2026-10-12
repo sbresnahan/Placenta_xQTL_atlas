@@ -536,6 +536,7 @@ data at render time.</p>
 </div>
 <div id="inputs-and-integration-rules" class="section level2 hasAnchor" number="12.2">
 <h2><span class="header-section-number">12.2</span> 1. Inputs and integration rules<a href="integration.html#inputs-and-integration-rules" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="12%" />
@@ -602,9 +603,11 @@ data at render time.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Resolved integration inputs.</p>
 <div id="core-versus-supporting-evidence" class="section level3 hasAnchor" number="12.2.1">
 <h3><span class="header-section-number">12.2.1</span> 1.1 Core versus supporting evidence<a href="integration.html#core-versus-supporting-evidence" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="30%" />
@@ -666,6 +669,7 @@ data at render time.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>The numerical <code>priority_score</code> is only a deterministic triage score. It
 is <strong>not</strong> a posterior probability, Bayes factor, or causal probability.
 Ranking is driven first by <code>core_evidence_breadth</code>, then by the
@@ -674,6 +678,7 @@ strength/context bonuses above.</p>
 </div>
 <div id="evidence-landscape" class="section level2 hasAnchor" number="12.3">
 <h2><span class="header-section-number">12.3</span> 2. Evidence landscape<a href="integration.html#evidence-landscape" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -716,9 +721,11 @@ strength/context bonuses above.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Gene counts by integration evidence dimension.</p>
 <div id="priority-tiers" class="section level3 hasAnchor" number="12.3.1">
 <h3><span class="header-section-number">12.3.1</span> 2.1 Priority tiers<a href="integration.html#priority-tiers" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -753,11 +760,13 @@ strength/context bonuses above.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Integrated gene priority tiers.</p>
 </div>
 </div>
 <div id="multi-line-of-evidence-gene-prioritization" class="section level2 hasAnchor" number="12.4">
 <h2><span class="header-section-number">12.4</span> 3. Multi-line-of-evidence gene prioritization<a href="integration.html#multi-line-of-evidence-gene-prioritization" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="8%" />
@@ -1688,6 +1697,7 @@ strength/context bonuses above.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top integrated genes, ranked by evidence breadth then strength.</p>
 <div id="evidence-matrix" class="section level3 hasAnchor" number="12.4.1">
 <h3><span class="header-section-number">12.4.1</span> 3.1 Evidence matrix<a href="integration.html#evidence-matrix" class="anchor-section" aria-label="Anchor link to header"></a></h3>
@@ -1706,6 +1716,7 @@ bp. This grouping is intended to expose multi-gene regulatory hotspots
 (for example, compact regions in which TWAS and colocalization nominate
 different nearby genes). It is <strong>not an LD-block definition</strong> and should
 not replace locus-specific conditional analyses.</p>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="5%" />
@@ -2117,6 +2128,7 @@ not replace locus-specific conditional analyses.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top approximate loci after aggregating evidence across nearby
 prioritized genes.</p>
 <p><img src=".staging/raw_integration_files/figure-markdown_github/locus-plot-1.png" /></p>
@@ -2127,6 +2139,7 @@ prioritized genes.</p>
 gene for unrelated traits. This section therefore highlights the
 stronger condition in which <strong>the same gene × GWAS trait pair</strong> is
 supported by at least two of TWAS, pairwise SuSiE-coloc, and colocBoost.</p>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="8%" />
@@ -2593,6 +2606,7 @@ supported by at least two of TWAS, pairwise SuSiE-coloc, and colocBoost.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Same gene × GWAS trait convergence across TWAS and colocalization
 methods.</p>
 <p><img src=".staging/raw_integration_files/figure-markdown_github/trait-convergence-plot-1.png" /></p>
@@ -2604,6 +2618,7 @@ when a <strong>Tier-1 discovery</strong> gene also has orthogonal evidence from
 fine-mapping, GWAS shared-signal analysis, or TWAS. Robust Tier-2
 results are retained in the table but are not allowed to create a new
 core evidence dimension.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="12%" />
@@ -3408,6 +3423,7 @@ core evidence dimension.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>G×ppBMI genes prioritized by overlap with orthogonal atlas evidence.</p>
 <p><strong>Interpretation of G×E evidence.</strong> Tier-1 ppBMI interactions can
 legitimately add a separate core evidence dimension because they arise
@@ -3422,6 +3438,7 @@ independent discoveries.</p>
 <p>Cell-type attribution is used here to localize the molecular phenotype,
 not to claim that an assigned cell population is the unique causal cell
 type.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="6%" />
@@ -4000,6 +4017,7 @@ type.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Cell-type assignments for genes with ≥2 core integration dimensions.</p>
 <p><img src=".staging/raw_integration_files/figure-markdown_github/celltype-plot-1.png" /></p>
 </div>
@@ -4076,6 +4094,7 @@ assignments restricted to multi-line genes, when available.</li>
 </div>
 <div id="reproducibility-4" class="section level2 hasAnchor" number="12.12">
 <h2><span class="header-section-number">12.12</span> 11. Reproducibility<a href="integration.html#reproducibility-4" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="11%" />
@@ -4147,9 +4166,10 @@ assignments restricted to multi-line genes, when available.</li>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Resolved source files used by the integration report.</p>
 <pre><code>## 
-## Rendered: 2026-10-12 11:40:09
+## Rendered: 2026-10-12 12:07:01
 
 ## R version 4.4.1 (2024-06-14)
 ## Platform: aarch64-apple-darwin20

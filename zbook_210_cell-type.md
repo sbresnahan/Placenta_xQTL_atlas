@@ -556,7 +556,7 @@ Feature-assignment table columns
 This report is descriptive: it reads the completed Module-06 attribution
 outputs and does not refit genotype × cell-type models.
 
-    ## Rendered: 2026-10-12 11:39:56
+    ## Rendered: 2026-10-12 12:06:50
 
     ## results_dir: /Users/stbresnahan/Documents/GitHub/Placenta_xQTL_atlas/reports/celltype_diagnostics_bundle
 

@@ -589,6 +589,7 @@ RNA-seq runs and 95 WXS runs); each NIGMS subject was sampled at two
 placental sites, and the replicate libraries were averaged per
 individual before mapping. All genotype and transcriptomic data were
 processed against the GRCh38 no-alt analysis set (GCA_000001405.15).</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="25%" />
@@ -631,6 +632,7 @@ processed against the GRCh38 no-alt analysis set (GCA_000001405.15).</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Table 1. Study cohorts, data types, and access routes.</p>
 </div>
 <div id="genotype-processing-and-imputation" class="section level3 hasAnchor" number="1.1.2">
@@ -860,6 +862,7 @@ sushie, pandas, pyarrow, genotypeio). # Cohort and data landscape</p>
 <div id="sample-attrition" class="section level3 hasAnchor" number="1.1.16">
 <h3><span class="header-section-number">1.1.16</span> Sample attrition<a href="xqtl-mapping.html#sample-attrition" class="anchor-section" aria-label="Anchor link to header"></a></h3>
 <p><img src=".staging/raw_xqtl-mapping_files/figure-markdown_github/attrition-funnel-1.png" /></p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -926,9 +929,11 @@ sushie, pandas, pyarrow, genotypeio). # Cohort and data landscape</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Sample attrition from raw FASTQ libraries to the final mapping sets.
 Pre-ancestry stages are cohort-wide run counts; post-ancestry stages
 count individuals (technical replicates share one array_id column).</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -1005,6 +1010,7 @@ count individuals (technical replicates share one array_id column).</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Per-modality retention at the normalization (INT) and QTL-input stages,
 in individuals (unique array_id; run-level counts are in
 attrition_summary.tsv).</p>
@@ -1032,6 +1038,7 @@ EUR), from junction-level harmonization.</p>
 <div id="cohort-composition-and-genotype-processing" class="section level3 hasAnchor" number="1.1.17">
 <h3><span class="header-section-number">1.1.17</span> Cohort composition and genotype processing<a href="xqtl-mapping.html#cohort-composition-and-genotype-processing" class="anchor-section" aria-label="Anchor link to header"></a></h3>
 <p><img src=".staging/raw_xqtl-mapping_files/figure-markdown_github/fig-geno-stage-counts-1.png" /></p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="17%" />
@@ -1108,6 +1115,7 @@ EUR), from junction-level harmonization.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Variant and sample counts across genotype processing stages (line counts
 of the stage pvar/psam files; extraction script 35).</p>
 <p>Variant counts are stable across chromosomes and cohorts after the Rsq
@@ -1155,6 +1163,7 @@ batch.</p>
 </div>
 <div id="covariate-qc" class="section level3 hasAnchor" number="1.1.19">
 <h3><span class="header-section-number">1.1.19</span> Covariate QC<a href="xqtl-mapping.html#covariate-qc" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="12%" />
@@ -1193,10 +1202,12 @@ batch.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Final covariate sets (expression arm shown). Maternal cell-fraction
 covariate excluded before pruning by analysis decision; HCP count is
 ancestry × modality-specific from module 25b (per-modality k* in the
 HCP-optimization section); no covariate cap.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="13%" />
@@ -1245,9 +1256,11 @@ HCP-optimization section); no covariate cap.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Covariate pruning log: analysis-decision exclusions, reference cell
 type, and correlation pruning (|r| &gt; 0.9; HCPs lowest priority — no
 covariate cap).</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -1314,6 +1327,7 @@ covariate cap).</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>PCA outliers excluded (6-SD rule on PC1–PC5, cohort-only PCA).</p>
 <p>Outlier exclusion on the cohort-only PCs (6-SD rule on PC1–PC5) removed
 1 EAS and 5 EUR samples. Pruning dropped 2 covariates in EAS (1
@@ -1325,6 +1339,7 @@ per-modality k* — see the HCP-optimization section.</p>
 <p>Covariate correlation matrices before/after pruning: no |r| &gt; 0.9
 pairs remain in the final sets.</p>
 <p><img src=".staging/raw_xqtl-mapping_files/figure-markdown_github/fig-covariate-distributions-1.png" /></p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -1436,6 +1451,7 @@ pairs remain in the final sets.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Fixed-covariate distributions per ancestry (final model values; sex is
 the numeric code, ct_* are deconvolution cell-type proportions).</p>
 </div>
@@ -1449,6 +1465,7 @@ show up to 5,000 sampled values per cohort with quartile guides; PCA
 panels are computed on a 5,000-feature subsample with per-feature
 z-scoring so before/after geometry is comparable (extraction script 35,
 section qc).</em></p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="13%" />
@@ -1707,6 +1724,7 @@ section qc).</em></p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Features and samples per modality at each saved processing stage.</p>
 <p>Feature-count changes between stages range from -236,311 to -2,898
 features per ancestry x modality (per-stratum detection filters at
@@ -1845,6 +1863,7 @@ of its FDR-significant catalog rather than of artifact.</p>
 </div>
 <div id="signal-fraction-storey-π1-per-layer" class="section level3 hasAnchor" number="1.2.4">
 <h3><span class="header-section-number">1.2.4</span> Signal fraction (Storey π1) per layer<a href="xqtl-mapping.html#signal-fraction-storey-%CF%801-per-layer" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2147,6 +2166,7 @@ of its FDR-significant catalog rather than of artifact.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Storey pi1 (estimated fraction of true associations) on
 permutation-calibrated p-values.</p>
 <p>π1 estimates are 0–34% across all cells, with the largest fractions in
@@ -2161,6 +2181,7 @@ the expected, conservative behavior.</p>
 <div id="power-analysis" class="section level3 hasAnchor" number="1.2.5">
 <h3><span class="header-section-number">1.2.5</span> Power analysis<a href="xqtl-mapping.html#power-analysis" class="anchor-section" aria-label="Anchor link to header"></a></h3>
 <p><img src=".staging/raw_xqtl-mapping_files/figure-markdown_github/power-curve-1.png" /></p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="13%" />
@@ -2343,6 +2364,7 @@ the expected, conservative behavior.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Minimum detectable effect (r², 80% power) at our sample sizes vs
 PANTRY’s n=445, per layer.</p>
 <p>At n ≈ 136 (EUR), only xQTLs explaining ≳ 19% of phenotype variance are
@@ -2356,6 +2378,7 @@ that range.</p>
 </div>
 <div id="carrier-count-audit-mac-floor-propagation" class="section level3 hasAnchor" number="1.2.6">
 <h3><span class="header-section-number">1.2.6</span> Carrier-count audit: MAC floor propagation<a href="xqtl-mapping.html#carrier-count-audit-mac-floor-propagation" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2411,6 +2434,7 @@ that range.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Minimum minor-allele carrier counts per layer (mapping sample sets).</p>
 <p>The MAC ≥ 5 floor is applied at the genotype intersection in module 23
 (before outlier exclusion). The floor propagated cleanly: every tested
@@ -2431,6 +2455,7 @@ placenta eQTL literature (1A analog, below). Inversion QTLs (1J) are not
 assayed by this pipeline.</em></p>
 <div id="phenotypes-and-genes-tested-per-modality" class="section level3 hasAnchor" number="1.3.1">
 <h3><span class="header-section-number">1.3.1</span> Phenotypes and genes tested per modality<a href="xqtl-mapping.html#phenotypes-and-genes-tested-per-modality" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2542,6 +2567,7 @@ assayed by this pipeline.</em></p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Genes tested per ancestry × modality (grouped layers).</p>
 <p><img src=".staging/raw_xqtl-mapping_files/figure-markdown_github/fig-phenotypes-genes-1.png" /></p>
 <p>Note the ancestry asymmetry: EUR contributes roughly 1.5–5.6× more
@@ -2681,6 +2707,7 @@ hexbin is the fallback concordance view. Cross-ancestry analysis here is
 comparative only (no pooled p-value combination).</em></p>
 <div id="per-ancestry-discovery-comparison" class="section level3 hasAnchor" number="1.4.1">
 <h3><span class="header-section-number">1.4.1</span> Per-ancestry discovery comparison<a href="xqtl-mapping.html#per-ancestry-discovery-comparison" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -2703,6 +2730,7 @@ comparative only (no pooled p-value combination).</em></p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Combined-layer eGene overlap between ancestries (genes tested in both:
 12,574).</p>
 <p><img src=".staging/raw_xqtl-mapping_files/figure-markdown_github/fig-per-ancestry-discovery-1.png" /></p>
@@ -2737,6 +2765,7 @@ inverse-normal-transformed phenotypes — both strata share the transform,
 so slopes (not aFC) are the comparable effect scale here, a deliberate
 deviation from DevBrain’s aFC panel. Of 3,331 looked-up pairs, 1,147
 (34.4%) replicate at nominal p &lt; 0.05 and direction agrees in 76.4%.</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="27%" />
@@ -2827,6 +2856,7 @@ deviation from DevBrain’s aFC panel. Of 3,331 looked-up pairs, 1,147
 </tr>
 </tbody>
 </table>
+</div>
 <p>Cross-ancestry concordance per layer: genes tested in both ancestries,
 same-lead-variant count, Spearman correlation of -log10(pval_beta), and
 top-100 gene overlap.</p>
@@ -2860,6 +2890,7 @@ of fine-mapped variants and genes.</em></p>
 <h2><span class="header-section-number">1.5</span> Discovery catalog<a href="xqtl-mapping.html#discovery-catalog" class="anchor-section" aria-label="Anchor link to header"></a></h2>
 <div id="fdr-significant-associations" class="section level3 hasAnchor" number="1.5.1">
 <h3><span class="header-section-number">1.5.1</span> FDR-significant associations<a href="xqtl-mapping.html#fdr-significant-associations" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="3%" />
@@ -4600,6 +4631,7 @@ of fine-mapped variants and genes.</em></p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>FDR ≤ 5% associations across layers (top 100 of 15,039 shown; full table
 in tables/fdr_hits.tsv). Grouped/combined rows are gene-level; ungrouped
 rows are phenotype-level.</p>
@@ -4611,6 +4643,7 @@ modality-specific; a hit that also passes in the combined layer survives
 the cross-modality grouping burden.</p>
 <div id="eas-cfh" class="section level5 hasAnchor" number="1.5.1.0.1">
 <h5><span class="header-section-number">1.5.1.0.1</span> EAS — CFH<a href="xqtl-mapping.html#eas-cfh" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -5137,10 +5170,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>CFH (ENSG00000000971) across layers and ancestries.</p>
 </div>
 <div id="eas-sema3f" class="section level5 hasAnchor" number="1.5.1.0.2">
 <h5><span class="header-section-number">1.5.1.0.2</span> EAS — SEMA3F<a href="xqtl-mapping.html#eas-sema3f" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="10%" />
@@ -5267,10 +5302,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>SEMA3F (ENSG00000001617) across layers and ancestries.</p>
 </div>
 <div id="eas-hs3st1" class="section level5 hasAnchor" number="1.5.1.0.3">
 <h5><span class="header-section-number">1.5.1.0.3</span> EAS — HS3ST1<a href="xqtl-mapping.html#eas-hs3st1" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="10%" />
@@ -5397,10 +5434,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>HS3ST1 (ENSG00000002587) across layers and ancestries.</p>
 </div>
 <div id="eas-aoc1" class="section level5 hasAnchor" number="1.5.1.0.4">
 <h5><span class="header-section-number">1.5.1.0.4</span> EAS — AOC1<a href="xqtl-mapping.html#eas-aoc1" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -6197,10 +6236,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>AOC1 (ENSG00000002726) across layers and ancestries.</p>
 </div>
 <div id="eas-m6pr" class="section level5 hasAnchor" number="1.5.1.0.5">
 <h5><span class="header-section-number">1.5.1.0.5</span> EAS — M6PR<a href="xqtl-mapping.html#eas-m6pr" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -7027,10 +7068,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>M6PR (ENSG00000003056) across layers and ancestries.</p>
 </div>
 <div id="eas-tfpi" class="section level5 hasAnchor" number="1.5.1.0.6">
 <h5><span class="header-section-number">1.5.1.0.6</span> EAS — TFPI<a href="xqtl-mapping.html#eas-tfpi" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -9567,10 +9610,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>TFPI (ENSG00000003436) across layers and ancestries.</p>
 </div>
 <div id="eas-ndufaf7" class="section level5 hasAnchor" number="1.5.1.0.7">
 <h5><span class="header-section-number">1.5.1.0.7</span> EAS — NDUFAF7<a href="xqtl-mapping.html#eas-ndufaf7" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -10087,10 +10132,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>NDUFAF7 (ENSG00000003509) across layers and ancestries.</p>
 </div>
 <div id="eas-slc7a2" class="section level5 hasAnchor" number="1.5.1.0.8">
 <h5><span class="header-section-number">1.5.1.0.8</span> EAS — SLC7A2<a href="xqtl-mapping.html#eas-slc7a2" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="10%" />
@@ -11087,10 +11134,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>SLC7A2 (ENSG00000003989) across layers and ancestries.</p>
 </div>
 <div id="eas-rbm6" class="section level5 hasAnchor" number="1.5.1.0.9">
 <h5><span class="header-section-number">1.5.1.0.9</span> EAS — RBM6<a href="xqtl-mapping.html#eas-rbm6" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -12007,10 +12056,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>RBM6 (ENSG00000004534) across layers and ancestries.</p>
 </div>
 <div id="eas-slc22a16" class="section level5 hasAnchor" number="1.5.1.0.10">
 <h5><span class="header-section-number">1.5.1.0.10</span> EAS — SLC22A16<a href="xqtl-mapping.html#eas-slc22a16" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="10%" />
@@ -12117,10 +12168,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>SLC22A16 (ENSG00000004809) across layers and ancestries.</p>
 </div>
 <div id="eas-prss22" class="section level5 hasAnchor" number="1.5.1.0.11">
 <h5><span class="header-section-number">1.5.1.0.11</span> EAS — PRSS22<a href="xqtl-mapping.html#eas-prss22" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -12357,10 +12410,12 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>PRSS22 (ENSG00000005001) across layers and ancestries.</p>
 </div>
 <div id="eas-polr2j" class="section level5 hasAnchor" number="1.5.1.0.12">
 <h5><span class="header-section-number">1.5.1.0.12</span> EAS — POLR2J<a href="xqtl-mapping.html#eas-polr2j" class="anchor-section" aria-label="Anchor link to header"></a></h5>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="10%" />
@@ -12697,6 +12752,7 @@ the cross-modality grouping burden.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>POLR2J (ENSG00000005075) across layers and ancestries.</p>
 <p><em>4,589 further hit genes omitted from per-gene context tables; see
 tables/fdr_hits.tsv.</em></p>
@@ -12713,6 +12769,7 @@ remainder yielded their primary lead variant alone.</p>
 </div>
 <div id="egene-catalog-fdr-5" class="section level3 hasAnchor" number="1.5.3">
 <h3><span class="header-section-number">1.5.3</span> eGene catalog (FDR ≤ 5%)<a href="xqtl-mapping.html#egene-catalog-fdr-5" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="5%" />
@@ -13307,6 +13364,7 @@ remainder yielded their primary lead variant alone.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Combined-layer eGenes (top 20 per ancestry by q-value; full catalog in
 tables/egene_catalog_combined.tsv).</p>
 <p>The gene-level catalog is the <strong>combined cross-modality layer</strong> (1404
@@ -13319,6 +13377,7 @@ which modality carries the gene’s strongest association.</p>
 </div>
 <div id="top-ranked-genes-per-layer" class="section level3 hasAnchor" number="1.5.4">
 <h3><span class="header-section-number">1.5.4</span> Top-ranked genes per layer<a href="xqtl-mapping.html#top-ranked-genes-per-layer" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="7%" />
@@ -13580,7 +13639,9 @@ which modality carries the gene’s strongest association.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>EAS — top 15 combined-layer genes.</p>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="7%" />
@@ -13842,6 +13903,7 @@ which modality carries the gene’s strongest association.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>EUR — top 15 combined-layer genes.</p>
 </div>
 <div id="driver-modality-resolution" class="section level3 hasAnchor" number="1.5.5">
@@ -13858,6 +13920,7 @@ the top 50); expression does so in EUR (46% of the top 50).</p>
 <h4><span class="header-section-number">1.5.5.1</span> Within-gene driver breakdown for the top combined genes<a href="xqtl-mapping.html#within-gene-driver-breakdown-for-the-top-combined-genes" class="anchor-section" aria-label="Anchor link to header"></a></h4>
 <p>For the top 10 combined-layer genes per ancestry, the per-phenotype lead
 associations across all modalities (ungrouped layer):</p>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="9%" />
@@ -14106,6 +14169,7 @@ associations across all modalities (ungrouped layer):</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>EAS top-10 genes: top 5 phenotypes each (ungrouped layer).</p>
 </div>
 </div>
@@ -14137,6 +14201,7 @@ unavailable.</li>
 </ol>
 <div id="per-modality-enrichment-of-xqtl-gene-sets" class="section level3 hasAnchor" number="1.6.1">
 <h3><span class="header-section-number">1.6.1</span> Per-modality enrichment of xQTL gene sets<a href="xqtl-mapping.html#per-modality-enrichment-of-xqtl-gene-sets" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="27%" />
@@ -14269,6 +14334,7 @@ unavailable.</li>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Per-modality discovery sets used for ORA</p>
 <p>The reference universe contains <strong>13,835 HPLRv2 genes</strong>, including 533
 HPLRG_ genes. Annotation-based databases only test genes that can be
@@ -14280,6 +14346,7 @@ in the report’s discovery counts but can be invisible to GO/KEGG.</p>
 independently of the xQTL results. The report therefore reuses
 <code>pregnancy_sets.rds</code> while rebuilding every result-derived enrichment
 table from the current archive.</p>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -14316,6 +14383,7 @@ table from the current archive.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Pregnancy/placenta gene sets</p>
 <p>The pregnancy collection is tested with <code>minGSSize = 3</code>; the other
 custom-set analysis uses the standard larger minimum. This preserves the
@@ -14324,6 +14392,7 @@ changing the xQTL discovery threshold.</p>
 </div>
 <div id="rebuildload-ora-results" class="section level4 hasAnchor" number="1.6.1.2">
 <h4><span class="header-section-number">1.6.1.2</span> Rebuild/load ORA results<a href="xqtl-mapping.html#rebuildload-ora-results" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -14357,6 +14426,7 @@ changing the xQTL discovery threshold.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Significant term-stratum combinations (FDR &lt; 0.05) by database and
 background</p>
 <p>The current rebuild contains <strong>83,907 tested term-stratum rows</strong> across
@@ -14366,6 +14436,7 @@ matching the original standalone enrichment report.</p>
 </div>
 <div id="top-enrichment-results" class="section level4 hasAnchor" number="1.6.1.3">
 <h4><span class="header-section-number">1.6.1.3</span> Top enrichment results<a href="xqtl-mapping.html#top-enrichment-results" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="7%" />
@@ -15002,11 +15073,13 @@ matching the original standalone enrichment report.</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top significant terms per database x modality x ancestry (HPLRv2
 background)</p>
 </div>
 <div id="go-biological-process" class="section level4 hasAnchor" number="1.6.1.4">
 <h4><span class="header-section-number">1.6.1.4</span> GO Biological Process<a href="xqtl-mapping.html#go-biological-process" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="13%" />
@@ -15549,6 +15622,7 @@ background)</p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Significant GO BP terms (HPLRv2 background)</p>
 <figure>
 <img
@@ -15562,6 +15636,7 @@ stratum (HPLRv2 background).
 </div>
 <div id="go-molecular-function-and-cellular-component" class="section level4 hasAnchor" number="1.6.1.5">
 <h4><span class="header-section-number">1.6.1.5</span> GO Molecular Function and Cellular Component<a href="xqtl-mapping.html#go-molecular-function-and-cellular-component" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="6%" />
@@ -15992,10 +16067,12 @@ stratum (HPLRv2 background).
 </tr>
 </tbody>
 </table>
+</div>
 <p>Significant GO MF/CC terms (HPLRv2 background)</p>
 </div>
 <div id="kegg" class="section level4 hasAnchor" number="1.6.1.6">
 <h4><span class="header-section-number">1.6.1.6</span> KEGG<a href="xqtl-mapping.html#kegg" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="21%" />
@@ -16212,6 +16289,7 @@ stratum (HPLRv2 background).
 </tr>
 </tbody>
 </table>
+</div>
 <p>Significant KEGG pathways (HPLRv2 background)</p>
 </div>
 <div id="msigdb-hallmark" class="section level4 hasAnchor" number="1.6.1.7">
@@ -16221,6 +16299,7 @@ stratum (HPLRv2 background).
 </div>
 <div id="pregnancyplacenta-collection" class="section level4 hasAnchor" number="1.6.1.8">
 <h4><span class="header-section-number">1.6.1.8</span> Pregnancy/placenta collection<a href="xqtl-mapping.html#pregnancyplacenta-collection" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table>
 <colgroup>
 <col width="10%" />
@@ -16337,6 +16416,7 @@ stratum (HPLRv2 background).
 </tr>
 </tbody>
 </table>
+</div>
 <p>Significant pregnancy/placenta set enrichments</p>
 <figure>
 <img
@@ -16350,6 +16430,7 @@ across strata; black rings mark FDR &lt; 0.05.
 </div>
 <div id="cross-ancestry-contrast" class="section level4 hasAnchor" number="1.6.1.9">
 <h4><span class="header-section-number">1.6.1.9</span> Cross-ancestry contrast<a href="xqtl-mapping.html#cross-ancestry-contrast" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -16372,6 +16453,7 @@ across strata; black rings mark FDR &lt; 0.05.
 </tr>
 </tbody>
 </table>
+</div>
 <p>Unique significant terms by ancestry-sharing class</p>
 <figure>
 <img
@@ -16385,6 +16467,7 @@ background) by ancestry class.
 </div>
 <div id="background-sensitivity" class="section level4 hasAnchor" number="1.6.1.10">
 <h4><span class="header-section-number">1.6.1.10</span> Background sensitivity<a href="xqtl-mapping.html#background-sensitivity" class="anchor-section" aria-label="Anchor link to header"></a></h4>
+<div class="table-scroll">
 <table>
 <thead>
 <tr class="header">
@@ -16407,6 +16490,7 @@ background) by ancestry class.
 </tr>
 </tbody>
 </table>
+</div>
 <p>Concordance of significant term-strata between backgrounds</p>
 <p>The HPLRv2 and tested-gene backgrounds answer slightly different
 questions: the former asks whether xQTL genes are unusual relative to
@@ -16422,6 +16506,7 @@ sensitivity findings.</p>
 <p><em>Over-representation analysis on the combined-layer eGene sets, using
 the corresponding tested-gene universe as a custom background.</em></p>
 <p><img src=".staging/raw_xqtl-mapping_files/figure-markdown_github/enrichment-gprofiler-1.png" /></p>
+<div class="table-scroll">
 <table style="width:99%;">
 <colgroup>
 <col width="13%" />
@@ -16572,6 +16657,7 @@ the corresponding tested-gene universe as a custom background.</em></p>
 </tr>
 </tbody>
 </table>
+</div>
 <p>Top 5 enriched terms per combined-catalog eGene set</p>
 </div>
 <div id="enrichment-limitations" class="section level3 hasAnchor" number="1.6.3">
