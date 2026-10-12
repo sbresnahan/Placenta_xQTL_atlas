@@ -210,13 +210,11 @@ def scan_ancestry(scanner, anc, modality, exposure_id, pheno_keep, args):
         return pd.DataFrame()
     pheno = pheno[samples]
     cov = cov[samples]
-    # Stage 0 already includes GA in the ancestry-specific base covariates.
-    # Remove it only when GA itself is the exposure; otherwise require it.
-    if exposure_id == "GA":
-        if "GA" in cov.index:
-            cov = cov.drop(index="GA")
-    elif "GA" not in cov.index:
-        sys.exit(f"ERROR: GA covariate missing from {cov_path} for exposure {exposure_id}")
+    # The exposure main effect is fitted explicitly in the GxE model.
+    # If the exposure is also present in the covariate matrix, remove it
+    # to avoid including the same variable twice.
+    if exposure_id in cov.index:
+        cov = cov.drop(index=exposure_id)
     e = exp[samples]
 
     device = gxe_core.get_device()
